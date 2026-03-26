@@ -8,6 +8,12 @@ export default async function AgentPage({
   params: Promise<{ agentId: string }>
 }) {
   const { agentId } = await params
+
+  // Redirect general chat to /assistants/chat
+  if (agentId === 'general') {
+    redirect('/assistants/chat')
+  }
+
   const agent = getAgent(agentId)
 
   if (!agent) {

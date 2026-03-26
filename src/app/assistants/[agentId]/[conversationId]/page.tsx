@@ -3,6 +3,19 @@ import { redirect, notFound } from 'next/navigation'
 import { getAgent } from '@/lib/agents'
 import { ChatInterface } from '@/components/chat-interface'
 import Link from 'next/link'
+import type { AgentDefinition } from '@/lib/agents'
+
+const generalAgent: AgentDefinition = {
+  id: 'general',
+  name: 'Allgemeiner Chat',
+  description: 'Stellen Sie jede Frage rund um Immobilien',
+  emoji: '💬',
+  color: 'bg-primary',
+  textColor: 'text-primary',
+  mode: 'free-chat',
+  placeholder: 'Stellen Sie Ihre Frage...',
+  systemPrompt: 'Du bist ein hilfreicher AI-Assistent für Immobilienprofis im deutschsprachigen Raum (DACH). Du kannst bei allen Themen rund um Immobilien helfen — von Marktfragen über Marketing bis hin zu rechtlichen Grundlagen. Antworte professionell, praxisnah und auf Deutsch.',
+}
 
 export default async function ConversationPage({
   params,
@@ -10,7 +23,7 @@ export default async function ConversationPage({
   params: Promise<{ agentId: string; conversationId: string }>
 }) {
   const { agentId, conversationId } = await params
-  const agent = getAgent(agentId)
+  const agent = agentId === 'general' ? generalAgent : getAgent(agentId)
 
   if (!agent) {
     notFound()
