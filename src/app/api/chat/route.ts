@@ -34,12 +34,13 @@ export async function POST(req: Request) {
   }
 
   // Convert UIMessage format to simple role/content for streamText
-  const messages = rawMessages.map((msg: Record<string, unknown>) => {
+  const messages = rawMessages.map((msg) => {
     let content = ''
-    if (typeof msg.content === 'string' && msg.content) {
-      content = msg.content
-    } else if (Array.isArray(msg.parts)) {
-      content = (msg.parts as Array<{ type: string; text?: string }>)
+    const msgAny = msg as unknown as { content?: string; parts?: Array<{ type: string; text?: string }> }
+    if (typeof msgAny.content === 'string' && msgAny.content) {
+      content = msgAny.content
+    } else if (Array.isArray(msgAny.parts)) {
+      content = msgAny.parts
         .filter((p) => p.type === 'text' && p.text)
         .map((p) => p.text!)
         .join('')
