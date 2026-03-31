@@ -4,6 +4,7 @@ import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
 import { useState, useRef, useEffect } from 'react'
 import { agents } from '@/lib/agents'
+import { workflows } from '@/lib/workflows'
 import { createClient } from '@/lib/supabase/client'
 import type { Conversation } from '@/lib/types'
 
@@ -278,6 +279,32 @@ export function Sidebar({ conversations, userEmail, userName, isAdmin }: Sidebar
                 >
                   <span className="text-base shrink-0">{agent.emoji}</span>
                   <span className="truncate">{agent.name}</span>
+                </Link>
+              )
+            })}
+          </nav>
+        </div>
+
+        {/* Workflows */}
+        <div className="p-4 border-t border-border">
+          <h2 className="text-xs font-semibold text-muted uppercase tracking-wider mb-3">
+            Workflows
+          </h2>
+          <nav className="space-y-1">
+            {workflows.map((workflow) => {
+              const isActive = pathname.startsWith(`/assistants/workflows/${workflow.id}`)
+              return (
+                <Link
+                  key={workflow.id}
+                  href={`/assistants/workflows/${workflow.id}`}
+                  className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-colors ${
+                    isActive
+                      ? 'bg-surface-secondary shadow-sm text-foreground font-medium border border-border'
+                      : 'text-muted hover:bg-surface-secondary hover:text-foreground'
+                  }`}
+                >
+                  <span className="text-base shrink-0">{workflow.emoji}</span>
+                  <span className="truncate">{workflow.name}</span>
                 </Link>
               )
             })}
