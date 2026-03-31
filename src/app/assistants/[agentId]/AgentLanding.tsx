@@ -43,19 +43,6 @@ export default function AgentLanding({ agent }: { agent: AgentDefinition }) {
         <h2 className="text-xl font-semibold text-foreground mb-2">{agent.name}</h2>
         <p className="text-sm text-muted max-w-md text-center mb-6">{agent.description}</p>
 
-        {/* Quick-start button for guided agents */}
-        {agent.mode === 'guided' && (
-          <button
-            onClick={() => handleSend("Los geht's! Bitte starte den Prozess und stelle mir die ersten Fragen.")}
-            disabled={loading}
-            className="px-5 py-2.5 bg-primary hover:bg-primary-hover disabled:opacity-60 text-white font-medium rounded-xl transition-colors text-sm mb-2"
-          >
-            {loading ? '...' : (agent.goButtonLabel ?? 'Starten')}
-          </button>
-        )}
-        {agent.mode === 'guided' && (
-          <p className="text-xs text-muted">oder direkt unten eintippen</p>
-        )}
       </div>
 
       {/* Chat input — always visible at the bottom */}
