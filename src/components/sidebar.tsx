@@ -275,28 +275,10 @@ export function Sidebar({ conversations, userEmail, userName }: SidebarProps) {
         </Link>
       </div>
 
-      {/* Conversations + Agents */}
+      {/* Agents + Conversations */}
       <div className="flex-1 overflow-y-auto border-t border-border">
-        {/* Conversations */}
-        {conversations.length > 0 && (
-          <div className="p-4">
-            <h2 className="text-xs font-semibold text-muted uppercase tracking-wider mb-3">
-              Letzte Chats
-            </h2>
-            <nav className="space-y-0.5">
-              {conversations.map((conv) => (
-                <ConversationItem
-                  key={conv.id}
-                  conv={conv}
-                  isActive={pathname.includes(conv.id)}
-                />
-              ))}
-            </nav>
-          </div>
-        )}
-
         {/* Agents */}
-        <div className={`p-4 ${conversations.length > 0 ? 'border-t border-border' : ''}`}>
+        <div className="p-4">
           <h2 className="text-xs font-semibold text-muted uppercase tracking-wider mb-3">
             Workspace-Assistenten
           </h2>
@@ -320,6 +302,24 @@ export function Sidebar({ conversations, userEmail, userName }: SidebarProps) {
             })}
           </nav>
         </div>
+
+        {/* Conversations */}
+        {conversations.length > 0 && (
+          <div className="p-4 border-t border-border">
+            <h2 className="text-xs font-semibold text-muted uppercase tracking-wider mb-3">
+              Letzte Chats
+            </h2>
+            <nav className="space-y-0.5">
+              {conversations.map((conv) => (
+                <ConversationItem
+                  key={conv.id}
+                  conv={conv}
+                  isActive={pathname.includes(conv.id)}
+                />
+              ))}
+            </nav>
+          </div>
+        )}
       </div>
 
       {/* Bottom — User Profile Dropdown */}
