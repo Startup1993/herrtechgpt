@@ -171,52 +171,59 @@ function UserMenu({ userEmail, userName, isAdmin }: { userEmail: string; userNam
       </button>
 
       {open && (
-        <div className="absolute bottom-full left-0 right-0 mb-2 z-50 bg-surface border border-border rounded-xl shadow-lg py-2">
+        <div className="absolute bottom-full left-0 right-0 mb-2 z-50 bg-white dark:bg-surface border border-border rounded-xl shadow-xl overflow-hidden">
           {/* User info header */}
-          <div className="px-4 py-2 border-b border-border mb-1">
+          <div className="px-4 py-3 bg-surface-secondary/60 border-b border-border">
             <div className="flex items-center gap-3">
-              <div className="w-9 h-9 rounded-full bg-primary/15 text-primary flex items-center justify-center text-sm font-semibold">
+              <div className="w-9 h-9 rounded-full bg-primary/15 text-primary flex items-center justify-center text-sm font-semibold shrink-0">
                 {initials}
               </div>
               <div className="min-w-0">
-                <p className="text-sm font-medium text-foreground truncate">{userName || 'Nutzer'}</p>
+                <p className="text-sm font-semibold text-foreground truncate">{userName || 'Nutzer'}</p>
                 <p className="text-xs text-muted truncate">{userEmail}</p>
               </div>
             </div>
           </div>
 
-          <Link
-            href="/assistants/profile"
-            onClick={() => setOpen(false)}
-            className={`flex items-center gap-3 px-4 py-2.5 text-sm transition-colors ${
-              pathname === '/assistants/profile'
-                ? 'text-primary font-medium'
-                : 'text-foreground hover:bg-surface-secondary'
-            }`}
-          >
-            <span className="text-base">🧠</span>
-            Meine Wissensbasis
-          </Link>
-
-          {isAdmin && (
+          {/* Navigation items */}
+          <div className="py-1">
             <Link
-              href="/assistants/admin"
+              href="/assistants/library"
               onClick={() => setOpen(false)}
               className="flex items-center gap-3 px-4 py-2.5 text-sm text-foreground hover:bg-surface-secondary transition-colors"
             >
-              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className="text-muted">
-                <path d="M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20z"/><path d="M12 8v4l3 3"/>
-              </svg>
-              Admin-Bereich
+              <span className="text-base">📚</span>
+              Bibliothek
             </Link>
-          )}
+            <Link
+              href="/assistants/profile"
+              onClick={() => setOpen(false)}
+              className="flex items-center gap-3 px-4 py-2.5 text-sm text-foreground hover:bg-surface-secondary transition-colors"
+            >
+              <span className="text-base">🧠</span>
+              Wissensbasis
+            </Link>
+            {isAdmin && (
+              <Link
+                href="/assistants/admin"
+                onClick={() => setOpen(false)}
+                className="flex items-center gap-3 px-4 py-2.5 text-sm text-foreground hover:bg-surface-secondary transition-colors"
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className="text-muted shrink-0">
+                  <circle cx="12" cy="8" r="4"/><path d="M20 21a8 8 0 1 0-16 0"/>
+                </svg>
+                Admin-Bereich
+              </Link>
+            )}
+          </div>
 
-          <div className="border-t border-border mt-1 pt-1">
+          {/* Logout — clearly separated */}
+          <div className="border-t border-border bg-surface-secondary/30 py-1">
             <button
               onClick={handleLogout}
-              className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-foreground hover:bg-surface-secondary transition-colors"
+              className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-red-600 hover:bg-red-50 dark:hover:bg-red-950/20 transition-colors"
             >
-              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className="text-muted">
+              <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="shrink-0">
                 <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
                 <polyline points="16 17 21 12 16 7" />
                 <line x1="21" y1="12" x2="9" y2="12" />
@@ -311,34 +318,6 @@ export function Sidebar({ conversations, userEmail, userName, isAdmin }: Sidebar
           </nav>
         </div>
 
-        {/* Tools */}
-        <div className="p-4 border-t border-border">
-          <h2 className="text-xs font-semibold text-muted uppercase tracking-wider mb-3">
-            Mein Bereich
-          </h2>
-          <nav className="space-y-1">
-            {[
-              { href: '/assistants/library', emoji: '📚', label: 'Bibliothek' },
-              { href: '/assistants/profile', emoji: '🧠', label: 'Wissensbasis' },
-            ].map(({ href, emoji, label }) => {
-              const isActive = pathname === href
-              return (
-                <Link
-                  key={href}
-                  href={href}
-                  className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-colors ${
-                    isActive
-                      ? 'bg-surface-secondary shadow-sm text-foreground font-medium border border-border'
-                      : 'text-muted hover:bg-surface-secondary hover:text-foreground'
-                  }`}
-                >
-                  <span className="text-base shrink-0">{emoji}</span>
-                  <span className="truncate">{label}</span>
-                </Link>
-              )
-            })}
-          </nav>
-        </div>
 
         {/* Conversations */}
         {conversations.length > 0 && (
