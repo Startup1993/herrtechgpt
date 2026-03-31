@@ -11,6 +11,7 @@ interface SidebarProps {
   conversations: Conversation[]
   userEmail?: string
   userName?: string
+  isAdmin?: boolean
 }
 
 function ConversationItem({ conv, isActive }: { conv: Conversation; isActive: boolean }) {
@@ -124,7 +125,7 @@ function ConversationItem({ conv, isActive }: { conv: Conversation; isActive: bo
   )
 }
 
-function UserMenu({ userEmail, userName }: { userEmail: string; userName: string }) {
+function UserMenu({ userEmail, userName, isAdmin }: { userEmail: string; userName: string; isAdmin?: boolean }) {
   const [open, setOpen] = useState(false)
   const menuRef = useRef<HTMLDivElement>(null)
   const pathname = usePathname()
@@ -196,6 +197,19 @@ function UserMenu({ userEmail, userName }: { userEmail: string; userName: string
             Meine Wissensbasis
           </Link>
 
+          {isAdmin && (
+            <Link
+              href="/admin"
+              onClick={() => setOpen(false)}
+              className="flex items-center gap-3 px-4 py-2.5 text-sm text-foreground hover:bg-surface-secondary transition-colors"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className="text-muted">
+                <path d="M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20z"/><path d="M12 8v4l3 3"/>
+              </svg>
+              Admin-Bereich
+            </Link>
+          )}
+
           <div className="border-t border-border mt-1 pt-1">
             <button
               onClick={handleLogout}
@@ -215,7 +229,7 @@ function UserMenu({ userEmail, userName }: { userEmail: string; userName: string
   )
 }
 
-export function Sidebar({ conversations, userEmail, userName }: SidebarProps) {
+export function Sidebar({ conversations, userEmail, userName, isAdmin }: SidebarProps) {
   const pathname = usePathname()
 
   // Conversations are already sorted by updated_at DESC from the server query
@@ -327,6 +341,7 @@ export function Sidebar({ conversations, userEmail, userName }: SidebarProps) {
         <UserMenu
           userEmail={userEmail ?? ''}
           userName={userName ?? ''}
+          isAdmin={isAdmin}
         />
       </div>
     </aside>

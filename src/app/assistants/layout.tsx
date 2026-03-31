@@ -17,11 +17,19 @@ export default async function AssistantsLayout({
     redirect('/login')
   }
 
-  const { data: conversations } = await supabase
-    .from('conversations')
-    .select('id, user_id, agent_id, title, created_at, updated_at')
-    .order('updated_at', { ascending: false })
-    .limit(15)
+  const [{ data: conversations }, { data: profile }] = await Promise.all([
+    supabase
+      .from('conversations')
+      .select('id, user_id, agent_id, title, created_at, updated_at')
+      .eq('user_id', user.id)
+      .order('updated_at', { ascending: false })
+      .limit(15),
+    supabase
+      .from('profiles')
+      .select('role')
+      .eq('id', user.id)
+      .single(),
+  ])
 
   // Extract user name from email or metadata
   const userEmail = user.email ?? ''
@@ -36,6 +44,7 @@ export default async function AssistantsLayout({
         conversations={(conversations as Conversation[]) ?? []}
         userEmail={userEmail}
         userName={userName}
+        isAdmin={profile?.role === 'admin'}
       />
       <main className="flex-1 overflow-hidden">{children}</main>
     </div>
