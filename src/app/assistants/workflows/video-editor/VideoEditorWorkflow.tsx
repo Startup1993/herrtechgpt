@@ -3,7 +3,6 @@
 import { useState, useRef, useCallback } from 'react'
 import ReactMarkdown from 'react-markdown'
 
-type Mode = 'transcript' | 'upload'
 type Step = 'input' | 'transcribing' | 'analyzing' | 'done'
 
 interface Segment {
@@ -18,24 +17,23 @@ function formatTime(seconds: number) {
   return `${m}:${s.toString().padStart(2, '0')}`
 }
 
-function StepIndicator({ step, mode }: { step: Step; mode: Mode }) {
-  const steps =
-    mode === 'transcript'
-      ? [
-          { id: 'input', label: 'Transkript' },
-          { id: 'analyzing', label: 'KI-Analyse' },
-          { id: 'done', label: 'Ergebnis' },
-        ]
-      : [
-          { id: 'input', label: 'Upload' },
-          { id: 'transcribing', label: 'Transkription' },
-          { id: 'analyzing', label: 'KI-Analyse' },
-          { id: 'done', label: 'Ergebnis' },
-        ]
+function StepIndicator({ step, hasUpload }: { step: Step; hasUpload: boolean }) {
+  const steps = hasUpload
+    ? [
+        { id: 'input', label: 'Upload' },
+        { id: 'transcribing', label: 'Transkription' },
+        { id: 'analyzing', label: 'KI-Analyse' },
+        { id: 'done', label: 'Ergebnis' },
+      ]
+    : [
+        { id: 'input', label: 'Transkript' },
+        { id: 'analyzing', label: 'KI-Analyse' },
+        { id: 'done', label: 'Ergebnis' },
+      ]
 
-  const order = mode === 'transcript'
-    ? ['input', 'analyzing', 'done']
-    : ['input', 'transcribing', 'analyzing', 'done']
+  const order = hasUpload
+    ? ['input', 'transcribing', 'analyzing', 'done']
+    : ['input', 'analyzing', 'done']
 
   const currentIdx = order.indexOf(step)
 
@@ -82,8 +80,8 @@ function Spinner() {
 }
 
 export default function VideoEditorWorkflow() {
-  const [mode, setMode] = useState<Mode>('transcript')
   const [step, setStep] = useState<Step>('input')
+  const [showTranscriptMode, setShowTranscriptMode] = useState(false)
   const [context, setContext] = useState('')
   const [manualTranscript, setManualTranscript] = useState('')
   const [file, setFile] = useState<File | null>(null)
@@ -93,6 +91,8 @@ export default function VideoEditorWorkflow() {
   const [segments, setSegments] = useState<Segment[]>([])
   const [analysis, setAnalysis] = useState('')
   const inputRef = useRef<HTMLInputElement>(null)
+
+  const hasUpload = !showTranscriptMode
 
   const handleFile = (f: File) => {
     if (!f.type.startsWith('video/') && !f.type.startsWith('audio/')) {
@@ -118,7 +118,7 @@ export default function VideoEditorWorkflow() {
     setError('')
     let finalTranscript = ''
 
-    if (mode === 'transcript') {
+    if (showTranscriptMode) {
       if (!manualTranscript.trim()) return
       finalTranscript = manualTranscript.trim()
       setTranscript(finalTranscript)
@@ -171,9 +171,9 @@ export default function VideoEditorWorkflow() {
   }
 
   return (
-    <div className="p-8 max-w-4xl">
+    <div className="p-8 max-w-3xl">
       {/* Header */}
-      <div className="flex items-center gap-3 mb-6">
+      <div className="flex items-center gap-3 mb-2">
         <div className="w-10 h-10 bg-primary/10 rounded-xl flex items-center justify-center">
           <span className="text-xl">🎬</span>
         </div>
@@ -182,35 +182,31 @@ export default function VideoEditorWorkflow() {
             <h1 className="text-xl font-bold text-foreground">KI Video Editor</h1>
             <span className="text-xs bg-primary/10 text-primary font-medium px-2 py-0.5 rounded-full">KI-powered</span>
           </div>
-          <p className="text-xs text-muted">Transkript eingeben oder Video hochladen — Claude analysiert und empfiehlt Schnitte.</p>
+          <p className="text-xs text-muted">
+            {showTranscriptMode
+              ? 'Transkript einfügen — Claude analysiert und empfiehlt Schnitte.'
+              : 'Lade ein Video hoch — Whisper transkribiert, Claude analysiert und empfiehlt Schnitte.'}
+          </p>
         </div>
       </div>
 
-      <StepIndicator step={step} mode={mode} />
+      {/* Mode switch (only on input step) */}
+      {step === 'input' && (
+        <div className="mb-6 mt-1">
+          <button
+            onClick={() => { setShowTranscriptMode(!showTranscriptMode); setError('') }}
+            className="text-xs text-primary hover:underline"
+          >
+            {showTranscriptMode ? '← Zurück zum Video-Upload' : 'Kein Video? Transkript direkt einfügen →'}
+          </button>
+        </div>
+      )}
+
+      <StepIndicator step={step} hasUpload={hasUpload} />
 
       {/* Input Step */}
       {step === 'input' && (
         <div className="space-y-5">
-          {/* Mode Toggle */}
-          <div className="flex bg-surface-secondary border border-border rounded-xl p-1 w-fit gap-1">
-            <button
-              onClick={() => { setMode('transcript'); setError('') }}
-              className={`px-4 py-2 text-sm font-medium rounded-lg transition-colors ${
-                mode === 'transcript' ? 'bg-surface text-foreground shadow-sm' : 'text-muted hover:text-foreground'
-              }`}
-            >
-              📝 Transkript eingeben
-            </button>
-            <button
-              onClick={() => { setMode('upload'); setError('') }}
-              className={`px-4 py-2 text-sm font-medium rounded-lg transition-colors ${
-                mode === 'upload' ? 'bg-surface text-foreground shadow-sm' : 'text-muted hover:text-foreground'
-              }`}
-            >
-              🎥 Video hochladen
-            </button>
-          </div>
-
           {/* Context */}
           <div>
             <label className="block text-sm font-medium text-foreground mb-1.5">
@@ -225,8 +221,50 @@ export default function VideoEditorWorkflow() {
             />
           </div>
 
+          {/* Upload Mode */}
+          {!showTranscriptMode && (
+            <div
+              onDragOver={(e) => { e.preventDefault(); setDragging(true) }}
+              onDragLeave={() => setDragging(false)}
+              onDrop={onDrop}
+              onClick={() => inputRef.current?.click()}
+              className={`border-2 border-dashed rounded-xl p-12 flex flex-col items-center justify-center cursor-pointer transition-colors ${
+                dragging ? 'border-primary bg-primary/5' :
+                file ? 'border-primary/40 bg-primary/5' :
+                'border-border hover:border-primary/40 hover:bg-surface-secondary'
+              }`}
+            >
+              <input ref={inputRef} type="file" accept="video/*,audio/*" className="hidden"
+                onChange={(e) => e.target.files?.[0] && handleFile(e.target.files[0])} />
+              {file ? (
+                <>
+                  <div className="w-12 h-12 bg-primary/10 rounded-full flex items-center justify-center mb-3">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="text-primary">
+                      <polygon points="23 7 16 12 23 17 23 7"/><rect x="1" y="5" width="15" height="14" rx="2" ry="2"/>
+                    </svg>
+                  </div>
+                  <p className="text-sm font-medium text-foreground">{file.name}</p>
+                  <p className="text-xs text-muted mt-1">{(file.size / 1024 / 1024).toFixed(1)} MB</p>
+                  <button onClick={(e) => { e.stopPropagation(); setFile(null) }}
+                    className="mt-3 text-xs text-muted hover:text-red-500 transition-colors">Entfernen</button>
+                </>
+              ) : (
+                <>
+                  <div className="w-16 h-16 bg-primary/10 rounded-full flex items-center justify-center mb-4">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" className="text-primary">
+                      <polyline points="16 16 12 12 8 16"/><line x1="12" y1="12" x2="12" y2="21"/>
+                      <path d="M20.39 18.39A5 5 0 0 0 18 9h-1.26A8 8 0 1 0 3 16.3"/>
+                    </svg>
+                  </div>
+                  <p className="text-sm font-semibold text-foreground">Video hierher ziehen oder klicken</p>
+                  <p className="text-xs text-muted mt-1">MP4, MOV, AVI, WebM — max. 25 MB</p>
+                </>
+              )}
+            </div>
+          )}
+
           {/* Transcript Mode */}
-          {mode === 'transcript' && (
+          {showTranscriptMode && (
             <div>
               <label className="block text-sm font-medium text-foreground mb-1.5">
                 Transkript einfügen
@@ -244,59 +282,6 @@ export default function VideoEditorWorkflow() {
             </div>
           )}
 
-          {/* Upload Mode */}
-          {mode === 'upload' && (
-            <>
-              <div className="flex items-start gap-2.5 bg-yellow-50 border border-yellow-200 rounded-lg px-4 py-3">
-                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="text-yellow-600 mt-0.5 shrink-0">
-                  <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/>
-                </svg>
-                <p className="text-xs text-yellow-800">
-                  Benötigt <strong>OPENAI_API_KEY</strong> in den Server-Einstellungen (Whisper-Transkription). Ohne Key: Transkript-Modus nutzen.
-                </p>
-              </div>
-
-              <div
-                onDragOver={(e) => { e.preventDefault(); setDragging(true) }}
-                onDragLeave={() => setDragging(false)}
-                onDrop={onDrop}
-                onClick={() => inputRef.current?.click()}
-                className={`border-2 border-dashed rounded-xl p-10 flex flex-col items-center justify-center cursor-pointer transition-colors ${
-                  dragging ? 'border-primary bg-primary/5' :
-                  file ? 'border-primary/40 bg-primary/5' :
-                  'border-border hover:border-primary/40 hover:bg-surface-secondary'
-                }`}
-              >
-                <input ref={inputRef} type="file" accept="video/*,audio/*" className="hidden"
-                  onChange={(e) => e.target.files?.[0] && handleFile(e.target.files[0])} />
-                {file ? (
-                  <>
-                    <div className="w-12 h-12 bg-primary/10 rounded-full flex items-center justify-center mb-3">
-                      <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="text-primary">
-                        <polygon points="23 7 16 12 23 17 23 7"/><rect x="1" y="5" width="15" height="14" rx="2" ry="2"/>
-                      </svg>
-                    </div>
-                    <p className="text-sm font-medium text-foreground">{file.name}</p>
-                    <p className="text-xs text-muted mt-1">{(file.size / 1024 / 1024).toFixed(1)} MB</p>
-                    <button onClick={(e) => { e.stopPropagation(); setFile(null) }}
-                      className="mt-3 text-xs text-muted hover:text-red-500 transition-colors">Entfernen</button>
-                  </>
-                ) : (
-                  <>
-                    <div className="w-14 h-14 bg-primary/10 rounded-full flex items-center justify-center mb-4">
-                      <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" className="text-primary">
-                        <polyline points="16 16 12 12 8 16"/><line x1="12" y1="12" x2="12" y2="21"/>
-                        <path d="M20.39 18.39A5 5 0 0 0 18 9h-1.26A8 8 0 1 0 3 16.3"/>
-                      </svg>
-                    </div>
-                    <p className="text-sm font-semibold text-foreground">Video hierher ziehen oder klicken</p>
-                    <p className="text-xs text-muted mt-1">MP4, MOV, AVI, WebM — max. 25 MB</p>
-                  </>
-                )}
-              </div>
-            </>
-          )}
-
           {error && (
             <div className="flex items-start gap-2.5 bg-red-50 border border-red-200 rounded-lg px-4 py-3">
               <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="text-red-500 mt-0.5 shrink-0">
@@ -308,10 +293,10 @@ export default function VideoEditorWorkflow() {
 
           <button
             onClick={handleStart}
-            disabled={mode === 'transcript' ? !manualTranscript.trim() : !file}
+            disabled={showTranscriptMode ? !manualTranscript.trim() : !file}
             className="w-full py-3 bg-primary hover:bg-primary-hover disabled:bg-border disabled:text-white/50 text-white font-medium rounded-xl transition-colors"
           >
-            {mode === 'transcript' ? 'Mit Claude analysieren' : 'Automatisch bearbeiten'}
+            {showTranscriptMode ? 'Mit Claude analysieren' : 'Automatisch bearbeiten'}
           </button>
         </div>
       )}
