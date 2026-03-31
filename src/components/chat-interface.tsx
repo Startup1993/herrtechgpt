@@ -25,7 +25,12 @@ export function ChatInterface({
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const [input, setInput] = useState('')
   const [isListening, setIsListening] = useState(false)
+  const [barHeights, setBarHeights] = useState<number[]>(Array(28).fill(3))
   const recognitionRef = useRef<SpeechRecognition | null>(null)
+  const audioCtxRef = useRef<AudioContext | null>(null)
+  const analyserRef = useRef<AnalyserNode | null>(null)
+  const audioStreamRef = useRef<MediaStream | null>(null)
+  const animFrameRef = useRef<number>(0)
   const autoSentRef = useRef(false)
 
   const transport = useMemo(
@@ -87,6 +92,7 @@ export function ChatInterface({
   const toggleDictation = useCallback(() => {
     if (isListening) {
       recognitionRef.current?.stop()
+      stopAudioAnalysis()
       setIsListening(false)
       return
     }
@@ -123,13 +129,15 @@ export function ChatInterface({
     }
 
     recognition.onend = () => {
+      stopAudioAnalysis()
       setIsListening(false)
     }
 
     recognitionRef.current = recognition
     recognition.start()
     setIsListening(true)
-  }, [isListening])
+    startAudioAnalysis()
+  }, [isListening, startAudioAnalysis, stopAudioAnalysis])
 
   const showGoButton = agent.mode === 'guided' && messages.length === 0
   const isGeneralChat = agent.id === 'general'
@@ -147,44 +155,75 @@ export function ChatInterface({
     return ''
   }
 
-  const cancelDictation = () => {
+  const stopAudioAnalysis = useCallback(() => {
+    cancelAnimationFrame(animFrameRef.current)
+    audioStreamRef.current?.getTracks().forEach((t) => t.stop())
+    audioCtxRef.current?.close()
+    audioCtxRef.current = null
+    analyserRef.current = null
+    setBarHeights(Array(28).fill(3))
+  }, [])
+
+  const startAudioAnalysis = useCallback(async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
+      audioStreamRef.current = stream
+      const ctx = new AudioContext()
+      audioCtxRef.current = ctx
+      const analyser = ctx.createAnalyser()
+      analyser.fftSize = 128
+      analyser.smoothingTimeConstant = 0.75
+      analyserRef.current = analyser
+      ctx.createMediaStreamSource(stream).connect(analyser)
+      const data = new Uint8Array(analyser.frequencyBinCount)
+      const animate = () => {
+        analyser.getByteFrequencyData(data)
+        const bars = Array.from({ length: 28 }, (_, i) => {
+          const idx = Math.floor((i / 28) * data.length * 0.6)
+          const raw = data[idx] / 255
+          return Math.max(3, raw * 36)
+        })
+        setBarHeights(bars)
+        animFrameRef.current = requestAnimationFrame(animate)
+      }
+      animate()
+    } catch {
+      // fallback: idle animation if mic permission denied
+    }
+  }, [])
+
+  const cancelDictation = useCallback(() => {
     recognitionRef.current?.stop()
+    stopAudioAnalysis()
     setIsListening(false)
     setInput('')
-  }
+  }, [stopAudioAnalysis])
 
-  const confirmDictation = () => {
+  const confirmDictation = useCallback(() => {
     recognitionRef.current?.stop()
+    stopAudioAnalysis()
     setIsListening(false)
-    if (input.trim()) handleSend()
-  }
+    if (input.trim()) handleSend(input)
+  }, [stopAudioAnalysis, input]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Waveform bars for voice UI
+  // Waveform UI — reacts to live microphone input
   const WaveformUI = ({ centered }: { centered?: boolean }) => (
     <div className={centered ? 'w-full max-w-2xl mx-auto' : 'max-w-3xl mx-auto'}>
-      <div className="flex items-center gap-3 px-5 py-3 border border-dashed border-foreground/30 rounded-2xl bg-surface">
-        {/* Waveform */}
-        <div className="flex-1 flex items-center justify-center gap-[3px] h-9">
-          {[0.4,0.6,1,0.7,0.9,0.5,0.8,1,0.6,0.4,0.7,0.9,1,0.8,0.5,0.6,1,0.7,0.4,0.9].map((h, i) => (
+      <div className="flex items-center gap-3 px-5 py-3 border border-dashed border-border rounded-2xl bg-surface shadow-sm">
+        {/* Waveform — centered, dynamic */}
+        <div className="flex-1 flex items-center justify-center gap-[2.5px] h-10">
+          {barHeights.map((h, i) => (
             <div
               key={i}
-              className="w-[3px] rounded-full bg-foreground"
-              style={{
-                height: `${h * 28}px`,
-                animationName: 'waveBar',
-                animationDuration: `${0.6 + (i % 5) * 0.15}s`,
-                animationTimingFunction: 'ease-in-out',
-                animationIterationCount: 'infinite',
-                animationDirection: 'alternate',
-                animationDelay: `${(i % 7) * 0.08}s`,
-              }}
+              className="w-[3px] rounded-full bg-foreground/80 transition-all"
+              style={{ height: `${h}px`, transitionDuration: '60ms' }}
             />
           ))}
         </div>
         {/* Cancel */}
         <button
           onClick={cancelDictation}
-          className="p-2 rounded-lg hover:bg-surface-secondary text-foreground transition-colors shrink-0"
+          className="p-2 rounded-lg hover:bg-surface-secondary text-foreground/70 hover:text-foreground transition-colors shrink-0"
           title="Abbrechen"
         >
           <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
@@ -194,7 +233,7 @@ export function ChatInterface({
         {/* Confirm */}
         <button
           onClick={confirmDictation}
-          className="p-2 rounded-lg hover:bg-surface-secondary text-foreground transition-colors shrink-0"
+          className="p-2 rounded-lg hover:bg-surface-secondary text-foreground/70 hover:text-foreground transition-colors shrink-0"
           title="Senden"
         >
           <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
@@ -202,12 +241,6 @@ export function ChatInterface({
           </svg>
         </button>
       </div>
-      <style>{`
-        @keyframes waveBar {
-          from { transform: scaleY(0.3); }
-          to   { transform: scaleY(1); }
-        }
-      `}</style>
     </div>
   )
 
