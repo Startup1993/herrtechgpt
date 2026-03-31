@@ -23,7 +23,7 @@ function VoiceRecordingUI({
     <div className={centered ? 'w-full max-w-2xl mx-auto' : 'max-w-3xl mx-auto'}>
       <div className="flex items-center gap-3 px-5 py-3.5 border border-dashed border-border rounded-2xl bg-surface shadow-sm">
         {/* Scrolling waveform — bars flow right to left */}
-        <div className="flex-1 flex items-end gap-[2px] h-10 overflow-hidden">
+        <div className="flex-1 flex items-end justify-end gap-[2px] h-10 overflow-hidden">
           {heights.map((h, i) => (
             <div
               key={i}
