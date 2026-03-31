@@ -32,3 +32,18 @@ export async function PATCH(request: Request) {
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
   return NextResponse.json(data)
 }
+
+export async function DELETE(request: Request) {
+  const currentUser = await requireAdmin()
+  if (!currentUser) return NextResponse.json({ error: 'Unauthorized' }, { status: 403 })
+
+  const { searchParams } = new URL(request.url)
+  const userId = searchParams.get('userId')
+  if (!userId) return NextResponse.json({ error: 'userId required' }, { status: 400 })
+  if (userId === currentUser.id) return NextResponse.json({ error: 'Cannot delete yourself' }, { status: 400 })
+
+  const admin = createAdminClient()
+  const { error } = await admin.auth.admin.deleteUser(userId)
+  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  return NextResponse.json({ success: true })
+}
