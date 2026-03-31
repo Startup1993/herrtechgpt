@@ -256,39 +256,6 @@ export function Sidebar({ conversations, userEmail, userName, isAdmin }: Sidebar
         </Link>
       </div>
 
-      {/* Main Nav */}
-      <div className="px-4 pb-2 space-y-0.5">
-        <Link
-          href="/assistants/chat"
-          className={`flex items-center gap-3 px-3 py-2 rounded-lg text-sm transition-colors ${
-            pathname === '/assistants/chat'
-              ? 'bg-surface-secondary text-foreground font-medium'
-              : 'text-muted hover:bg-surface-secondary hover:text-foreground'
-          }`}
-        >
-          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-            <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
-          </svg>
-          Chats
-        </Link>
-        <Link
-          href="/assistants"
-          className={`flex items-center gap-3 px-3 py-2 rounded-lg text-sm transition-colors ${
-            pathname === '/assistants'
-              ? 'bg-surface-secondary text-foreground font-medium'
-              : 'text-muted hover:bg-surface-secondary hover:text-foreground'
-          }`}
-        >
-          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-            <rect x="3" y="3" width="7" height="7" rx="1" />
-            <rect x="14" y="3" width="7" height="7" rx="1" />
-            <rect x="3" y="14" width="7" height="7" rx="1" />
-            <rect x="14" y="14" width="7" height="7" rx="1" />
-          </svg>
-          Assistenten
-        </Link>
-      </div>
-
       {/* Agents + Conversations */}
       <div className="flex-1 overflow-y-auto border-t border-border">
         {/* Agents */}
