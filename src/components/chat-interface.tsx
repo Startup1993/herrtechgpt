@@ -7,6 +7,54 @@ import { useRouter } from 'next/navigation'
 import { ChatMessage } from './chat-message'
 import type { AgentDefinition } from '@/lib/agents'
 
+// Extracted as top-level component so onClick handlers are never stale
+function VoiceRecordingUI({
+  heights,
+  onCancel,
+  onConfirm,
+  centered,
+}: {
+  heights: number[]
+  onCancel: () => void
+  onConfirm: () => void
+  centered?: boolean
+}) {
+  return (
+    <div className={centered ? 'w-full max-w-2xl mx-auto' : 'max-w-3xl mx-auto'}>
+      <div className="flex items-center gap-3 px-5 py-3.5 border border-dashed border-border rounded-2xl bg-surface shadow-sm">
+        {/* Scrolling waveform — bars flow right to left */}
+        <div className="flex-1 flex items-end gap-[2px] h-10 overflow-hidden">
+          {heights.map((h, i) => (
+            <div
+              key={i}
+              className="w-[3px] rounded-full bg-foreground/70 flex-shrink-0"
+              style={{ height: `${h}px`, transition: 'height 0.07s ease' }}
+            />
+          ))}
+        </div>
+        {/* Cancel */}
+        <button
+          onPointerDown={(e) => { e.preventDefault(); onCancel() }}
+          className="p-2 rounded-lg hover:bg-surface-secondary text-foreground/60 hover:text-foreground transition-colors shrink-0"
+        >
+          <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+            <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
+          </svg>
+        </button>
+        {/* Confirm */}
+        <button
+          onPointerDown={(e) => { e.preventDefault(); onConfirm() }}
+          className="p-2 rounded-lg hover:bg-surface-secondary text-foreground/60 hover:text-foreground transition-colors shrink-0"
+        >
+          <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+            <polyline points="20 6 9 17 4 12" />
+          </svg>
+        </button>
+      </div>
+    </div>
+  )
+}
+
 interface ChatInterfaceProps {
   agent: AgentDefinition
   conversationId: string
@@ -25,12 +73,12 @@ export function ChatInterface({
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const [input, setInput] = useState('')
   const [isListening, setIsListening] = useState(false)
-  const [barHeights, setBarHeights] = useState<number[]>(Array(28).fill(3))
+  const [barHeights, setBarHeights] = useState<number[]>(Array(40).fill(3))
   const recognitionRef = useRef<SpeechRecognition | null>(null)
   const audioCtxRef = useRef<AudioContext | null>(null)
   const analyserRef = useRef<AnalyserNode | null>(null)
   const audioStreamRef = useRef<MediaStream | null>(null)
-  const animFrameRef = useRef<number>(0)
+  const waveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const autoSentRef = useRef(false)
 
   const transport = useMemo(
@@ -88,14 +136,14 @@ export function ChatInterface({
     }
   }
 
-  // Audio analysis for waveform visualization
+  // Audio analysis — scrolling waveform (bars flow right to left)
   const stopAudioAnalysis = useCallback(() => {
-    cancelAnimationFrame(animFrameRef.current)
+    if (waveTimerRef.current) clearTimeout(waveTimerRef.current)
     audioStreamRef.current?.getTracks().forEach((t) => t.stop())
     audioCtxRef.current?.close()
     audioCtxRef.current = null
     analyserRef.current = null
-    setBarHeights(Array(28).fill(3))
+    setBarHeights(Array(40).fill(3))
   }, [])
 
   const startAudioAnalysis = useCallback(async () => {
@@ -105,24 +153,31 @@ export function ChatInterface({
       const ctx = new AudioContext()
       audioCtxRef.current = ctx
       const analyser = ctx.createAnalyser()
-      analyser.fftSize = 128
-      analyser.smoothingTimeConstant = 0.75
+      analyser.fftSize = 256
+      analyser.smoothingTimeConstant = 0.6
       analyserRef.current = analyser
       ctx.createMediaStreamSource(stream).connect(analyser)
       const data = new Uint8Array(analyser.frequencyBinCount)
-      const animate = () => {
-        analyser.getByteFrequencyData(data)
-        const bars = Array.from({ length: 28 }, (_, i) => {
-          const idx = Math.floor((i / 28) * data.length * 0.6)
-          const raw = data[idx] / 255
-          return Math.max(3, raw * 36)
-        })
-        setBarHeights(bars)
-        animFrameRef.current = requestAnimationFrame(animate)
+
+      const tick = () => {
+        if (!analyserRef.current) return
+        analyserRef.current.getByteFrequencyData(data)
+        // Average the lower frequencies (voice range)
+        const slice = data.slice(0, Math.floor(data.length / 3))
+        const avg = slice.reduce((a, b) => a + b, 0) / slice.length
+        const h = Math.max(3, (avg / 255) * 38)
+        // Shift left, append new bar on right → scrolling effect
+        setBarHeights((prev) => [...prev.slice(1), h])
+        waveTimerRef.current = setTimeout(tick, 75) // ~13fps scroll
       }
-      animate()
+      tick()
     } catch {
-      // fallback if mic permission denied
+      // fallback: slow idle pulse if mic denied
+      const idle = () => {
+        setBarHeights((prev) => [...prev.slice(1), 3 + Math.random() * 4])
+        waveTimerRef.current = setTimeout(idle, 75)
+      }
+      idle()
     }
   }, [])
 
@@ -207,47 +262,16 @@ export function ChatInterface({
     if (input.trim()) handleSend(input)
   }, [stopAudioAnalysis, input]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Waveform UI — reacts to live microphone input
-  const WaveformUI = ({ centered }: { centered?: boolean }) => (
-    <div className={centered ? 'w-full max-w-2xl mx-auto' : 'max-w-3xl mx-auto'}>
-      <div className="flex items-center gap-3 px-5 py-3 border border-dashed border-border rounded-2xl bg-surface shadow-sm">
-        {/* Waveform — centered, dynamic */}
-        <div className="flex-1 flex items-center justify-center gap-[2.5px] h-10">
-          {barHeights.map((h, i) => (
-            <div
-              key={i}
-              className="w-[3px] rounded-full bg-foreground/80 transition-all"
-              style={{ height: `${h}px`, transitionDuration: '60ms' }}
-            />
-          ))}
-        </div>
-        {/* Cancel */}
-        <button
-          onClick={cancelDictation}
-          className="p-2 rounded-lg hover:bg-surface-secondary text-foreground/70 hover:text-foreground transition-colors shrink-0"
-          title="Abbrechen"
-        >
-          <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-            <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
-          </svg>
-        </button>
-        {/* Confirm */}
-        <button
-          onClick={confirmDictation}
-          className="p-2 rounded-lg hover:bg-surface-secondary text-foreground/70 hover:text-foreground transition-colors shrink-0"
-          title="Senden"
-        >
-          <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-            <polyline points="20 6 9 17 4 12" />
-          </svg>
-        </button>
-      </div>
-    </div>
-  )
-
   // Shared input bar component
   const renderInputBar = (centered?: boolean) => {
-    if (isListening) return <WaveformUI centered={centered} />
+    if (isListening) return (
+      <VoiceRecordingUI
+        heights={barHeights}
+        onCancel={cancelDictation}
+        onConfirm={confirmDictation}
+        centered={centered}
+      />
+    )
     return (
       <div className={centered ? 'w-full max-w-2xl mx-auto' : 'max-w-3xl mx-auto'}>
         <div className="flex gap-2 items-end bg-surface border border-border rounded-2xl px-4 py-2 shadow-sm focus-within:ring-2 focus-within:ring-primary focus-within:border-transparent transition-shadow">
