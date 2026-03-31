@@ -199,7 +199,7 @@ function UserMenu({ userEmail, userName, isAdmin }: { userEmail: string; userNam
 
           {isAdmin && (
             <Link
-              href="/admin"
+              href="/assistants/admin"
               onClick={() => setOpen(false)}
               className="flex items-center gap-3 px-4 py-2.5 text-sm text-foreground hover:bg-surface-secondary transition-colors"
             >
