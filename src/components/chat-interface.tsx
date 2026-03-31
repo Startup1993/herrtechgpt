@@ -267,8 +267,8 @@ export function ChatInterface({
     recognitionRef.current?.stop()
     stopAudioAnalysis()
     setIsListening(false)
-    if (input.trim()) handleSend(input)
-  }, [stopAudioAnalysis, input]) // eslint-disable-line react-hooks/exhaustive-deps
+    // Text bleibt im Eingabefeld — Nutzer kann es prüfen/ergänzen, dann manuell senden
+  }, [stopAudioAnalysis])
 
   // Shared input bar
   const renderInputBar = (centered?: boolean) => {
