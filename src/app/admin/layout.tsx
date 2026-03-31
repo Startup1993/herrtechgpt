@@ -15,8 +15,8 @@ export default async function AdminLayout({ children }: { children: React.ReactN
       {/* Admin Sidebar */}
       <aside className="w-64 bg-surface border-r border-border flex flex-col h-screen shrink-0">
         <div className="px-5 pt-5 pb-4 border-b border-border">
-          <Link href="/admin" className="text-xl font-black uppercase">
-            Herr Tech<span className="text-primary">.</span>
+          <Link href="/admin">
+            <img src="/logo.png" alt="Herr Tech" className="h-6 w-auto" />
           </Link>
           <p className="text-xs text-muted mt-1">Admin-Bereich</p>
         </div>

@@ -6,7 +6,7 @@ export default function AssistantsPage() {
     <div className="flex flex-col items-center justify-center h-full p-8 bg-background">
       <div className="max-w-2xl w-full">
         <h1 className="text-2xl font-bold text-foreground mb-2">
-          Willkommen bei <span className="font-black uppercase">Herr Tech<span className="text-primary">.</span></span>
+          Willkommen bei <img src="/logo.png" alt="Herr Tech" className="h-6 w-auto inline-block align-middle ml-1" />
         </h1>
         <p className="text-muted mb-8">
           Wähle einen Assistenten aus, um loszulegen.

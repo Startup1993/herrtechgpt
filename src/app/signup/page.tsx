@@ -6,9 +6,7 @@ export default function SignupPage() {
     <div className="min-h-screen flex items-center justify-center bg-background">
       <div className="bg-surface p-8 rounded-2xl shadow-sm border border-border w-full max-w-md">
         <div className="text-center mb-8">
-          <h1 className="text-2xl font-black uppercase">
-            Herr Tech<span className="text-primary">.</span>
-          </h1>
+          <img src="/logo.png" alt="Herr Tech" className="h-8 w-auto mx-auto" />
           <p className="text-muted mt-2">Erstell dein Konto</p>
         </div>
 
