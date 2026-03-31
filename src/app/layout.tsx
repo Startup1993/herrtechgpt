@@ -13,8 +13,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "ImmoGPT — AI für Immobilienprofis",
-  description: "Ihre persönlichen AI-Assistenten für den Immobilienmarkt",
+  title: "Herr Tech — Dein KI-Workspace",
+  description: "Deine persönlichen KI-Assistenten für Content, Business & Wachstum",
 };
 
 export default function RootLayout({

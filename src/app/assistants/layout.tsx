@@ -1,6 +1,7 @@
 import { createClient } from '@/lib/supabase/server'
 import { redirect } from 'next/navigation'
 import { AppShell } from '@/components/app-shell'
+import { OnboardingGuard } from '@/components/onboarding-guard'
 import type { Conversation } from '@/lib/types'
 
 export default async function AssistantsLayout({
@@ -26,7 +27,7 @@ export default async function AssistantsLayout({
       .limit(15),
     supabase
       .from('profiles')
-      .select('role')
+      .select('role, background, market, target_audience, offer')
       .eq('id', user.id)
       .single(),
   ])
@@ -38,14 +39,24 @@ export default async function AssistantsLayout({
     (user.user_metadata?.name as string) ??
     userEmail.split('@')[0]
 
+  const profileComplete = !!(
+    profile?.background ||
+    profile?.market ||
+    profile?.target_audience ||
+    profile?.offer
+  )
+
   return (
-    <AppShell
-      conversations={(conversations as Conversation[]) ?? []}
-      userEmail={userEmail}
-      userName={userName}
-      isAdmin={profile?.role === 'admin'}
-    >
-      {children}
-    </AppShell>
+    <>
+      <OnboardingGuard profileComplete={profileComplete} />
+      <AppShell
+        conversations={(conversations as Conversation[]) ?? []}
+        userEmail={userEmail}
+        userName={userName}
+        isAdmin={profile?.role === 'admin'}
+      >
+        {children}
+      </AppShell>
+    </>
   )
 }

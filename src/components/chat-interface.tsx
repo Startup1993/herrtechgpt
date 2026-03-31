@@ -252,6 +252,8 @@ export function ChatInterface({
                   key={msg.id}
                   role={msg.role as 'user' | 'assistant'}
                   content={content}
+                  agentId={agent.id}
+                  agentName={agent.name}
                 />
               )
             })}

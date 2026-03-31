@@ -11,6 +11,8 @@ export interface AgentDefinition {
   systemPrompt: string
   goButtonLabel?: string
   placeholder: string
+  bestFor?: string[]
+  isRecommended?: boolean
 }
 
 export const agents: AgentDefinition[] = [
@@ -24,6 +26,8 @@ export const agents: AgentDefinition[] = [
     mode: 'guided',
     goButtonLabel: 'Content erstellen',
     placeholder: 'Thema oder Idee beschreiben...',
+    bestFor: ['Hooks', 'Captions', 'Viral Content'],
+    isRecommended: true,
     systemPrompt: `Du bist ein erfahrener Content-Stratege und Copywriter, spezialisiert auf Creator und Online-Unternehmer im deutschsprachigen Raum. Du erstellst viralen Content mit starken Hooks, der Aufmerksamkeit erzeugt und die Community wachsen lässt.
 
 Dein Ablauf:
@@ -59,6 +63,7 @@ Passe den Ton an die Plattform an:
     mode: 'guided',
     goButtonLabel: 'Funnel analysieren',
     placeholder: 'Dein aktuelles Angebot oder Funnel beschreiben...',
+    bestFor: ['Funnel-Analyse', 'Umsatz steigern'],
     systemPrompt: `Du bist ein Experte für digitale Funnels und Online-Monetarisierung im deutschsprachigen Raum. Du hilfst Creator und Online-Unternehmern, ihre Reichweite in Umsatz zu verwandeln.
 
 Dein Ablauf:
@@ -95,6 +100,7 @@ Liefere immer konkrete Handlungsschritte mit Priorisierung.`,
     textColor: 'text-yellow-500',
     mode: 'free-chat',
     placeholder: 'Was beschäftigt dich gerade?',
+    bestFor: ['Mindset', 'Produktivität', 'Routinen'],
     systemPrompt: `Du bist ein einfühlsamer und motivierender Personal-Growth-Coach für ambitionierte Creator und Unternehmer im deutschsprachigen Raum. Du verbindest praktische Strategien mit mentalem Wachstum.
 
 Deine Kernbereiche:
@@ -124,6 +130,7 @@ Beziehe immer das Nutzerprofil ein, um deine Antworten auf die spezifische Situa
     mode: 'guided',
     goButtonLabel: 'Prompt erstellen',
     placeholder: 'Was soll die KI für dich tun?',
+    bestFor: ['Prompt Engineering', 'KI-Workflows'],
     systemPrompt: `Du bist ein Experte für Prompt Engineering und KI-Nutzung im Business-Kontext. Du hilfst Creator und Unternehmern, das Maximum aus KI-Tools wie Claude, ChatGPT und anderen herauszuholen.
 
 Dein Ablauf:
@@ -159,6 +166,7 @@ Liefere immer:
     textColor: 'text-purple-500',
     mode: 'free-chat',
     placeholder: 'Stell mir deine Frage...',
+    bestFor: ['Tech-Fragen', 'Online Business', 'KI-Tools'],
     systemPrompt: `Du bist Herr Tech — der persönliche KI-Assistent der HerrTech-Community. Du bist ein erfahrener Experte für Online Business, KI-Tools, Digitalisierung und Creator Economy im deutschsprachigen Raum.
 
 Deine Expertise:
@@ -189,6 +197,7 @@ Beziehe immer das Nutzerprofil ein, um Antworten optimal auf die Situation des N
     mode: 'guided',
     goButtonLabel: 'Coaching starten',
     placeholder: 'Beschreibe deine aktuelle Situation...',
+    bestFor: ['Strategie', 'Business-Coaching', '90-Tage-Plan'],
     systemPrompt: `Du bist ein erfahrener Business Coach, spezialisiert auf Creator, Coaches und Online-Unternehmer im deutschsprachigen Raum. Du führst den Nutzer durch einen strukturierten Coaching-Prozess.
 
 Dein Coaching-Ablauf:
