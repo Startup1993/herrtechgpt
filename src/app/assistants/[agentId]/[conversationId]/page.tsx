@@ -80,12 +80,14 @@ export default async function ConversationPage({
       </div>
 
       {/* Chat */}
-      <ChatInterface
-        agent={agent}
-        conversationId={conversationId}
-        initialMessages={initialMessages}
-        autoSend={init}
-      />
+      <div className="flex-1 min-h-0 overflow-hidden">
+        <ChatInterface
+          agent={agent}
+          conversationId={conversationId}
+          initialMessages={initialMessages}
+          autoSend={init}
+        />
+      </div>
     </div>
   )
 }

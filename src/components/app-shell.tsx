@@ -64,7 +64,7 @@ export function AppShell({ conversations, userEmail, userName, isAdmin, children
           <img src="/logo.png" alt="Herr Tech" className="h-5 w-auto" />
         </div>
 
-        <main className="flex-1 overflow-hidden">{children}</main>
+        <main className="flex-1 min-h-0 overflow-hidden">{children}</main>
       </div>
     </div>
   )

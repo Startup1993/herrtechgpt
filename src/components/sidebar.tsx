@@ -171,11 +171,11 @@ function UserMenu({ userEmail, userName, isAdmin }: { userEmail: string; userNam
       </button>
 
       {open && (
-        <div className="absolute bottom-full left-0 right-0 mb-2 z-50 bg-white dark:bg-surface border border-border rounded-xl shadow-xl overflow-hidden">
+        <div className="absolute bottom-full left-0 right-0 mb-2 z-50 bg-white dark:bg-surface border-2 border-primary/20 rounded-xl shadow-xl overflow-hidden">
           {/* User info header */}
-          <div className="px-4 py-3 bg-surface-secondary/60 border-b border-border">
+          <div className="px-4 py-3 bg-primary/8 border-b-2 border-primary/15">
             <div className="flex items-center gap-3">
-              <div className="w-9 h-9 rounded-full bg-primary/15 text-primary flex items-center justify-center text-sm font-semibold shrink-0">
+              <div className="w-9 h-9 rounded-full bg-primary/20 text-primary flex items-center justify-center text-sm font-bold shrink-0">
                 {initials}
               </div>
               <div className="min-w-0">
