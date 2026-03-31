@@ -35,21 +35,29 @@ export async function middleware(request: NextRequest) {
 
   const { pathname } = request.nextUrl
 
-  // Redirect unauthenticated users to login (except for auth routes)
-  if (
-    !user &&
-    pathname.startsWith('/assistants')
-  ) {
+  // Redirect unauthenticated users to login
+  if (!user && (pathname.startsWith('/assistants') || pathname.startsWith('/admin'))) {
     const url = request.nextUrl.clone()
     url.pathname = '/login'
     return NextResponse.redirect(url)
   }
 
+  // Protect admin routes: check role
+  if (user && pathname.startsWith('/admin')) {
+    const { data: profile } = await supabase
+      .from('profiles')
+      .select('role')
+      .eq('id', user.id)
+      .single()
+    if (!profile || profile.role !== 'admin') {
+      const url = request.nextUrl.clone()
+      url.pathname = '/assistants'
+      return NextResponse.redirect(url)
+    }
+  }
+
   // Redirect authenticated users away from login/signup
-  if (
-    user &&
-    (pathname === '/login' || pathname === '/signup')
-  ) {
+  if (user && (pathname === '/login' || pathname === '/signup')) {
     const url = request.nextUrl.clone()
     url.pathname = '/assistants'
     return NextResponse.redirect(url)
