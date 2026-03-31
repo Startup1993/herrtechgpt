@@ -2,8 +2,9 @@ import { notFound } from 'next/navigation'
 import { getWorkflow } from '@/lib/workflows'
 import WorkflowSteps from './WorkflowSteps'
 
-export default function WorkflowPage({ params }: { params: { workflowId: string } }) {
-  const workflow = getWorkflow(params.workflowId)
+export default async function WorkflowPage({ params }: { params: Promise<{ workflowId: string }> }) {
+  const { workflowId } = await params
+  const workflow = getWorkflow(workflowId)
   if (!workflow) notFound()
 
   const difficultyColor = {
