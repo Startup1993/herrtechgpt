@@ -147,59 +147,122 @@ export function ChatInterface({
     return ''
   }
 
-  // Shared input bar component
-  const renderInputBar = (centered?: boolean) => (
+  const cancelDictation = () => {
+    recognitionRef.current?.stop()
+    setIsListening(false)
+    setInput('')
+  }
+
+  const confirmDictation = () => {
+    recognitionRef.current?.stop()
+    setIsListening(false)
+    if (input.trim()) handleSend()
+  }
+
+  // Waveform bars for voice UI
+  const WaveformUI = ({ centered }: { centered?: boolean }) => (
     <div className={centered ? 'w-full max-w-2xl mx-auto' : 'max-w-3xl mx-auto'}>
-      <div className="flex gap-2 items-end bg-surface border border-border rounded-2xl px-4 py-2 shadow-sm focus-within:ring-2 focus-within:ring-primary focus-within:border-transparent transition-shadow">
-        <textarea
-          ref={textareaRef}
-          value={input}
-          onChange={(e) => setInput(e.target.value)}
-          onKeyDown={handleKeyDown}
-          placeholder={agent.placeholder}
-          rows={1}
-          className="flex-1 py-2 text-sm resize-none max-h-32 overflow-y-auto bg-transparent focus:outline-none placeholder:text-muted/60"
-          style={{ minHeight: '36px' }}
-          onInput={(e) => {
-            const target = e.target as HTMLTextAreaElement
-            target.style.height = 'auto'
-            target.style.height = Math.min(target.scrollHeight, 128) + 'px'
-          }}
-        />
-        <div className="flex items-center gap-1 pb-1">
-          {/* Dictation button */}
-          <button
-            onClick={toggleDictation}
-            type="button"
-            className={`p-2 rounded-lg transition-colors ${
-              isListening
-                ? 'bg-primary text-white animate-pulse'
-                : 'text-muted hover:text-foreground hover:bg-surface-secondary'
-            }`}
-            title={isListening ? 'Diktat stoppen' : 'Spracheingabe'}
-          >
-            <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z" />
-              <path d="M19 10v2a7 7 0 0 1-14 0v-2" />
-              <line x1="12" y1="19" x2="12" y2="23" />
-              <line x1="8" y1="23" x2="16" y2="23" />
-            </svg>
-          </button>
-          {/* Send button */}
-          <button
-            onClick={() => handleSend()}
-            disabled={!input.trim() || isStreaming}
-            className="p-2 bg-primary hover:bg-primary-hover disabled:bg-border disabled:text-white/50 text-white rounded-lg transition-colors"
-          >
-            <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <line x1="22" y1="2" x2="11" y2="13" />
-              <polygon points="22 2 15 22 11 13 2 9 22 2" />
-            </svg>
-          </button>
+      <div className="flex items-center gap-3 px-5 py-3 border border-dashed border-foreground/30 rounded-2xl bg-surface">
+        {/* Waveform */}
+        <div className="flex-1 flex items-center justify-center gap-[3px] h-9">
+          {[0.4,0.6,1,0.7,0.9,0.5,0.8,1,0.6,0.4,0.7,0.9,1,0.8,0.5,0.6,1,0.7,0.4,0.9].map((h, i) => (
+            <div
+              key={i}
+              className="w-[3px] rounded-full bg-foreground"
+              style={{
+                height: `${h * 28}px`,
+                animationName: 'waveBar',
+                animationDuration: `${0.6 + (i % 5) * 0.15}s`,
+                animationTimingFunction: 'ease-in-out',
+                animationIterationCount: 'infinite',
+                animationDirection: 'alternate',
+                animationDelay: `${(i % 7) * 0.08}s`,
+              }}
+            />
+          ))}
         </div>
+        {/* Cancel */}
+        <button
+          onClick={cancelDictation}
+          className="p-2 rounded-lg hover:bg-surface-secondary text-foreground transition-colors shrink-0"
+          title="Abbrechen"
+        >
+          <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+            <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
+          </svg>
+        </button>
+        {/* Confirm */}
+        <button
+          onClick={confirmDictation}
+          className="p-2 rounded-lg hover:bg-surface-secondary text-foreground transition-colors shrink-0"
+          title="Senden"
+        >
+          <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+            <polyline points="20 6 9 17 4 12" />
+          </svg>
+        </button>
       </div>
+      <style>{`
+        @keyframes waveBar {
+          from { transform: scaleY(0.3); }
+          to   { transform: scaleY(1); }
+        }
+      `}</style>
     </div>
   )
+
+  // Shared input bar component
+  const renderInputBar = (centered?: boolean) => {
+    if (isListening) return <WaveformUI centered={centered} />
+    return (
+      <div className={centered ? 'w-full max-w-2xl mx-auto' : 'max-w-3xl mx-auto'}>
+        <div className="flex gap-2 items-end bg-surface border border-border rounded-2xl px-4 py-2 shadow-sm focus-within:ring-2 focus-within:ring-primary focus-within:border-transparent transition-shadow">
+          <textarea
+            ref={textareaRef}
+            value={input}
+            onChange={(e) => setInput(e.target.value)}
+            onKeyDown={handleKeyDown}
+            placeholder={agent.placeholder}
+            rows={1}
+            className="flex-1 py-2 text-sm resize-none max-h-32 overflow-y-auto bg-transparent focus:outline-none placeholder:text-muted/60"
+            style={{ minHeight: '36px' }}
+            onInput={(e) => {
+              const target = e.target as HTMLTextAreaElement
+              target.style.height = 'auto'
+              target.style.height = Math.min(target.scrollHeight, 128) + 'px'
+            }}
+          />
+          <div className="flex items-center gap-1 pb-1">
+            {/* Dictation button */}
+            <button
+              onClick={toggleDictation}
+              type="button"
+              className="p-2 rounded-lg text-muted hover:text-foreground hover:bg-surface-secondary transition-colors"
+              title="Spracheingabe"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z" />
+                <path d="M19 10v2a7 7 0 0 1-14 0v-2" />
+                <line x1="12" y1="19" x2="12" y2="23" />
+                <line x1="8" y1="23" x2="16" y2="23" />
+              </svg>
+            </button>
+            {/* Send button */}
+            <button
+              onClick={() => handleSend()}
+              disabled={!input.trim() || isStreaming}
+              className="p-2 bg-primary hover:bg-primary-hover disabled:bg-border disabled:text-white/50 text-white rounded-lg transition-colors"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <line x1="22" y1="2" x2="11" y2="13" />
+                <polygon points="22 2 15 22 11 13 2 9 22 2" />
+              </svg>
+            </button>
+          </div>
+        </div>
+      </div>
+    )
+  }
 
   // Centered empty state for general chat (ChatGPT-style)
   if (showCenteredView && isGeneralChat) {
