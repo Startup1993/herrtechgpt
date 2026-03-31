@@ -186,7 +186,7 @@ function UserMenu({ userEmail, userName, isAdmin }: { userEmail: string; userNam
           </div>
 
           {/* Navigation items */}
-          <div className="py-1">
+          <div className="pt-1">
             <Link
               href="/assistants/library"
               onClick={() => setOpen(false)}
@@ -218,7 +218,7 @@ function UserMenu({ userEmail, userName, isAdmin }: { userEmail: string; userNam
           </div>
 
           {/* Logout — clearly separated */}
-          <div className="border-t border-border bg-surface-secondary/30 py-1">
+          <div className="border-t border-border py-1">
             <button
               onClick={handleLogout}
               className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-red-600 hover:bg-red-50 dark:hover:bg-red-950/20 transition-colors"

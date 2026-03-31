@@ -18,12 +18,14 @@ export function ChatMessage({ role, content, agentId, agentName }: ChatMessagePr
     if (saved || saving) return
     setSaving(true)
     try {
-      await fetch('/api/library', {
+      const res = await fetch('/api/library', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ content, agentId, agentName }),
       })
-      setSaved(true)
+      if (res.ok) {
+        setSaved(true)
+      }
     } finally {
       setSaving(false)
     }
