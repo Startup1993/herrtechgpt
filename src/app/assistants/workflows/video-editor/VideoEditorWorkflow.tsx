@@ -179,7 +179,7 @@ export default function VideoEditorWorkflow() {
         </div>
         <div>
           <div className="flex items-center gap-2">
-            <h1 className="text-xl font-bold text-foreground">KI Video Editor</h1>
+            <h1 className="text-xl font-bold text-foreground">Herr Tech <span className="font-black uppercase">Video Editor</span></h1>
             <span className="text-xs bg-primary/10 text-primary font-medium px-2 py-0.5 rounded-full">KI-powered</span>
           </div>
           <p className="text-xs text-muted">

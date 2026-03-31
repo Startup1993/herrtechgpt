@@ -6,7 +6,7 @@ export default function LoginPage() {
     <div className="min-h-screen flex items-center justify-center bg-background">
       <div className="bg-surface p-8 rounded-2xl shadow-sm border border-border w-full max-w-md">
         <div className="text-center mb-8">
-          <h1 className="text-2xl font-black tracking-widest uppercase">
+          <h1 className="text-2xl font-black uppercase">
             Herr Tech<span className="text-primary">.</span>
           </h1>
           <p className="text-muted mt-2">Meld dich an</p>
