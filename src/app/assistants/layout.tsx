@@ -1,6 +1,6 @@
 import { createClient } from '@/lib/supabase/server'
 import { redirect } from 'next/navigation'
-import { Sidebar } from '@/components/sidebar'
+import { AppShell } from '@/components/app-shell'
 import type { Conversation } from '@/lib/types'
 
 export default async function AssistantsLayout({
@@ -39,14 +39,13 @@ export default async function AssistantsLayout({
     userEmail.split('@')[0]
 
   return (
-    <div className="flex h-screen bg-background">
-      <Sidebar
-        conversations={(conversations as Conversation[]) ?? []}
-        userEmail={userEmail}
-        userName={userName}
-        isAdmin={profile?.role === 'admin'}
-      />
-      <main className="flex-1 overflow-hidden">{children}</main>
-    </div>
+    <AppShell
+      conversations={(conversations as Conversation[]) ?? []}
+      userEmail={userEmail}
+      userName={userName}
+      isAdmin={profile?.role === 'admin'}
+    >
+      {children}
+    </AppShell>
   )
 }

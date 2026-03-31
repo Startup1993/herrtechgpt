@@ -171,7 +171,7 @@ export default function VideoEditorWorkflow() {
   }
 
   return (
-    <div className="p-8 max-w-3xl">
+    <div className="p-4 md:p-8 max-w-3xl overflow-y-auto h-full">
       {/* Header */}
       <div className="flex items-center gap-3 mb-2">
         <div className="w-10 h-10 bg-primary/10 rounded-xl flex items-center justify-center">

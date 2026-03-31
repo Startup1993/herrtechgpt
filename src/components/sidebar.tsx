@@ -235,7 +235,7 @@ export function Sidebar({ conversations, userEmail, userName, isAdmin }: Sidebar
 
   // Conversations are already sorted by updated_at DESC from the server query
   return (
-    <aside className="w-72 bg-surface border-r border-border flex flex-col h-screen shrink-0">
+    <aside className="w-72 bg-surface border-r border-border flex flex-col h-full shrink-0">
       {/* Logo */}
       <div className="px-5 pt-5 pb-4">
         <Link href="/assistants">

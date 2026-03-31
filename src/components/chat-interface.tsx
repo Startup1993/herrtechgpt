@@ -221,7 +221,7 @@ export function ChatInterface({
   return (
     <div className="flex flex-col h-full">
       {/* Messages area */}
-      <div ref={scrollRef} className="flex-1 overflow-y-auto px-6 py-4">
+      <div ref={scrollRef} className="flex-1 overflow-y-auto px-3 py-4 md:px-6">
         {messages.length === 0 ? (
           <div className="flex flex-col items-center justify-center h-full text-center">
             <div className="text-4xl mb-4">{agent.emoji}</div>
@@ -268,7 +268,7 @@ export function ChatInterface({
       </div>
 
       {/* Input area */}
-      <div className="border-t border-border px-6 py-4 bg-surface">
+      <div className="border-t border-border px-3 py-3 md:px-6 md:py-4 bg-surface">
         {renderInputBar()}
       </div>
     </div>
