@@ -1,6 +1,7 @@
 'use client'
 
 import { useState } from 'react'
+import ReactMarkdown from 'react-markdown'
 
 interface ChatMessageProps {
   role: 'user' | 'assistant'
@@ -35,13 +36,31 @@ export function ChatMessage({ role, content, agentId, agentName }: ChatMessagePr
     <div className={`flex ${isUser ? 'justify-end' : 'justify-start'} group`}>
       <div className="relative max-w-[80%]">
         <div
-          className={`px-4 py-3 rounded-2xl text-sm leading-relaxed whitespace-pre-wrap ${
+          className={`px-4 py-3 rounded-2xl text-sm leading-relaxed ${
             isUser
-              ? 'bg-primary text-white rounded-br-md'
+              ? 'bg-primary text-white rounded-br-md whitespace-pre-wrap'
               : 'bg-surface-secondary text-foreground rounded-bl-md border border-border'
           }`}
         >
-          {content}
+          {isUser ? content : (
+            <ReactMarkdown
+              components={{
+                p: ({ children }) => <p className="mb-2 last:mb-0">{children}</p>,
+                strong: ({ children }) => <strong className="font-semibold">{children}</strong>,
+                em: ({ children }) => <em className="italic">{children}</em>,
+                ul: ({ children }) => <ul className="list-disc pl-4 mb-2 space-y-0.5">{children}</ul>,
+                ol: ({ children }) => <ol className="list-decimal pl-4 mb-2 space-y-0.5">{children}</ol>,
+                li: ({ children }) => <li>{children}</li>,
+                h1: ({ children }) => <h1 className="font-bold text-base mb-1">{children}</h1>,
+                h2: ({ children }) => <h2 className="font-semibold mb-1">{children}</h2>,
+                h3: ({ children }) => <h3 className="font-semibold mb-1">{children}</h3>,
+                code: ({ children }) => <code className="bg-black/10 rounded px-1 font-mono text-xs">{children}</code>,
+                hr: () => <hr className="border-border my-2" />,
+              }}
+            >
+              {content}
+            </ReactMarkdown>
+          )}
         </div>
 
         {/* Save button — only on assistant messages */}
