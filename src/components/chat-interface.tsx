@@ -3,6 +3,7 @@
 import { useChat } from '@ai-sdk/react'
 import { TextStreamChatTransport } from 'ai'
 import { useEffect, useMemo, useRef, useState, useCallback } from 'react'
+import { useRouter } from 'next/navigation'
 import { ChatMessage } from './chat-message'
 import type { AgentDefinition } from '@/lib/agents'
 
@@ -10,18 +11,22 @@ interface ChatInterfaceProps {
   agent: AgentDefinition
   conversationId: string
   initialMessages: { id: string; role: 'user' | 'assistant'; content: string }[]
+  autoSend?: string
 }
 
 export function ChatInterface({
   agent,
   conversationId,
   initialMessages,
+  autoSend,
 }: ChatInterfaceProps) {
+  const router = useRouter()
   const scrollRef = useRef<HTMLDivElement>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const [input, setInput] = useState('')
   const [isListening, setIsListening] = useState(false)
   const recognitionRef = useRef<SpeechRecognition | null>(null)
+  const autoSentRef = useRef(false)
 
   const transport = useMemo(
     () =>
@@ -43,6 +48,16 @@ export function ChatInterface({
   })
 
   const isStreaming = status === 'streaming' || status === 'submitted'
+
+  // Auto-send first message (from AgentLanding)
+  useEffect(() => {
+    if (autoSend && !autoSentRef.current) {
+      autoSentRef.current = true
+      sendMessage({ text: autoSend })
+      // Clean up the URL without reloading
+      router.replace(`/assistants/${agent.id}/${conversationId}`)
+    }
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Auto-scroll to bottom
   useEffect(() => {

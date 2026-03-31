@@ -19,10 +19,13 @@ const generalAgent: AgentDefinition = {
 
 export default async function ConversationPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ agentId: string; conversationId: string }>
+  searchParams: Promise<{ init?: string }>
 }) {
   const { agentId, conversationId } = await params
+  const { init } = await searchParams
   const agent = agentId === 'general' ? generalAgent : getAgent(agentId)
 
   if (!agent) {
@@ -81,6 +84,7 @@ export default async function ConversationPage({
         agent={agent}
         conversationId={conversationId}
         initialMessages={initialMessages}
+        autoSend={init}
       />
     </div>
   )
