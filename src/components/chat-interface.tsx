@@ -7,27 +7,70 @@ import { useRouter } from 'next/navigation'
 import { ChatMessage } from './chat-message'
 import type { AgentDefinition } from '@/lib/agents'
 
-// Extracted as top-level component so onClick handlers are never stale
+// VoiceRecordingUI manages its own bar count (via ResizeObserver) and animation
 function VoiceRecordingUI({
-  heights,
+  analyserRef,
   onCancel,
   onConfirm,
   centered,
 }: {
-  heights: number[]
+  analyserRef: { current: AnalyserNode | null }
   onCancel: () => void
   onConfirm: () => void
   centered?: boolean
 }) {
+  const containerRef = useRef<HTMLDivElement>(null)
+  const [barHeights, setBarHeights] = useState<number[]>(() => Array(60).fill(3))
+  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  // Dynamically set bar count to fill the container width
+  useEffect(() => {
+    const el = containerRef.current
+    if (!el) return
+    const update = () => {
+      const w = el.clientWidth
+      // 2px bar + 2px gap = 4px per bar
+      const n = Math.max(20, Math.floor(w / 4))
+      setBarHeights(Array(n).fill(3))
+    }
+    update()
+    const ro = new ResizeObserver(update)
+    ro.observe(el)
+    return () => ro.disconnect()
+  }, [])
+
+  // Animation loop — reads from analyserRef every 75ms
+  useEffect(() => {
+    const tick = () => {
+      let h = 3
+      const analyser = analyserRef.current
+      if (analyser) {
+        const data = new Uint8Array(analyser.frequencyBinCount)
+        analyser.getByteFrequencyData(data)
+        const slice = data.slice(0, Math.floor(data.length / 3))
+        const avg = slice.reduce((a, b) => a + b, 0) / slice.length
+        h = Math.max(3, (avg / 255) * 38)
+      } else {
+        h = 3 + Math.random() * 4
+      }
+      setBarHeights((prev) => (prev.length ? [...prev.slice(1), h] : prev))
+      timerRef.current = setTimeout(tick, 75)
+    }
+    tick()
+    return () => {
+      if (timerRef.current) clearTimeout(timerRef.current)
+    }
+  }, [analyserRef])
+
   return (
     <div className={centered ? 'w-full max-w-2xl mx-auto' : 'max-w-3xl mx-auto'}>
       <div className="flex items-center gap-3 px-5 py-3.5 border border-dashed border-border rounded-2xl bg-surface shadow-sm">
-        {/* Scrolling waveform — bars flow right to left */}
-        <div className="flex-1 flex items-end justify-end gap-[2px] h-10 overflow-hidden">
-          {heights.map((h, i) => (
+        {/* Scrolling waveform — fills full width, bars flow right to left */}
+        <div ref={containerRef} className="flex-1 flex items-end gap-[2px] h-10 overflow-hidden">
+          {barHeights.map((h, i) => (
             <div
               key={i}
-              className="w-[3px] rounded-full bg-foreground/70 flex-shrink-0"
+              className="w-[2px] rounded-full bg-foreground/70 flex-shrink-0"
               style={{ height: `${h}px`, transition: 'height 0.07s ease' }}
             />
           ))}
@@ -73,12 +116,10 @@ export function ChatInterface({
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const [input, setInput] = useState('')
   const [isListening, setIsListening] = useState(false)
-  const [barHeights, setBarHeights] = useState<number[]>(Array(40).fill(3))
   const recognitionRef = useRef<SpeechRecognition | null>(null)
   const audioCtxRef = useRef<AudioContext | null>(null)
   const analyserRef = useRef<AnalyserNode | null>(null)
   const audioStreamRef = useRef<MediaStream | null>(null)
-  const waveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const autoSentRef = useRef(false)
 
   const transport = useMemo(
@@ -107,7 +148,6 @@ export function ChatInterface({
     if (autoSend && !autoSentRef.current) {
       autoSentRef.current = true
       sendMessage({ text: autoSend })
-      // Clean up the URL without reloading
       router.replace(`/assistants/${agent.id}/${conversationId}`)
     }
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
@@ -136,14 +176,12 @@ export function ChatInterface({
     }
   }
 
-  // Audio analysis — scrolling waveform (bars flow right to left)
+  // Set up audio stream + analyser node (animation runs inside VoiceRecordingUI)
   const stopAudioAnalysis = useCallback(() => {
-    if (waveTimerRef.current) clearTimeout(waveTimerRef.current)
     audioStreamRef.current?.getTracks().forEach((t) => t.stop())
     audioCtxRef.current?.close()
     audioCtxRef.current = null
     analyserRef.current = null
-    setBarHeights(Array(40).fill(3))
   }, [])
 
   const startAudioAnalysis = useCallback(async () => {
@@ -157,27 +195,8 @@ export function ChatInterface({
       analyser.smoothingTimeConstant = 0.6
       analyserRef.current = analyser
       ctx.createMediaStreamSource(stream).connect(analyser)
-      const data = new Uint8Array(analyser.frequencyBinCount)
-
-      const tick = () => {
-        if (!analyserRef.current) return
-        analyserRef.current.getByteFrequencyData(data)
-        // Average the lower frequencies (voice range)
-        const slice = data.slice(0, Math.floor(data.length / 3))
-        const avg = slice.reduce((a, b) => a + b, 0) / slice.length
-        const h = Math.max(3, (avg / 255) * 38)
-        // Shift left, append new bar on right → scrolling effect
-        setBarHeights((prev) => [...prev.slice(1), h])
-        waveTimerRef.current = setTimeout(tick, 75) // ~13fps scroll
-      }
-      tick()
     } catch {
-      // fallback: slow idle pulse if mic denied
-      const idle = () => {
-        setBarHeights((prev) => [...prev.slice(1), 3 + Math.random() * 4])
-        waveTimerRef.current = setTimeout(idle, 75)
-      }
-      idle()
+      // mic denied — VoiceRecordingUI will use idle animation (analyserRef stays null)
     }
   }, [])
 
@@ -203,13 +222,9 @@ export function ChatInterface({
 
     recognition.onresult = (event: SpeechRecognitionEvent) => {
       let finalTranscript = ''
-      let interimTranscript = ''
       for (let i = event.resultIndex; i < event.results.length; i++) {
-        const transcript = event.results[i][0].transcript
         if (event.results[i].isFinal) {
-          finalTranscript += transcript
-        } else {
-          interimTranscript += transcript
+          finalTranscript += event.results[i][0].transcript
         }
       }
       if (finalTranscript) {
@@ -217,14 +232,8 @@ export function ChatInterface({
       }
     }
 
-    recognition.onerror = () => {
-      setIsListening(false)
-    }
-
-    recognition.onend = () => {
-      stopAudioAnalysis()
-      setIsListening(false)
-    }
+    recognition.onerror = () => { setIsListening(false) }
+    recognition.onend = () => { stopAudioAnalysis(); setIsListening(false) }
 
     recognitionRef.current = recognition
     recognition.start()
@@ -236,7 +245,6 @@ export function ChatInterface({
   const isGeneralChat = agent.id === 'general'
   const showCenteredView = messages.length === 0
 
-  // Extract text content from message parts
   const getMessageContent = (msg: (typeof messages)[0]): string => {
     if (typeof msg.content === 'string' && msg.content) return msg.content
     if (msg.parts) {
@@ -262,11 +270,11 @@ export function ChatInterface({
     if (input.trim()) handleSend(input)
   }, [stopAudioAnalysis, input]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Shared input bar component
+  // Shared input bar
   const renderInputBar = (centered?: boolean) => {
     if (isListening) return (
       <VoiceRecordingUI
-        heights={barHeights}
+        analyserRef={analyserRef}
         onCancel={cancelDictation}
         onConfirm={confirmDictation}
         centered={centered}
@@ -322,7 +330,7 @@ export function ChatInterface({
     )
   }
 
-  // Centered empty state for general chat (ChatGPT-style)
+  // Centered empty state for general chat
   if (showCenteredView && isGeneralChat) {
     return (
       <div className="flex flex-col h-full">
@@ -354,9 +362,7 @@ export function ChatInterface({
             </p>
             {showGoButton && (
               <button
-                onClick={() =>
-                  handleSend("Los geht's! Bitte starte den Prozess.")
-                }
+                onClick={() => handleSend("Los geht's! Bitte starte den Prozess.")}
                 className="px-6 py-3 bg-primary hover:bg-primary-hover text-white font-medium rounded-xl transition-colors text-sm"
               >
                 {agent.goButtonLabel ?? 'Starten'}
