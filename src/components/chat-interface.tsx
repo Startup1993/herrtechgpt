@@ -88,6 +88,44 @@ export function ChatInterface({
     }
   }
 
+  // Audio analysis for waveform visualization
+  const stopAudioAnalysis = useCallback(() => {
+    cancelAnimationFrame(animFrameRef.current)
+    audioStreamRef.current?.getTracks().forEach((t) => t.stop())
+    audioCtxRef.current?.close()
+    audioCtxRef.current = null
+    analyserRef.current = null
+    setBarHeights(Array(28).fill(3))
+  }, [])
+
+  const startAudioAnalysis = useCallback(async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
+      audioStreamRef.current = stream
+      const ctx = new AudioContext()
+      audioCtxRef.current = ctx
+      const analyser = ctx.createAnalyser()
+      analyser.fftSize = 128
+      analyser.smoothingTimeConstant = 0.75
+      analyserRef.current = analyser
+      ctx.createMediaStreamSource(stream).connect(analyser)
+      const data = new Uint8Array(analyser.frequencyBinCount)
+      const animate = () => {
+        analyser.getByteFrequencyData(data)
+        const bars = Array.from({ length: 28 }, (_, i) => {
+          const idx = Math.floor((i / 28) * data.length * 0.6)
+          const raw = data[idx] / 255
+          return Math.max(3, raw * 36)
+        })
+        setBarHeights(bars)
+        animFrameRef.current = requestAnimationFrame(animate)
+      }
+      animate()
+    } catch {
+      // fallback if mic permission denied
+    }
+  }, [])
+
   // Voice dictation
   const toggleDictation = useCallback(() => {
     if (isListening) {
@@ -154,43 +192,6 @@ export function ChatInterface({
     }
     return ''
   }
-
-  const stopAudioAnalysis = useCallback(() => {
-    cancelAnimationFrame(animFrameRef.current)
-    audioStreamRef.current?.getTracks().forEach((t) => t.stop())
-    audioCtxRef.current?.close()
-    audioCtxRef.current = null
-    analyserRef.current = null
-    setBarHeights(Array(28).fill(3))
-  }, [])
-
-  const startAudioAnalysis = useCallback(async () => {
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
-      audioStreamRef.current = stream
-      const ctx = new AudioContext()
-      audioCtxRef.current = ctx
-      const analyser = ctx.createAnalyser()
-      analyser.fftSize = 128
-      analyser.smoothingTimeConstant = 0.75
-      analyserRef.current = analyser
-      ctx.createMediaStreamSource(stream).connect(analyser)
-      const data = new Uint8Array(analyser.frequencyBinCount)
-      const animate = () => {
-        analyser.getByteFrequencyData(data)
-        const bars = Array.from({ length: 28 }, (_, i) => {
-          const idx = Math.floor((i / 28) * data.length * 0.6)
-          const raw = data[idx] / 255
-          return Math.max(3, raw * 36)
-        })
-        setBarHeights(bars)
-        animFrameRef.current = requestAnimationFrame(animate)
-      }
-      animate()
-    } catch {
-      // fallback: idle animation if mic permission denied
-    }
-  }, [])
 
   const cancelDictation = useCallback(() => {
     recognitionRef.current?.stop()
