@@ -6,11 +6,10 @@ export default function AssistantsPage() {
     <div className="flex flex-col items-center justify-center h-full p-8 bg-background">
       <div className="max-w-2xl w-full">
         <h1 className="text-2xl font-bold text-foreground mb-2">
-          Willkommen bei <span>immo</span>
-          <span className="text-primary">GPT</span>
+          Willkommen bei <span className="font-black tracking-widest uppercase">Herr Tech<span className="text-primary">.</span></span>
         </h1>
         <p className="text-muted mb-8">
-          Wählen Sie einen Agenten aus, um loszulegen.
+          Wähle einen Assistenten aus, um loszulegen.
         </p>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">

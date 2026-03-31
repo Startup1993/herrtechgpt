@@ -13,33 +13,33 @@ const fields = [
   {
     key: 'background' as const,
     label: 'Über mich',
-    hint: 'Wer sind Sie? Erfahrung, Spezialisierung, Ausbildung',
+    hint: 'Wer bist du? Dein Hintergrund, deine Erfahrung, deine Geschichte',
     placeholder:
-      'z.B. "Immobilienmakler seit 8 Jahren, spezialisiert auf Wohnimmobilien in München. IHK-zertifiziert, vorher 5 Jahre in der Finanzberatung."',
+      'z.B. "Online-Unternehmer seit 4 Jahren, Schwerpunkt auf KI-Tools und Automatisierung. Früher Softwareentwickler, heute Creator und Coach für die HerrTech-Community."',
     icon: '👤',
   },
   {
     key: 'market' as const,
-    label: 'Mein Markt & Region',
-    hint: 'Wo sind Sie aktiv? Welche Immobilientypen?',
+    label: 'Mein Business & Nische',
+    hint: 'In welcher Nische bist du aktiv? Was ist dein Geschäftsmodell?',
     placeholder:
-      'z.B. "München und Umgebung, Bayern. Fokus auf Eigentumswohnungen und Einfamilienhäuser im Preissegment 300k-1,2M€"',
-    icon: '📍',
+      'z.B. "Online-Kurse und Coaching rund um KI & Produktivität. Hauptplattformen: Instagram und YouTube. Monatlich 5–10 neue Kunden über organischen Content."',
+    icon: '🚀',
   },
   {
     key: 'target_audience' as const,
     label: 'Meine Zielgruppe',
-    hint: 'Wer sind Ihre typischen Kunden?',
+    hint: 'Wer ist deine Wunschzielgruppe?',
     placeholder:
-      'z.B. "Eigennutzer und Familien, 30-55 Jahre, Doppelverdiener, oft Erstimmobilie. Zunehmend auch Kapitalanleger."',
+      'z.B. "Ambitionierte Unternehmer und Angestellte, 25–45 Jahre, die KI nutzen wollen, um Zeit zu sparen und ihr Business zu skalieren. Technikaffin, aber kein Developer."',
     icon: '🎯',
   },
   {
     key: 'offer' as const,
-    label: 'Meine Leistungen',
-    hint: 'Was bieten Sie Ihren Kunden an?',
+    label: 'Meine Angebote',
+    hint: 'Was verkaufst du? Welche Produkte oder Dienstleistungen?',
     placeholder:
-      'z.B. "Kauf und Verkauf von Wohnimmobilien, professionelle Immobilienbewertung, Off-Market Deals, Rundum-Service von Besichtigung bis Notar"',
+      'z.B. "KI-Masterkurs (997€), monatliche Membership-Community (49€/Monat), 1:1 Strategie-Calls (350€/h). Zusätzlich Affiliate-Einnahmen über empfohlene Tools."',
     icon: '💼',
   },
 ]
@@ -99,10 +99,10 @@ export function ProfileForm({ profile }: ProfileFormProps) {
         <span className="text-xl shrink-0">💡</span>
         <div>
           <p className="text-sm font-medium text-foreground">
-            Je mehr wir über Sie wissen, desto besser werden die Ergebnisse.
+            Je mehr wir über dich wissen, desto besser werden die Ergebnisse.
           </p>
           <p className="text-xs text-muted mt-1">
-            Diese Informationen werden automatisch an alle Agenten weitergegeben, damit die Antworten perfekt auf Sie zugeschnitten sind.
+            Diese Informationen werden automatisch an alle Assistenten weitergegeben, damit die Antworten perfekt auf dich zugeschnitten sind.
           </p>
         </div>
       </div>
@@ -148,7 +148,7 @@ export function ProfileForm({ profile }: ProfileFormProps) {
           </label>
         </div>
         <p className="text-xs text-muted mb-4 ml-8">
-          Laden Sie Dokumente hoch, die als zusätzliche Wissensbasis dienen (z.B. Marktberichte, Leitfäden, Vorlagen).
+          Lade Dokumente hoch, die als zusätzliche Wissensbasis dienen (z.B. Leitfäden, SOPs, Angebote, Texte über dich).
         </p>
 
         {/* Uploaded files */}

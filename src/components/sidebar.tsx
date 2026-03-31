@@ -223,9 +223,8 @@ export function Sidebar({ conversations, userEmail, userName }: SidebarProps) {
     <aside className="w-72 bg-surface border-r border-border flex flex-col h-screen shrink-0">
       {/* Logo */}
       <div className="px-5 pt-5 pb-4">
-        <Link href="/assistants" className="text-2xl font-bold text-foreground">
-          <span className="font-bold">immo</span>
-          <span className="font-black text-primary">GPT</span>
+        <Link href="/assistants" className="text-xl font-black tracking-widest text-foreground uppercase">
+          Herr Tech<span className="text-primary">.</span>
         </Link>
       </div>
 
@@ -243,11 +242,63 @@ export function Sidebar({ conversations, userEmail, userName }: SidebarProps) {
         </Link>
       </div>
 
-      {/* Agents + Conversations */}
+      {/* Main Nav */}
+      <div className="px-4 pb-2 space-y-0.5">
+        <Link
+          href="/assistants/chat"
+          className={`flex items-center gap-3 px-3 py-2 rounded-lg text-sm transition-colors ${
+            pathname === '/assistants/chat'
+              ? 'bg-surface-secondary text-foreground font-medium'
+              : 'text-muted hover:bg-surface-secondary hover:text-foreground'
+          }`}
+        >
+          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
+          </svg>
+          Chats
+        </Link>
+        <Link
+          href="/assistants"
+          className={`flex items-center gap-3 px-3 py-2 rounded-lg text-sm transition-colors ${
+            pathname === '/assistants'
+              ? 'bg-surface-secondary text-foreground font-medium'
+              : 'text-muted hover:bg-surface-secondary hover:text-foreground'
+          }`}
+        >
+          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+            <rect x="3" y="3" width="7" height="7" rx="1" />
+            <rect x="14" y="3" width="7" height="7" rx="1" />
+            <rect x="3" y="14" width="7" height="7" rx="1" />
+            <rect x="14" y="14" width="7" height="7" rx="1" />
+          </svg>
+          Assistenten
+        </Link>
+      </div>
+
+      {/* Conversations + Agents */}
       <div className="flex-1 overflow-y-auto border-t border-border">
-        <div className="p-4">
+        {/* Conversations */}
+        {conversations.length > 0 && (
+          <div className="p-4">
+            <h2 className="text-xs font-semibold text-muted uppercase tracking-wider mb-3">
+              Letzte Chats
+            </h2>
+            <nav className="space-y-0.5">
+              {conversations.map((conv) => (
+                <ConversationItem
+                  key={conv.id}
+                  conv={conv}
+                  isActive={pathname.includes(conv.id)}
+                />
+              ))}
+            </nav>
+          </div>
+        )}
+
+        {/* Agents */}
+        <div className={`p-4 ${conversations.length > 0 ? 'border-t border-border' : ''}`}>
           <h2 className="text-xs font-semibold text-muted uppercase tracking-wider mb-3">
-            Meine Agenten
+            Workspace-Assistenten
           </h2>
           <nav className="space-y-1">
             {agents.map((agent) => {
@@ -269,24 +320,6 @@ export function Sidebar({ conversations, userEmail, userName }: SidebarProps) {
             })}
           </nav>
         </div>
-
-        {/* Conversations */}
-        {conversations.length > 0 && (
-          <div className="p-4 pt-2 border-t border-border">
-            <h2 className="text-xs font-semibold text-muted uppercase tracking-wider mb-3">
-              Meine Chats
-            </h2>
-            <nav className="space-y-0.5">
-              {conversations.map((conv) => (
-                <ConversationItem
-                  key={conv.id}
-                  conv={conv}
-                  isActive={pathname.includes(conv.id)}
-                />
-              ))}
-            </nav>
-          </div>
-        )}
       </div>
 
       {/* Bottom — User Profile Dropdown */}

@@ -6,11 +6,10 @@ export default function SignupPage() {
     <div className="min-h-screen flex items-center justify-center bg-background">
       <div className="bg-surface p-8 rounded-2xl shadow-sm border border-border w-full max-w-md">
         <div className="text-center mb-8">
-          <h1 className="text-2xl font-bold">
-            <span>immo</span>
-            <span className="text-primary">GPT</span>
+          <h1 className="text-2xl font-black tracking-widest uppercase">
+            Herr Tech<span className="text-primary">.</span>
           </h1>
-          <p className="text-muted mt-2">Erstellen Sie Ihr Konto</p>
+          <p className="text-muted mt-2">Erstell dein Konto</p>
         </div>
 
         <div className="flex justify-center">

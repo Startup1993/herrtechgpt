@@ -30,14 +30,14 @@ export async function POST(req: Request) {
   const { text } = await generateText({
     model: anthropic('claude-sonnet-4-20250514'),
     system:
-      'Du bist ein Experte für Immobilienmakler-Positionierung im deutschsprachigen Raum (DACH). Generiere einen professionellen, konkreten Vorschlag für das angegebene Profilfeld. Der Text soll spezifisch und praxisnah sein, nicht generisch. Antworte nur mit dem generierten Text, ohne Erklärungen oder Anführungszeichen.',
-    prompt: `Generiere einen Vorschlag für das Feld "${fieldLabel}" eines Immobilienmakler-Profils.
+      'Du bist ein Experte für Positionierung und Personal Branding für Creator und Online-Unternehmer im deutschsprachigen Raum. Generiere einen professionellen, konkreten Vorschlag für das angegebene Profilfeld. Der Text soll spezifisch und praxisnah sein, nicht generisch. Antworte nur mit dem generierten Text, ohne Erklärungen oder Anführungszeichen.',
+    prompt: `Generiere einen Vorschlag für das Feld "${fieldLabel}" eines Creator- und Online-Business-Profils.
 
 Bereits ausgefüllte Felder:
 - Hintergrund: ${currentProfile.background || '(noch nicht ausgefüllt)'}
-- Markt: ${currentProfile.market || '(noch nicht ausgefüllt)'}
+- Business & Nische: ${currentProfile.market || '(noch nicht ausgefüllt)'}
 - Zielgruppe: ${currentProfile.target_audience || '(noch nicht ausgefüllt)'}
-- Angebot: ${currentProfile.offer || '(noch nicht ausgefüllt)'}
+- Angebote: ${currentProfile.offer || '(noch nicht ausgefüllt)'}
 
 Generiere einen passenden, konkreten Text für das Feld "${fieldLabel}".`,
   })
