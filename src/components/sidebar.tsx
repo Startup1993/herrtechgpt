@@ -186,30 +186,30 @@ function UserMenu({ userEmail, userName, isAdmin }: { userEmail: string; userNam
           </div>
 
           {/* Navigation items */}
-          <div className="py-1">
+          <div className="py-0.5">
             <Link
               href="/assistants/library"
               onClick={() => setOpen(false)}
-              className="flex items-center gap-3 px-4 py-2 text-sm text-foreground hover:bg-surface-secondary transition-colors"
+              className="flex items-center gap-2.5 px-4 py-1.5 text-sm text-foreground hover:bg-surface-secondary transition-colors"
             >
-              <span className="text-base">📚</span>
+              <span className="text-sm leading-none">📚</span>
               Bibliothek
             </Link>
             <Link
               href="/assistants/profile"
               onClick={() => setOpen(false)}
-              className="flex items-center gap-3 px-4 py-2 text-sm text-foreground hover:bg-surface-secondary transition-colors"
+              className="flex items-center gap-2.5 px-4 py-1.5 text-sm text-foreground hover:bg-surface-secondary transition-colors"
             >
-              <span className="text-base">🧠</span>
+              <span className="text-sm leading-none">🧠</span>
               Wissensbasis
             </Link>
             {isAdmin && (
               <Link
                 href="/assistants/admin"
                 onClick={() => setOpen(false)}
-                className="flex items-center gap-3 px-4 py-2 text-sm text-foreground hover:bg-surface-secondary transition-colors"
+                className="flex items-center gap-2.5 px-4 py-1.5 text-sm text-foreground hover:bg-surface-secondary transition-colors"
               >
-                <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className="text-muted shrink-0">
+                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className="text-muted shrink-0">
                   <circle cx="12" cy="8" r="4"/><path d="M20 21a8 8 0 1 0-16 0"/>
                 </svg>
                 Admin-Bereich
@@ -218,10 +218,10 @@ function UserMenu({ userEmail, userName, isAdmin }: { userEmail: string; userNam
           </div>
 
           {/* Logout — clearly separated */}
-          <div className="border-t border-border py-1">
+          <div className="border-t border-border py-0.5">
             <button
               onClick={handleLogout}
-              className="w-full flex items-center gap-3 px-4 py-2 text-sm text-red-600 hover:bg-red-50 dark:hover:bg-red-950/20 transition-colors"
+              className="w-full flex items-center gap-2.5 px-4 py-1.5 text-sm text-red-600 hover:bg-red-50 dark:hover:bg-red-950/20 transition-colors"
             >
               <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="shrink-0">
                 <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
