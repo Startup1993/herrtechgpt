@@ -66,6 +66,10 @@ export default function OnboardingPage() {
 
   const currentStep = steps[step]
 
+  const markDone = () => {
+    localStorage.setItem('herr_tech_onboarding_done', 'true')
+  }
+
   const handleNext = async () => {
     if (step < steps.length - 1) {
       setStep((s) => s + 1)
@@ -87,11 +91,13 @@ export default function OnboardingPage() {
         })
         .eq('id', user.id)
     }
+    markDone()
     router.push('/assistants')
     router.refresh()
   }
 
   const handleSkip = () => {
+    markDone()
     router.push('/assistants')
   }
 
