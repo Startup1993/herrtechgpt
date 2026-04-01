@@ -79,7 +79,41 @@ export async function POST(req: Request) {
     }
   }
 
-  const fullSystemPrompt = agent.systemPrompt + profileContext
+  // RAG: Search community knowledge base for relevant content
+  const lastQuery = messages[messages.length - 1]?.content ?? ''
+  let knowledgeContext = ''
+  if (lastQuery.length > 10) {
+    try {
+      // Extract keywords from the query (remove short words)
+      const searchTerms = lastQuery
+        .replace(/[^\w\säöüÄÖÜß]/g, ' ')
+        .split(/\s+/)
+        .filter((w) => w.length > 3)
+        .slice(0, 8)
+        .join(' | ')
+
+      if (searchTerms) {
+        const { data: knowledgeChunks } = await supabase
+          .from('knowledge_base')
+          .select('chunk_text, video_name')
+          .eq('is_active', true)
+          .textSearch('chunk_text', searchTerms)
+          .limit(4)
+
+        if (knowledgeChunks && knowledgeChunks.length > 0) {
+          const context = knowledgeChunks
+            .map((row) => `[Quelle: ${row.video_name}]\n${row.chunk_text}`)
+            .join('\n\n---\n\n')
+
+          knowledgeContext = `\n\n--- Relevantes Community-Wissen ---\n${context}\n--- Ende Community-Wissen ---\n\nDieses Wissen stammt aus unseren Community-Kursen. Beziehe es in deine Antwort mit ein, wenn es relevant ist. Zitiere die Quelle wenn passend.`
+        }
+      }
+    } catch {
+      // Knowledge search is optional — chat works without it
+    }
+  }
+
+  const fullSystemPrompt = agent.systemPrompt + profileContext + knowledgeContext
 
   const anthropic = createAnthropic({
     apiKey: process.env.ANTHROPIC_API_KEY,
