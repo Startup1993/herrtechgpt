@@ -39,7 +39,7 @@ export function AppShell({ conversations, userEmail, userName, isAdmin, children
           fixed inset-y-0 left-0 z-50 transition-all duration-300 ease-in-out
           md:relative md:translate-x-0 md:flex md:shrink-0
           ${sidebarOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'}
-          ${sidebarCollapsed ? 'md:w-0 md:overflow-hidden' : 'md:w-auto'}
+          ${sidebarCollapsed ? 'md:w-0 md:overflow-hidden' : 'md:w-72'}
         `}
       >
         <Sidebar
