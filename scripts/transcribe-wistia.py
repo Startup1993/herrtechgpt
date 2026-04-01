@@ -19,21 +19,30 @@ import re
 import os
 from typing import Optional
 
-# ─── Konfiguration ────────────────────────────────────────────────────────────
-WISTIA_KEY     = "bf7b42421ef3f9c5925d0a83a9d713d658c38287296c3f0842fd03484e34fa1c"
-ASSEMBLY_KEY   = "437344138db94474a66380bd1ddbdc64"
-SUPABASE_URL   = "https://kgolrqjkghhwdgoeyppt.supabase.co"
-SUPABASE_KEY   = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imtnb2xycWprZ2hod2Rnb2V5cHB0Iiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3NDU1MTY0OCwiZXhwIjoyMDkwMTI3NjQ4fQ.X7ic9yfeQeoj3NEw_-UJ-yiwOnlaVgmMmC5uuntC7fQ"
+# ─── Konfiguration (aus .env.local) ───────────────────────────────────────────
+def _load_env():
+    env_path = os.path.join(os.path.dirname(__file__), '..', '.env.local')
+    if os.path.exists(env_path):
+        with open(env_path) as f:
+            for line in f:
+                line = line.strip()
+                if line and not line.startswith('#') and '=' in line:
+                    k, v = line.split('=', 1)
+                    os.environ.setdefault(k.strip(), v.strip())
+
+_load_env()
+
+WISTIA_KEY   = os.environ.get("WISTIA_API_KEY", "")
+ASSEMBLY_KEY = os.environ.get("ASSEMBLYAI_API_KEY", "")
+SUPABASE_URL = os.environ.get("NEXT_PUBLIC_SUPABASE_URL", "")
+SUPABASE_KEY = os.environ.get("SUPABASE_SERVICE_ROLE_KEY", "")
 
 CHUNK_WORDS    = 500   # Wörter pro Chunk
 LANGUAGE       = "de"  # Deutsch
 
-# Videos die übersprungen werden (Live Calls, sehr kurze Videos, veraltete)
+# Nur wirklich irrelevante Videos überspringen
+# Live Calls werden INKLUDIERT — sie sind die aktuellsten Quellen!
 SKIP_PATTERNS = [
-    "Live Call",
-    "Recording",
-    "2025_0",    # Live Call Recordings mit Datum
-    "2025-0",
     "Skool_Intro",
     "Masterclass_Intro",
     "SkoolVideo",
@@ -42,7 +51,7 @@ SKIP_PATTERNS = [
     "I never pay",
     "Referenz",
     "Empfehlung",
-    "2025-04-23",  # sehr kurze Test-Videos
+    "KIMarketingClub",   # Marketing-Testimonials
 ]
 
 # ─── Hilfsfunktionen ──────────────────────────────────────────────────────────
