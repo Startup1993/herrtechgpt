@@ -14,10 +14,11 @@ interface AppShellProps {
 }
 
 export function AppShell({ conversations, userEmail, userName, isAdmin, children }: AppShellProps) {
-  const [sidebarOpen, setSidebarOpen] = useState(false)
+  const [sidebarOpen, setSidebarOpen] = useState(false)       // mobile overlay
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false) // desktop collapse
   const pathname = usePathname()
 
-  // Close sidebar on navigation (mobile)
+  // Close mobile sidebar on navigation
   useEffect(() => {
     setSidebarOpen(false)
   }, [pathname])
@@ -32,11 +33,14 @@ export function AppShell({ conversations, userEmail, userName, isAdmin, children
         />
       )}
 
-      {/* Sidebar — slide in on mobile, always visible on desktop */}
+      {/* Sidebar */}
       <div
-        className={`fixed inset-y-0 left-0 z-50 transition-transform duration-300 ease-in-out md:relative md:translate-x-0 md:flex md:shrink-0 ${
-          sidebarOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'
-        }`}
+        className={`
+          fixed inset-y-0 left-0 z-50 transition-all duration-300 ease-in-out
+          md:relative md:translate-x-0 md:flex md:shrink-0
+          ${sidebarOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'}
+          ${sidebarCollapsed ? 'md:w-0 md:overflow-hidden' : 'md:w-auto'}
+        `}
       >
         <Sidebar
           conversations={conversations}
@@ -48,6 +52,7 @@ export function AppShell({ conversations, userEmail, userName, isAdmin, children
 
       {/* Main content */}
       <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
+
         {/* Mobile top bar */}
         <div className="md:hidden flex items-center gap-3 px-4 py-3 border-b border-border bg-surface shrink-0">
           <button
@@ -63,6 +68,26 @@ export function AppShell({ conversations, userEmail, userName, isAdmin, children
           </button>
           <img src="/logo.png" alt="Herr Tech" className="h-5 w-auto" />
         </div>
+
+        {/* Desktop sidebar toggle — pinned top-left of main area */}
+        <button
+          onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
+          className="hidden md:flex absolute top-3 left-3 z-30 items-center justify-center w-7 h-7 rounded-md text-muted hover:text-foreground hover:bg-surface-secondary transition-colors"
+          aria-label={sidebarCollapsed ? 'Seitenleiste öffnen' : 'Seitenleiste schließen'}
+          title={sidebarCollapsed ? 'Seitenleiste öffnen' : 'Seitenleiste schließen'}
+        >
+          {sidebarCollapsed ? (
+            // › chevron right
+            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+              <polyline points="9 18 15 12 9 6" />
+            </svg>
+          ) : (
+            // ‹ chevron left
+            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+              <polyline points="15 18 9 12 15 6" />
+            </svg>
+          )}
+        </button>
 
         <main className="flex-1 min-h-0 overflow-hidden">{children}</main>
       </div>
