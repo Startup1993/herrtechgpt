@@ -69,21 +69,20 @@ export function AppShell({ conversations, userEmail, userName, isAdmin, children
           <img src="/logo.png" alt="Herr Tech" className="h-5 w-auto" />
         </div>
 
-        {/* Desktop sidebar toggle — pinned top-left of main area */}
+        {/* Desktop sidebar toggle — fixed tab at sidebar edge */}
         <button
           onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
-          className="hidden md:flex absolute top-3 left-3 z-30 items-center justify-center w-7 h-7 rounded-md text-muted hover:text-foreground hover:bg-surface-secondary transition-colors"
+          className={`hidden md:flex fixed top-16 z-50 items-center justify-center w-5 h-10 bg-surface border border-border rounded-r-lg shadow-sm text-muted hover:text-foreground hover:bg-surface-secondary transition-all duration-300 ease-in-out ${
+            sidebarCollapsed ? 'left-0' : 'left-72'
+          }`}
           aria-label={sidebarCollapsed ? 'Seitenleiste öffnen' : 'Seitenleiste schließen'}
-          title={sidebarCollapsed ? 'Seitenleiste öffnen' : 'Seitenleiste schließen'}
         >
           {sidebarCollapsed ? (
-            // › chevron right
-            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
               <polyline points="9 18 15 12 9 6" />
             </svg>
           ) : (
-            // ‹ chevron left
-            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
               <polyline points="15 18 9 12 15 6" />
             </svg>
           )}
