@@ -17,6 +17,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
         <AdminTab href="/assistants/admin/dashboard" label="Dashboard" />
         <AdminTab href="/assistants/admin/agents" label="Assistenten" />
         <AdminTab href="/assistants/admin/users" label="Nutzer" />
+        <AdminTab href="/assistants/admin/knowledge" label="Wissensbasis" />
       </div>
 
       <div className="flex-1 overflow-auto">
