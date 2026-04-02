@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useCallback } from 'react'
 import ReactMarkdown from 'react-markdown'
 
 interface ChatMessageProps {
@@ -8,6 +8,56 @@ interface ChatMessageProps {
   content: string
   agentId?: string
   agentName?: string
+}
+
+function CopyableCodeBlock({ children }: { children: React.ReactNode }) {
+  const [copied, setCopied] = useState(false)
+
+  const handleCopy = useCallback(() => {
+    const text = extractText(children)
+    navigator.clipboard.writeText(text).then(() => {
+      setCopied(true)
+      setTimeout(() => setCopied(false), 2000)
+    })
+  }, [children])
+
+  return (
+    <div className="relative group/code my-2">
+      <pre className="bg-black/10 rounded-lg p-3 pr-10 overflow-x-auto whitespace-pre-wrap break-words font-mono text-xs leading-relaxed">
+        {children}
+      </pre>
+      <button
+        onClick={handleCopy}
+        title={copied ? 'Kopiert!' : 'Kopieren'}
+        className={`absolute top-2 right-2 p-1.5 rounded-md border transition-all text-xs ${
+          copied
+            ? 'bg-green-50 border-green-200 text-green-600'
+            : 'bg-white/70 border-black/10 text-black/40 opacity-0 group-hover/code:opacity-100 hover:text-black/70 hover:bg-white'
+        }`}
+      >
+        {copied ? (
+          <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+            <polyline points="20 6 9 17 4 12" />
+          </svg>
+        ) : (
+          <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
+            <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
+          </svg>
+        )}
+      </button>
+    </div>
+  )
+}
+
+function extractText(node: React.ReactNode): string {
+  if (typeof node === 'string') return node
+  if (typeof node === 'number') return String(node)
+  if (Array.isArray(node)) return node.map(extractText).join('')
+  if (node && typeof node === 'object' && 'props' in (node as any)) {
+    return extractText((node as any).props.children)
+  }
+  return ''
 }
 
 export function ChatMessage({ role, content, agentId, agentName }: ChatMessageProps) {
@@ -54,13 +104,9 @@ export function ChatMessage({ role, content, agentId, agentName }: ChatMessagePr
                 h1: ({ children }) => <h1 className="font-bold text-base mb-1">{children}</h1>,
                 h2: ({ children }) => <h2 className="font-semibold mb-1">{children}</h2>,
                 h3: ({ children }) => <h3 className="font-semibold mb-1">{children}</h3>,
-                pre: ({ children }) => (
-                  <pre className="bg-black/10 rounded-lg p-3 my-2 overflow-x-auto whitespace-pre-wrap break-words font-mono text-xs leading-relaxed">
-                    {children}
-                  </pre>
-                ),
-                code: ({ className, children, ...props }) => {
-                  const isBlock = !props.node?.position || String(children).includes('\n')
+                pre: ({ children }) => <CopyableCodeBlock>{children}</CopyableCodeBlock>,
+                code: ({ children, ...props }) => {
+                  const isBlock = String(children).includes('\n')
                   return isBlock
                     ? <code className="font-mono text-xs">{children}</code>
                     : <code className="bg-black/10 rounded px-1 font-mono text-xs">{children}</code>
