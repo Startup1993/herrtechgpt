@@ -54,7 +54,17 @@ export function ChatMessage({ role, content, agentId, agentName }: ChatMessagePr
                 h1: ({ children }) => <h1 className="font-bold text-base mb-1">{children}</h1>,
                 h2: ({ children }) => <h2 className="font-semibold mb-1">{children}</h2>,
                 h3: ({ children }) => <h3 className="font-semibold mb-1">{children}</h3>,
-                code: ({ children }) => <code className="bg-black/10 rounded px-1 font-mono text-xs">{children}</code>,
+                pre: ({ children }) => (
+                  <pre className="bg-black/10 rounded-lg p-3 my-2 overflow-x-auto whitespace-pre-wrap break-words font-mono text-xs leading-relaxed">
+                    {children}
+                  </pre>
+                ),
+                code: ({ className, children, ...props }) => {
+                  const isBlock = !props.node?.position || String(children).includes('\n')
+                  return isBlock
+                    ? <code className="font-mono text-xs">{children}</code>
+                    : <code className="bg-black/10 rounded px-1 font-mono text-xs">{children}</code>
+                },
                 hr: () => <hr className="border-border my-2" />,
               }}
             >
