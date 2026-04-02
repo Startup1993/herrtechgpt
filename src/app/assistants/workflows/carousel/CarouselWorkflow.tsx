@@ -551,10 +551,14 @@ export default function CarouselWorkflow() {
   const [fontsQuery, setFontsQuery] = useState(PRESETS[0].googleFontsQuery)
   const [slides, setSlides] = useState<Slide[]>([])
   const [loading, setLoading] = useState(false)
+  const [refining, setRefining] = useState(false)
+  const [refineInput, setRefineInput] = useState('')
+  const [refineHistory, setRefineHistory] = useState<string[]>([])
   const [exporting, setExporting] = useState(false)
   const [progress, setProgress] = useState('')
   const [activeSlide, setActiveSlide] = useState(0)
   const slidesContainerRef = useRef<HTMLDivElement>(null)
+  const refineInputRef = useRef<HTMLTextAreaElement>(null)
 
   useGoogleFont(fontsQuery)
 
@@ -577,6 +581,27 @@ export default function CarouselWorkflow() {
   const updateSlide = useCallback((i: number, updated: Slide) => {
     setSlides(s => s.map((sl, idx) => idx === i ? updated : sl))
   }, [])
+
+  const refineSlides = useCallback(async () => {
+    if (!refineInput.trim() || refining) return
+    const prompt = refineInput.trim()
+    setRefining(true)
+    setRefineInput('')
+    try {
+      const res = await fetch('/api/carousel', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ refinePrompt: prompt, currentSlides: slides }),
+      })
+      const data = await res.json()
+      if (data.slides) {
+        setSlides(data.slides)
+        setRefineHistory(h => [...h, prompt])
+        setActiveSlide(0)
+      }
+    } catch { alert('Fehler beim Überarbeiten.') }
+    finally { setRefining(false) }
+  }, [refineInput, slides, refining])
 
   const exportPng = useCallback(async () => {
     if (!slides.length) return
@@ -714,6 +739,42 @@ export default function CarouselWorkflow() {
             className={`shrink-0 w-12 h-12 rounded-lg border-2 text-xs font-semibold transition ${i === activeSlide ? 'border-primary text-primary bg-primary/5' : 'border-border text-muted hover:border-primary/40'}`}
           >{i + 1}</button>
         ))}
+      </div>
+
+      {/* Refine prompt bar */}
+      <div className="mt-6 border border-border rounded-xl overflow-hidden bg-surface">
+        <div className="px-4 pt-3 pb-1">
+          <p className="text-xs font-medium text-foreground mb-1">✏️ Slides per Prompt anpassen</p>
+          {refineHistory.length > 0 && (
+            <div className="flex flex-wrap gap-1.5 mb-2">
+              {refineHistory.map((h, i) => (
+                <span key={i} className="text-xs bg-surface-secondary border border-border rounded-full px-2.5 py-0.5 text-muted">✓ {h}</span>
+              ))}
+            </div>
+          )}
+        </div>
+        <div className="flex items-end gap-2 px-3 pb-3">
+          <textarea
+            ref={refineInputRef}
+            value={refineInput}
+            onChange={(e) => setRefineInput(e.target.value)}
+            onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); refineSlides() } }}
+            placeholder='z.B. "Mach die Headlines kürzer" · "Füge Emojis hinzu" · "Mach den CTA direkter" · "Übersetze alles auf Englisch"'
+            rows={2}
+            disabled={refining}
+            className="flex-1 border border-border rounded-xl px-4 py-2.5 text-sm text-foreground bg-surface-secondary focus:outline-none focus:ring-2 focus:ring-primary/30 resize-none placeholder:text-muted disabled:opacity-50"
+          />
+          <button
+            onClick={refineSlides}
+            disabled={refining || !refineInput.trim()}
+            className="shrink-0 h-10 w-10 rounded-xl bg-primary text-white flex items-center justify-center hover:opacity-90 transition disabled:opacity-40"
+          >
+            {refining
+              ? <svg className="animate-spin w-4 h-4" viewBox="0 0 24 24" fill="none"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"/></svg>
+              : <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
+            }
+          </button>
+        </div>
       </div>
 
       {/* Hidden export container */}
