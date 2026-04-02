@@ -591,17 +591,25 @@ export default function CarouselWorkflow() {
       const res = await fetch('/api/carousel', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ refinePrompt: prompt, currentSlides: slides }),
+        body: JSON.stringify({
+          refinePrompt: prompt,
+          currentSlides: slides,
+          currentCI: {
+            bgColor: ci.bgColor,
+            primaryColor: ci.primaryColor,
+            textColor: ci.textColor,
+            accentColor: ci.accentColor,
+          },
+        }),
       })
       const data = await res.json()
-      if (data.slides) {
-        setSlides(data.slides)
-        setRefineHistory(h => [...h, prompt])
-        setActiveSlide(0)
-      }
+      if (data.slides) setSlides(data.slides)
+      if (data.ci) setCi(p => ({ ...p, ...data.ci }))
+      setRefineHistory(h => [...h, prompt])
+      setActiveSlide(0)
     } catch { alert('Fehler beim Überarbeiten.') }
     finally { setRefining(false) }
-  }, [refineInput, slides, refining])
+  }, [refineInput, slides, ci, refining])
 
   const exportPng = useCallback(async () => {
     if (!slides.length) return
