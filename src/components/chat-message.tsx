@@ -32,7 +32,7 @@ function CopyableCodeBlock({ children }: { children: React.ReactNode }) {
         className={`absolute top-2 right-2 p-1.5 rounded-md border transition-all text-xs ${
           copied
             ? 'bg-green-50 border-green-200 text-green-600'
-            : 'bg-white border-black/10 text-black/40 opacity-0 group-hover/code:opacity-100 hover:text-black/70 hover:bg-white'
+            : 'bg-white border-black/10 text-black/50 hover:text-black/70 hover:bg-white'
         }`}
       >
         {copied ? (
