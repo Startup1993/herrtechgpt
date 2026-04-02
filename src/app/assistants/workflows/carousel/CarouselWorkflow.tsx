@@ -71,12 +71,12 @@ async function extractColorsFromImage(file: File): Promise<{ primary: string; bg
 function SlideView({ slide, ci, index, total }: {
   slide: Slide; ci: CISettings; index: number; total: number
 }) {
-  const base = 'w-[540px] h-[540px] flex flex-col relative overflow-hidden shrink-0'
+  const base = 'flex flex-col relative shrink-0'
 
   if (slide.type === 'title') {
     return (
-      <div className={base} style={{ background: ci.bgColor, color: ci.textColor }} data-slide>
-        <div className="h-2 w-full" style={{ background: ci.primaryColor }} />
+      <div className={base} style={{ width: 540, height: 540, overflow: 'hidden', background: ci.bgColor, color: ci.textColor }} data-slide>
+        <div style={{ height: 8, width: '100%', background: ci.primaryColor }} />
         <div className="flex-1 flex flex-col justify-center px-12">
           <p className="text-xs font-semibold tracking-widest uppercase mb-4 opacity-50" style={{ color: ci.primaryColor }}>
             {index + 1} / {total}
@@ -98,8 +98,8 @@ function SlideView({ slide, ci, index, total }: {
 
   if (slide.type === 'content') {
     return (
-      <div className={base} style={{ background: ci.bgColor, color: ci.textColor }} data-slide>
-        <div className="h-1.5 w-full" style={{ background: ci.primaryColor }} />
+      <div className={base} style={{ width: 540, height: 540, overflow: 'hidden', background: ci.bgColor, color: ci.textColor }} data-slide>
+        <div style={{ height: 6, width: '100%', background: ci.primaryColor }} />
         <div className="flex-1 flex flex-col justify-center px-12">
           <p className="text-xs font-semibold tracking-widest uppercase mb-3 opacity-40" style={{ color: ci.primaryColor }}>
             {index + 1} / {total}
@@ -124,7 +124,7 @@ function SlideView({ slide, ci, index, total }: {
   }
 
   return (
-    <div className={base} style={{ background: ci.primaryColor }} data-slide>
+    <div className={base} style={{ width: 540, height: 540, overflow: 'hidden', background: ci.primaryColor }} data-slide>
       <div className="flex-1 flex flex-col justify-center items-center text-center px-12">
         <p className="text-xs font-semibold tracking-widest uppercase mb-6 opacity-60" style={{ color: ci.bgColor }}>
           {index + 1} / {total}
@@ -513,8 +513,9 @@ export default function CarouselWorkflow() {
           ))}
         </div>
 
-        <div className="sr-only" aria-hidden="true">
-          <div ref={slidesContainerRef} className="flex flex-col gap-0">
+        {/* Off-screen render container — full size so html2canvas works correctly */}
+        <div style={{ position: 'fixed', left: '-9999px', top: 0, pointerEvents: 'none', zIndex: -1 }} aria-hidden="true">
+          <div ref={slidesContainerRef} style={{ display: 'flex', flexDirection: 'column' }}>
             {slides.map((slide, i) => (
               <SlideView key={i} slide={slide} ci={ci} index={i} total={slides.length} />
             ))}
