@@ -286,7 +286,7 @@ async function exportPptx(slides: Slide[], ci: CISettings) {
       // Subtitle
       pSlide.addText(slide.subtitle, { x: pad, y: H * 0.52, w: W - pad * 2, h: 0.8, fontSize: 11, color: hex(ci.textColor), fontFace: ci.bodyFont, transparency: 30, lineSpacingMultiple: parseFloat(ci.lineHeight), wrap: true })
       // Bottom bar
-      pSlide.addShape(pptx.ShapeType.rect, { x: pad, y: H - pad - 0.03, w: 1.2, h: 0.03, fill: { color: hex(ci.primaryColor) }, rounding: true })
+      pSlide.addShape(pptx.ShapeType.rect, { x: pad, y: H - pad - 0.03, w: 1.2, h: 0.03, fill: { color: hex(ci.primaryColor) } })
       // Handle
       if (ci.handle) pSlide.addText(`@${ci.handle}`, { x: W - 1.2, y: H - 0.25, w: 1.1, h: 0.2, fontSize: 7, color: hex(ci.textColor), transparency: 70, align: 'right' })
 
@@ -310,7 +310,7 @@ async function exportPptx(slides: Slide[], ci: CISettings) {
       pSlide.addText(`${i + 1} / ${slides.length}`, { x: pad, y: pad, w: W - pad * 2, h: 0.2, fontSize: 8, color: hex(ci.bgColor), charSpacing: 4, align: 'center', transparency: 60 })
       pSlide.addText(slide.headline, { x: pad, y: H * 0.3, w: W - pad * 2, h: 1.5, fontSize: 22, bold: true, color: hex(ci.bgColor), fontFace: ci.headlineFont, align: 'center', lineSpacingMultiple: parseFloat(ci.lineHeight), wrap: true })
       // CTA pill
-      pSlide.addShape(pptx.ShapeType.roundRect, { x: W / 2 - 1.2, y: H * 0.62, w: 2.4, h: 0.36, fill: { color: hex(ci.bgColor) }, rounding: 0.5 })
+      pSlide.addShape(pptx.ShapeType.roundRect, { x: W / 2 - 1.2, y: H * 0.62, w: 2.4, h: 0.36, fill: { color: hex(ci.bgColor) }, rectRadius: 0.1 })
       pSlide.addText(slide.cta, { x: W / 2 - 1.2, y: H * 0.62, w: 2.4, h: 0.36, fontSize: 10, bold: true, color: hex(ci.accentColor), fontFace: ci.bodyFont, align: 'center' })
       if (ci.handle) pSlide.addText(`@${ci.handle}`, { x: 0, y: H * 0.78, w: W, h: 0.2, fontSize: 11, bold: true, color: hex(ci.bgColor), fontFace: ci.bodyFont, transparency: 40, align: 'center' })
     }
