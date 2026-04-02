@@ -400,7 +400,6 @@ export default function CarouselWorkflow() {
       a.download = 'karussell.zip'
       a.click()
       URL.revokeObjectURL(url)
-      setStep('done')
     } catch (err) {
       console.error(err)
       alert('Export fehlgeschlagen.')
