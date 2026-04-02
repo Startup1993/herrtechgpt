@@ -93,12 +93,31 @@ export async function POST(req: Request) {
         .join(' | ')
 
       if (searchTerms) {
-        const { data: knowledgeChunks } = await supabase
+        // Build query — filter by agent if it has categorised knowledge
+        let query = supabase
           .from('knowledge_base')
           .select('chunk_text, video_name')
           .eq('is_active', true)
           .textSearch('chunk_text', searchTerms)
-          .limit(4)
+
+        // Agent-spezifischer Filter: nur relevante Videos
+        if (agentId && agentId !== 'general') {
+          query = query.contains('relevant_agents', [agentId])
+        }
+
+        const { data: agentChunks } = await query.limit(4)
+
+        // Fallback: wenn kein Agent-spezifisches Ergebnis → allgemeine Suche
+        let knowledgeChunks = agentChunks
+        if ((!knowledgeChunks || knowledgeChunks.length === 0) && agentId && agentId !== 'general') {
+          const { data: fallbackChunks } = await supabase
+            .from('knowledge_base')
+            .select('chunk_text, video_name')
+            .eq('is_active', true)
+            .textSearch('chunk_text', searchTerms)
+            .limit(4)
+          knowledgeChunks = fallbackChunks
+        }
 
         if (knowledgeChunks && knowledgeChunks.length > 0) {
           const context = knowledgeChunks
