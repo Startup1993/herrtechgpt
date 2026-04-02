@@ -100,9 +100,9 @@ export async function POST(req: Request) {
           .eq('is_active', true)
           .textSearch('chunk_text', searchTerms)
 
-        // Agent-spezifischer Filter: nur relevante Videos
+        // Agent-spezifischer Filter: source enthält agent-id (z.B. 'wistia,content-hook')
         if (agentId && agentId !== 'general') {
-          query = query.contains('relevant_agents', [agentId])
+          query = query.ilike('source', `%${agentId}%`)
         }
 
         const { data: agentChunks } = await query.limit(4)

@@ -65,7 +65,7 @@ def get_all_videos() -> list:
         f"{SUPABASE_URL}/rest/v1/knowledge_base",
         headers=SUPABASE_HEADERS,
         params={
-            "select": "video_id,video_name,chunk_text,chunk_index,relevant_agents",
+            "select": "video_id,video_name,chunk_text,chunk_index,source",
             "chunk_index": "eq.0",
             "order": "video_id",
         }
@@ -75,12 +75,15 @@ def get_all_videos() -> list:
 
 
 def update_agents(video_id: str, agents: list[str]):
-    """Speichert die relevant_agents für ein Video."""
+    """Speichert die Agenten im source-Feld als CSV: 'wistia,content-hook,herr-tech'."""
+    source_val = "wistia"
+    if agents:
+        source_val = "wistia," + ",".join(agents)
     r = requests.patch(
         f"{SUPABASE_URL}/rest/v1/knowledge_base",
         headers=SUPABASE_HEADERS,
         params={"video_id": f"eq.{video_id}"},
-        json={"relevant_agents": agents}
+        json={"source": source_val}
     )
     return r.status_code in [200, 204]
 
@@ -165,8 +168,8 @@ def main():
     print("📋 Lade Videos aus Supabase...")
     videos = get_all_videos()
 
-    # Nur Videos ohne Kategorie (neu oder noch nicht kategorisiert)
-    uncategorized = [v for v in videos if not v.get("relevant_agents")]
+    # Nur Videos ohne Kategorie (source = 'wistia' = noch nicht kategorisiert)
+    uncategorized = [v for v in videos if v.get("source", "wistia") == "wistia"]
     already_done  = len(videos) - len(uncategorized)
 
     print(f"   {len(videos)} Videos gesamt")
