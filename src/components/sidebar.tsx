@@ -83,7 +83,7 @@ function ConversationItem({ conv, isActive }: { conv: Conversation; isActive: bo
     <div className="group relative flex items-center">
       <Link
         href={`/assistants/${conv.agent_id}/${conv.id}`}
-        className={`flex-1 flex items-center gap-3 px-3 py-2 rounded-lg text-sm transition-colors pr-8 ${
+        className={`flex-1 min-w-0 flex items-center gap-3 px-3 py-2 rounded-lg text-sm transition-colors pr-8 ${
           isActive
             ? 'bg-surface-secondary shadow-sm text-foreground'
             : 'text-muted hover:bg-surface-secondary hover:text-foreground'
