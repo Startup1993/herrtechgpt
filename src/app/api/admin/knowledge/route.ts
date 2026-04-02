@@ -18,12 +18,24 @@ export async function PATCH(req: Request) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   }
 
-  const { video_id, is_active } = await req.json()
+  const body = await req.json()
+  const { video_id, is_active, agents } = body
 
-  await supabase
-    .from('knowledge_base')
-    .update({ is_active })
-    .eq('video_id', video_id)
+  if (is_active !== undefined) {
+    await supabase
+      .from('knowledge_base')
+      .update({ is_active })
+      .eq('video_id', video_id)
+  }
+
+  if (agents !== undefined) {
+    // Rebuild source field: 'wistia' + optional agent IDs
+    const source = agents.length > 0 ? `wistia,${agents.join(',')}` : 'wistia'
+    await supabase
+      .from('knowledge_base')
+      .update({ source })
+      .eq('video_id', video_id)
+  }
 
   return NextResponse.json({ ok: true })
 }
