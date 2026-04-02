@@ -20,6 +20,16 @@ export interface WorkflowDefinition {
 
 export const workflows: WorkflowDefinition[] = [
   {
+    id: 'carousel',
+    name: 'Karussell-Generator',
+    emoji: '🎠',
+    description: 'Text rein — fertige Instagram-Slides raus. Mit deinen CI-Farben, 1080×1080px, ZIP-Download.',
+    duration: '1 Minute',
+    difficulty: 'Einfach',
+    techStack: ['KI', 'Instant Download'],
+    steps: [],
+  },
+  {
     id: 'video-editor',
     name: 'KI Video Editor',
     emoji: '🎬',

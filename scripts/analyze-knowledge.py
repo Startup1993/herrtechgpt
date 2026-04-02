@@ -23,13 +23,15 @@ from typing import Optional
 # ─── Konfiguration (aus .env.local oder Umgebungsvariablen) ────────────────────
 def _load_env():
     env_path = os.path.join(os.path.dirname(__file__), '..', '.env.local')
+    if not os.path.exists(env_path):
+        env_path = os.path.join(os.path.dirname(__file__), '..', '..', '..', '..', '.env.local')
     if os.path.exists(env_path):
         with open(env_path) as f:
             for line in f:
                 line = line.strip()
                 if line and not line.startswith('#') and '=' in line:
                     k, v = line.split('=', 1)
-                    os.environ.setdefault(k.strip(), v.strip())
+                    os.environ[k.strip()] = v.strip()
 
 _load_env()
 
@@ -151,18 +153,28 @@ Hier sind die Videos:
             "content-type": "application/json",
         },
         json={
-            "model": "claude-opus-4-5",
+            "model": "claude-sonnet-4-5-20250929",
             "max_tokens": 4096,
             "messages": [{"role": "user", "content": prompt}]
         }
     )
 
-    text = r.json()["content"][0]["text"]
+    resp = r.json()
+    if "content" not in resp:
+        raise Exception(f"API Fehler: {resp.get('error', resp)}")
+    text = resp["content"][0]["text"]
 
     # JSON aus Antwort extrahieren
     match = re.search(r'\[.*\]', text, re.DOTALL)
     if match:
-        return json.loads(match.group())
+        try:
+            return json.loads(match.group())
+        except json.JSONDecodeError as e:
+            print(f"   JSON Parse Fehler: {e}")
+            print(f"   Antwort (erste 500 Zeichen): {text[:500]}")
+            return []
+    print(f"   Kein JSON Array in Antwort gefunden.")
+    print(f"   Antwort (erste 500 Zeichen): {text[:500]}")
     return []
 
 
@@ -199,13 +211,22 @@ def main():
             f"---"
         )
 
-    video_summaries = "\n\n".join(summaries)
+    # In Batches von 20 aufteilen um Rate-Limit zu vermeiden
+    BATCH_SIZE = 20
+    all_decisions = []
+    batches = [summaries[i:i+BATCH_SIZE] for i in range(0, len(summaries), BATCH_SIZE)]
 
-    # An Claude senden (max. 100 Videos auf einmal um Kontext-Limit zu vermeiden)
-    print(f"🤖 Sende {len(videos)} Videos an Claude zur Analyse...")
-    print("   (Das dauert ca. 20-30 Sekunden...)\n")
+    print(f"🤖 Analysiere {len(videos)} Videos in {len(batches)} Batches...")
+    for i, batch in enumerate(batches):
+        print(f"   Batch {i+1}/{len(batches)} ({len(batch)} Videos)...")
+        batch_text = "\n\n".join(batch)
+        batch_decisions = analyze_with_claude(batch_text)
+        all_decisions.extend(batch_decisions)
+        if i < len(batches) - 1:
+            import time
+            time.sleep(65)  # Rate-Limit: 10k tokens/min → 65s warten
 
-    decisions = analyze_with_claude(video_summaries)
+    decisions = all_decisions
 
     if not decisions:
         print("❌ Keine Entscheidungen erhalten. Überprüfe die API-Verbindung.")
