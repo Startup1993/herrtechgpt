@@ -7,7 +7,7 @@ export default async function KnowledgePage() {
   // Fetch all videos grouped (one row per video)
   const { data: chunks } = await supabase
     .from('knowledge_base')
-    .select('video_id, video_name, duration_minutes, is_active, chunk_index')
+    .select('video_id, video_name, duration_minutes, is_active, chunk_index, source')
     .order('video_name')
 
   // Group by video_id
@@ -17,20 +17,25 @@ export default async function KnowledgePage() {
     duration_minutes: number
     is_active: boolean
     chunk_count: number
+    agents: string[]
   }> = {}
 
   chunks?.forEach((c) => {
     if (!videoMap[c.video_id]) {
+      const agents = (c.source ?? 'wistia')
+        .split(',')
+        .map((s: string) => s.trim())
+        .filter((s: string) => s !== 'wistia' && s !== '')
       videoMap[c.video_id] = {
         video_id: c.video_id,
         video_name: c.video_name,
         duration_minutes: c.duration_minutes ?? 0,
         is_active: c.is_active,
         chunk_count: 0,
+        agents,
       }
     }
     videoMap[c.video_id].chunk_count++
-    // If any chunk is active, video counts as active
     if (c.is_active) videoMap[c.video_id].is_active = true
   })
 
