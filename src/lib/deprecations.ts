@@ -1,0 +1,110 @@
+/**
+ * Tool-Deprecation-Register
+ *
+ * Zentrale Liste von Tools, die durch neuere/bessere Alternativen ersetzt wurden.
+ * Wird in die System-Prompts der Agenten injiziert, damit sie keine veralteten
+ * Empfehlungen mehr geben, und auf den Agent-Landing-Pages als Widget angezeigt.
+ */
+
+export interface Deprecation {
+  /** Das veraltete Tool, das NICHT mehr empfohlen werden soll */
+  deprecated: string
+  /** Das aktuell empfohlene Tool */
+  current: string
+  /** Kategorie — wird genutzt, um je Agent nur relevante Deprecations zu zeigen */
+  category:
+    | 'video-generation'
+    | 'image-generation'
+    | 'audio-music'
+    | 'automation'
+    | 'llm'
+    | 'transcription'
+    | 'design'
+    | 'other'
+  /** Kurze Begründung — wird Agenten mitgegeben, damit sie beim Empfehlen argumentieren können */
+  reason: string
+  /** Optional: seit wann diese Empfehlung gilt (ISO-Datum) */
+  since?: string
+  /** Für welche Agent-IDs ist das besonders relevant? Leer = alle */
+  agents?: string[]
+}
+
+export const deprecations: Deprecation[] = [
+  {
+    deprecated: 'Sora',
+    current: 'Seedance',
+    category: 'video-generation',
+    reason: 'Seedance liefert aktuell bessere Kohärenz bei Bewegung und kostet weniger pro Sekunde Output.',
+    since: '2026-01',
+    agents: ['herr-tech', 'ai-prompt', 'content-hook'],
+  },
+  {
+    deprecated: 'Midjourney v5',
+    current: 'Midjourney v7 / Nano Banana',
+    category: 'image-generation',
+    reason: 'V5 ist deutlich schlechter bei Prompt-Adherence. Für schnelle Social-Posts ist Nano Banana oft besser.',
+    since: '2025-10',
+    agents: ['ai-prompt', 'content-hook', 'herr-tech'],
+  },
+  {
+    deprecated: 'n8n für Solo-Setups',
+    current: 'Claude Code + n8n nur bei Team-Workflows',
+    category: 'automation',
+    reason: 'Claude Code kann die meisten 1-Personen-Automationen schneller und ohne Hosting-Overhead abbilden.',
+    since: '2026-02',
+    agents: ['herr-tech', 'business-coach'],
+  },
+  {
+    deprecated: 'ChatGPT Plus (Standard)',
+    current: 'Claude Opus 4.6 / Sonnet 4.6',
+    category: 'llm',
+    reason: 'Claude Opus/Sonnet liefern aktuell stärkere Reasoning-Ergebnisse, insb. für Content & Prompts auf Deutsch.',
+    since: '2026-03',
+    agents: ['ai-prompt', 'content-hook', 'herr-tech'],
+  },
+  {
+    deprecated: 'Suno v3',
+    current: 'Suno v4.5 / Udio',
+    category: 'audio-music',
+    reason: 'V3 wirkt heute erkennbar "AI". Neue Versionen klingen deutlich natürlicher.',
+    since: '2026-01',
+    agents: ['content-hook', 'herr-tech'],
+  },
+  {
+    deprecated: 'Whisper Large-v2 (Self-Hosted)',
+    current: 'AssemblyAI Universal-2',
+    category: 'transcription',
+    reason: 'Bessere Deutsch-Qualität, keine Hosting-Kosten, schneller.',
+    since: '2026-02',
+    agents: ['herr-tech'],
+  },
+  {
+    deprecated: 'Canva Free für Karussell-Posts',
+    current: 'PPTX-Export aus Karussell-Tool → Canva-Import',
+    category: 'design',
+    reason: 'Unser Karussell-Tool erzeugt direkt editierbare PPTX-Dateien, die Canva sauber importiert — spart 20 Min pro Post.',
+    since: '2026-04',
+    agents: ['content-hook'],
+  },
+]
+
+/** Liefert Deprecations, die für einen bestimmten Agenten relevant sind */
+export function deprecationsForAgent(agentId: string): Deprecation[] {
+  return deprecations.filter((d) => !d.agents || d.agents.length === 0 || d.agents.includes(agentId))
+}
+
+/**
+ * Baut einen kompakten Text-Block für die System-Prompts.
+ * Wird im Chat-Route dem agent.systemPrompt angehängt.
+ */
+export function deprecationPromptBlock(agentId?: string): string {
+  const list = agentId ? deprecationsForAgent(agentId) : deprecations
+  if (list.length === 0) return ''
+  const lines = list.map(
+    (d) => `- Nicht mehr ${d.deprecated} — stattdessen ${d.current} (${d.reason})`,
+  )
+  return `\n\n--- Aktuelle Tool-Empfehlungen (${new Date().toISOString().slice(0, 7)}) ---
+Wichtig: Empfehle NICHT die veralteten Tools. Nutze immer die aktuelle Alternative.
+${lines.join('\n')}
+--- Ende Tool-Empfehlungen ---`
+}

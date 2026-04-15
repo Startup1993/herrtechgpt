@@ -7,13 +7,16 @@ export default async function AssistantsPage() {
   const { data: { user } } = await supabase.auth.getUser()
 
   let profileComplete = false
+  let hasLearningPath = false
   if (user) {
     const { data: profile } = await supabase
       .from('profiles')
-      .select('background, market')
+      .select('background, market, learning_path')
       .eq('id', user.id)
       .single()
     profileComplete = !!(profile?.background || profile?.market)
+    const lp = profile?.learning_path as { videos?: unknown[] } | null
+    hasLearningPath = !!(lp?.videos && Array.isArray(lp.videos) && lp.videos.length > 0)
   }
 
   const recommended = agents.find((a) => a.isRecommended)
@@ -22,6 +25,29 @@ export default async function AssistantsPage() {
   return (
     <div className="flex flex-col h-full overflow-y-auto bg-background">
       <div className="max-w-2xl mx-auto w-full px-6 py-8">
+
+        {/* Learning path CTA (shown when path exists) */}
+        {hasLearningPath && (
+          <Link
+            href="/assistants/path"
+            className="flex items-center gap-4 p-4 mb-6 rounded-xl bg-primary/8 border border-primary/20 hover:bg-primary/12 transition-colors group"
+          >
+            <div className="w-10 h-10 rounded-full bg-primary/15 flex items-center justify-center shrink-0 text-lg">
+              🎯
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-semibold text-foreground">
+                Dein Lernpfad ist bereit
+              </p>
+              <p className="text-xs text-muted mt-0.5">
+                Die wichtigsten Videos für dich + 30/60/90-Tage-Plan.
+              </p>
+            </div>
+            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-primary shrink-0 group-hover:translate-x-0.5 transition-transform">
+              <polyline points="9 18 15 12 9 6" />
+            </svg>
+          </Link>
+        )}
 
         {/* Profile completion banner */}
         {!profileComplete && (

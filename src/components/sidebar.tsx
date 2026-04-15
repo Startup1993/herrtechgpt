@@ -188,6 +188,14 @@ function UserMenu({ userEmail, userName, isAdmin }: { userEmail: string; userNam
           {/* Navigation items */}
           <div className="py-0.5">
             <Link
+              href="/assistants/path"
+              onClick={() => setOpen(false)}
+              className="flex items-center gap-2.5 px-4 py-1 text-sm text-foreground hover:bg-surface-secondary transition-colors"
+            >
+              <span className="text-sm leading-none">🎯</span>
+              Mein Lernpfad
+            </Link>
+            <Link
               href="/assistants/library"
               onClick={() => setOpen(false)}
               className="flex items-center gap-2.5 px-4 py-1 text-sm text-foreground hover:bg-surface-secondary transition-colors"

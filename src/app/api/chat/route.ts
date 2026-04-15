@@ -2,6 +2,7 @@ import { streamText, generateText, UIMessage } from 'ai'
 import { createAnthropic } from '@ai-sdk/anthropic'
 import { createClient } from '@/lib/supabase/server'
 import { getAgent } from '@/lib/agents'
+import { deprecationPromptBlock } from '@/lib/deprecations'
 
 export const maxDuration = 60
 
@@ -132,7 +133,8 @@ export async function POST(req: Request) {
     }
   }
 
-  const fullSystemPrompt = agent.systemPrompt + profileContext + knowledgeContext
+  const deprecationContext = deprecationPromptBlock(agentId)
+  const fullSystemPrompt = agent.systemPrompt + profileContext + knowledgeContext + deprecationContext
 
   const anthropic = createAnthropic({
     apiKey: process.env.ANTHROPIC_API_KEY,

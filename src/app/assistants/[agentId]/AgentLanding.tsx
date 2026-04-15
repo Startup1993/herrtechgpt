@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation'
 import type { AgentDefinition } from '@/lib/agents'
 import { VoiceRecordingUI } from '@/components/voice-recording-ui'
 import { useVoiceDictation } from '@/hooks/use-voice-dictation'
+import { CurrentToolsWidget } from '@/components/current-tools-widget'
 
 export default function AgentLanding({ agent }: { agent: AgentDefinition }) {
   const router = useRouter()
@@ -48,7 +49,8 @@ export default function AgentLanding({ agent }: { agent: AgentDefinition }) {
       <div className="flex-1 flex flex-col items-center justify-center px-6 pb-4">
         <div className="text-5xl mb-4">{agent.emoji}</div>
         <h2 className="text-xl font-semibold text-foreground mb-2">{agent.name}</h2>
-        <p className="text-sm text-muted max-w-md text-center mb-6">{agent.description}</p>
+        <p className="text-sm text-muted max-w-md text-center mb-4">{agent.description}</p>
+        <CurrentToolsWidget agentId={agent.id} />
       </div>
 
       {/* Chat input — always visible at the bottom */}
