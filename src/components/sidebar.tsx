@@ -251,10 +251,20 @@ export function Sidebar({ conversations, userEmail, userName, isAdmin }: Sidebar
   // Conversations are already sorted by updated_at DESC from the server query
   return (
     <aside className="w-72 bg-surface border-r border-border flex flex-col h-full shrink-0">
-      {/* Logo */}
-      <div className="px-5 pt-5 pb-4">
+      {/* Logo + Zurück */}
+      <div className="px-5 pt-5 pb-4 flex items-center justify-between">
         <Link href="/assistants">
           <img src="/logo.png" alt="Herr Tech" className="h-6 w-auto" />
+        </Link>
+        <Link
+          href="/dashboard"
+          className="text-xs text-muted hover:text-foreground flex items-center gap-1 transition-colors"
+          title="Zurück zur Übersicht"
+        >
+          <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <polyline points="15 18 9 12 15 6" />
+          </svg>
+          Übersicht
         </Link>
       </div>
 

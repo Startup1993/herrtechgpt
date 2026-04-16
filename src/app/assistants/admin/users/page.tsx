@@ -9,7 +9,7 @@ export default async function AdminUsersPage() {
     { data: { users: authUsers } },
     { data: convStats },
   ] = await Promise.all([
-    admin.from('profiles').select('id, role, created_at').order('created_at', { ascending: false }),
+    admin.from('profiles').select('id, role, access_tier, created_at').order('created_at', { ascending: false }),
     admin.auth.admin.listUsers({ perPage: 1000 }),
     admin.from('conversations').select('user_id, updated_at'),
   ])
@@ -34,6 +34,7 @@ export default async function AdminUsersPage() {
     id: p.id,
     email: emailMap[p.id] ?? '—',
     role: p.role as 'user' | 'admin',
+    access_tier: (p.access_tier ?? 'basic') as 'basic' | 'premium',
     created_at: p.created_at,
     last_active: lastActiveMap[p.id] ?? lastLoginMap[p.id] ?? null,
     conversation_count: convCountMap[p.id] ?? 0,

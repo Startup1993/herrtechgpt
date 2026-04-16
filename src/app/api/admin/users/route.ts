@@ -17,14 +17,24 @@ export async function PATCH(request: Request) {
   const user = await requireAdmin()
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 403 })
 
-  const { userId, role } = await request.json()
-  if (!userId || !role) return NextResponse.json({ error: 'userId and role required' }, { status: 400 })
-  if (!['user', 'admin'].includes(role)) return NextResponse.json({ error: 'Invalid role' }, { status: 400 })
+  const { userId, role, access_tier } = await request.json()
+  if (!userId) return NextResponse.json({ error: 'userId required' }, { status: 400 })
+
+  const updates: Record<string, string> = { updated_at: new Date().toISOString() }
+  if (role) {
+    if (!['user', 'admin'].includes(role)) return NextResponse.json({ error: 'Invalid role' }, { status: 400 })
+    updates.role = role
+  }
+  if (access_tier) {
+    if (!['basic', 'premium'].includes(access_tier)) return NextResponse.json({ error: 'Invalid access_tier' }, { status: 400 })
+    updates.access_tier = access_tier
+  }
+  if (!role && !access_tier) return NextResponse.json({ error: 'role or access_tier required' }, { status: 400 })
 
   const admin = createAdminClient()
   const { data, error } = await admin
     .from('profiles')
-    .update({ role, updated_at: new Date().toISOString() })
+    .update(updates)
     .eq('id', userId)
     .select()
     .single()
