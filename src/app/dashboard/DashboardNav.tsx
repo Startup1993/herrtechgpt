@@ -6,15 +6,11 @@ import { usePathname } from 'next/navigation'
 export function DashboardNav({ isPremium }: { isPremium: boolean }) {
   const pathname = usePathname()
   const isVideos = pathname === '/dashboard' || pathname.startsWith('/dashboard/video')
-  const isPath = pathname === '/dashboard/path'
 
   return (
     <nav className="flex items-center gap-1">
       <NavLink href="/dashboard" active={isVideos}>
         🎬 Lernvideos
-      </NavLink>
-      <NavLink href="/dashboard/path" active={isPath}>
-        🎯 Mein Lernpfad
       </NavLink>
       {isPremium ? (
         <NavLink href="/assistants" active={false} highlight>

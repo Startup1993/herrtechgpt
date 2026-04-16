@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback } from 'react'
 
 interface VideoItem {
   id: string
+  hashedId: string
   title: string
   duration: number | null
   categories: string[]
@@ -131,8 +132,8 @@ export default function DashboardPage() {
               <VideoCard
                 key={`${cat.id}-${video.id}`}
                 video={video}
-                isPlaying={playingVideo === video.id}
-                onPlay={() => setPlayingVideo(playingVideo === video.id ? null : video.id)}
+                isPlaying={playingVideo === video.hashedId}
+                onPlay={() => setPlayingVideo(playingVideo === video.hashedId ? null : video.hashedId)}
               />
             ))}
           </div>
