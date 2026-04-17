@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect, useCallback } from 'react'
+import { Search, Play, ChevronDown, ChevronRight, GraduationCap } from 'lucide-react'
 
 interface VideoItem {
   id: string
@@ -17,12 +18,13 @@ interface Category {
   videos: VideoItem[]
 }
 
-export default function DashboardPage() {
+export default function ClassroomPage() {
   const [categories, setCategories] = useState<Category[]>([])
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
   const [activeFilter, setActiveFilter] = useState<string | null>(null)
   const [playingVideo, setPlayingVideo] = useState<string | null>(null)
+  const [expandedCategories, setExpandedCategories] = useState<Set<string>>(new Set())
   const [total, setTotal] = useState(0)
 
   const load = useCallback(async () => {
@@ -31,6 +33,10 @@ export default function DashboardPage() {
       const data = await res.json()
       setCategories(data.categories ?? [])
       setTotal(data.total ?? 0)
+      // Expand first category by default
+      if (data.categories?.[0]) {
+        setExpandedCategories(new Set([data.categories[0].id]))
+      }
     } catch {
       // silent
     } finally {
@@ -40,7 +46,16 @@ export default function DashboardPage() {
 
   useEffect(() => { load() }, [load])
 
-  // Suche + Filter
+  const toggleCategory = (id: string) => {
+    setExpandedCategories(prev => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+  }
+
+  // Filter
   const filteredCategories = categories
     .filter((cat) => !activeFilter || cat.id === activeFilter)
     .map((cat) => ({
@@ -54,57 +69,52 @@ export default function DashboardPage() {
   const filteredTotal = filteredCategories.reduce((n, c) => n + c.videos.length, 0)
 
   return (
-    <div className="max-w-6xl mx-auto px-6 py-8">
+    <div className="max-w-5xl mx-auto px-4 sm:px-6 py-6 sm:py-10">
       {/* Header */}
-      <div className="mb-8">
-        <h1 className="text-2xl font-bold text-foreground mb-1">Lernvideos</h1>
-        <p className="text-sm text-muted">
-          {total} Videos aus der Community — jederzeit anschauen, immer aktuell.
+      <div className="text-center mb-8">
+        <h1 className="text-2xl sm:text-3xl font-bold text-foreground mb-2">Classroom</h1>
+        <p className="text-sm text-muted mb-6">
+          {total} Lernvideos — jederzeit anschauen, immer aktuell.
         </p>
-      </div>
 
-      {/* Search + Filter */}
-      <div className="flex flex-col sm:flex-row gap-3 mb-6">
-        <div className="relative flex-1">
-          <svg className="absolute left-3 top-1/2 -translate-y-1/2 text-muted" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-            <circle cx="11" cy="11" r="8" /><path d="m21 21-4.35-4.35" />
-          </svg>
+        {/* Search */}
+        <div className="max-w-2xl mx-auto card-static p-3 flex items-center gap-3">
+          <Search size={18} className="text-muted shrink-0" />
           <input
             type="text"
-            placeholder="Video suchen…"
+            placeholder="Video suchen..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            className="w-full pl-10 pr-4 py-2.5 text-sm border border-border rounded-xl bg-surface focus:outline-none focus:ring-2 focus:ring-primary/30 placeholder:text-muted"
+            className="flex-1 bg-transparent text-sm text-foreground placeholder:text-muted focus:outline-none"
           />
+          {search && (
+            <span className="text-xs text-muted shrink-0">{filteredTotal} Ergebnisse</span>
+          )}
         </div>
-        <div className="flex flex-wrap gap-1.5">
+      </div>
+
+      {/* Category Filter Chips */}
+      <div className="flex flex-wrap justify-center gap-2 mb-8">
+        <FilterChip label="Alle" active={!activeFilter} onClick={() => setActiveFilter(null)} />
+        {categories.map((cat) => (
           <FilterChip
-            label="Alle"
-            active={!activeFilter}
-            onClick={() => setActiveFilter(null)}
+            key={cat.id}
+            label={`${cat.emoji} ${cat.label}`}
+            active={activeFilter === cat.id}
+            onClick={() => setActiveFilter(activeFilter === cat.id ? null : cat.id)}
           />
-          {categories.map((cat) => (
-            <FilterChip
-              key={cat.id}
-              label={`${cat.emoji} ${cat.label}`}
-              active={activeFilter === cat.id}
-              onClick={() => setActiveFilter(activeFilter === cat.id ? null : cat.id)}
-            />
-          ))}
-        </div>
+        ))}
       </div>
 
       {/* Loading */}
       {loading && (
-        <div className="flex items-center justify-center py-20 text-muted text-sm">
-          <div className="flex items-center gap-2">
-            <div className="w-4 h-4 border-2 border-primary/30 border-t-primary rounded-full animate-spin" />
-            Videos werden geladen…
-          </div>
+        <div className="flex items-center justify-center py-20 text-muted text-sm gap-2">
+          <div className="w-4 h-4 border-2 border-primary/30 border-t-primary rounded-full animate-spin" />
+          Videos werden geladen...
         </div>
       )}
 
-      {/* Empty state */}
+      {/* Empty */}
       {!loading && filteredTotal === 0 && (
         <div className="text-center py-16">
           <div className="text-4xl mb-4">🔍</div>
@@ -113,32 +123,45 @@ export default function DashboardPage() {
         </div>
       )}
 
-      {/* Ergebnis-Info bei Suche */}
-      {!loading && search && filteredTotal > 0 && (
-        <p className="text-xs text-muted mb-4">
-          {filteredTotal} Ergebnis{filteredTotal !== 1 ? 'se' : ''} für &ldquo;{search}&rdquo;
-        </p>
-      )}
+      {/* Modules (Skool-Style: collapsible categories with video list) */}
+      {!loading && filteredCategories.map((cat) => {
+        const isExpanded = expandedCategories.has(cat.id) || !!search
+        return (
+          <section key={cat.id} className="mb-4">
+            {/* Module Header — clickable to expand/collapse */}
+            <button
+              onClick={() => toggleCategory(cat.id)}
+              className="w-full flex items-center gap-3 p-4 card-static hover:border-primary/30 transition-all text-left"
+            >
+              <span className="text-xl">{cat.emoji}</span>
+              <div className="flex-1 min-w-0">
+                <h2 className="text-base font-semibold text-foreground">{cat.label}</h2>
+                <p className="text-xs text-muted">{cat.videos.length} Videos</p>
+              </div>
+              {isExpanded ? (
+                <ChevronDown size={18} className="text-muted shrink-0" />
+              ) : (
+                <ChevronRight size={18} className="text-muted shrink-0" />
+              )}
+            </button>
 
-      {/* Kategorien + Videos */}
-      {!loading && filteredCategories.map((cat) => (
-        <section key={cat.id} className="mb-10">
-          <h2 className="text-sm font-semibold text-muted uppercase tracking-wider mb-3 flex items-center gap-2">
-            <span>{cat.emoji}</span> {cat.label}
-            <span className="text-xs font-normal">({cat.videos.length})</span>
-          </h2>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-            {cat.videos.map((video) => (
-              <VideoCard
-                key={`${cat.id}-${video.id}`}
-                video={video}
-                isPlaying={playingVideo === video.hashedId}
-                onPlay={() => setPlayingVideo(playingVideo === video.hashedId ? null : video.hashedId)}
-              />
-            ))}
-          </div>
-        </section>
-      ))}
+            {/* Video List */}
+            {isExpanded && (
+              <div className="ml-4 sm:ml-8 mt-1 border-l-2 border-border pl-4 sm:pl-6 py-2 space-y-1">
+                {cat.videos.map((video, i) => (
+                  <VideoRow
+                    key={`${cat.id}-${video.id}`}
+                    video={video}
+                    index={i + 1}
+                    isPlaying={playingVideo === video.hashedId}
+                    onPlay={() => setPlayingVideo(playingVideo === video.hashedId ? null : video.hashedId)}
+                  />
+                ))}
+              </div>
+            )}
+          </section>
+        )
+      })}
 
       {/* Wistia Player Modal */}
       {playingVideo && (
@@ -150,7 +173,6 @@ export default function DashboardPage() {
             className="w-full max-w-4xl bg-black rounded-2xl overflow-hidden shadow-2xl"
             onClick={(e) => e.stopPropagation()}
           >
-            {/* Close button */}
             <div className="flex justify-end p-2 bg-black">
               <button
                 onClick={() => setPlayingVideo(null)}
@@ -161,7 +183,6 @@ export default function DashboardPage() {
                 </svg>
               </button>
             </div>
-            {/* Wistia iframe embed */}
             <div className="relative pb-[56.25%]">
               <iframe
                 src={`https://fast.wistia.net/embed/iframe/${playingVideo}?autoPlay=true`}
@@ -177,12 +198,14 @@ export default function DashboardPage() {
   )
 }
 
-function VideoCard({
+function VideoRow({
   video,
+  index,
   isPlaying,
   onPlay,
 }: {
   video: VideoItem
+  index: number
   isPlaying: boolean
   onPlay: () => void
 }) {
@@ -195,44 +218,33 @@ function VideoCard({
   return (
     <button
       onClick={onPlay}
-      className={`group text-left w-full p-4 rounded-xl border transition-all ${
+      className={`group w-full flex items-center gap-3 px-3 py-2.5 rounded-[var(--radius-lg)] text-left transition-all ${
         isPlaying
-          ? 'border-primary bg-primary/5 shadow-sm'
-          : 'border-border bg-surface hover:border-primary/30 hover:shadow-sm'
+          ? 'bg-primary/10 text-primary'
+          : 'hover:bg-surface-hover text-foreground'
       }`}
     >
-      <div className="flex items-start gap-3">
-        <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center shrink-0 group-hover:bg-primary/20 transition-colors">
-          <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="currentColor" className="text-primary ml-0.5">
-            <polygon points="5 3 19 12 5 21 5 3" />
-          </svg>
-        </div>
-        <div className="flex-1 min-w-0">
-          <p className="text-sm font-medium text-foreground leading-snug mb-1 line-clamp-2">
-            {video.title}
-          </p>
-          {duration && (
-            <p className="text-xs text-muted">{duration}</p>
-          )}
-        </div>
+      <span className="text-xs text-muted w-6 text-right shrink-0">{index}.</span>
+      <div className={`w-8 h-8 rounded-full flex items-center justify-center shrink-0 transition-colors ${
+        isPlaying ? 'bg-primary text-white' : 'bg-surface-secondary text-muted group-hover:bg-primary/10 group-hover:text-primary'
+      }`}>
+        <Play size={12} className={isPlaying ? '' : 'ml-0.5'} fill={isPlaying ? 'currentColor' : 'none'} />
       </div>
+      <div className="flex-1 min-w-0">
+        <p className="text-sm font-medium leading-snug truncate">{video.title}</p>
+      </div>
+      {duration && (
+        <span className="text-xs text-muted shrink-0">{duration}</span>
+      )}
     </button>
   )
 }
 
-function FilterChip({
-  label,
-  active,
-  onClick,
-}: {
-  label: string
-  active: boolean
-  onClick: () => void
-}) {
+function FilterChip({ label, active, onClick }: { label: string; active: boolean; onClick: () => void }) {
   return (
     <button
       onClick={onClick}
-      className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors whitespace-nowrap ${
+      className={`px-3 py-1.5 rounded-full text-xs font-medium transition-colors whitespace-nowrap ${
         active
           ? 'bg-primary text-white'
           : 'bg-surface border border-border text-muted hover:text-foreground hover:border-primary/30'

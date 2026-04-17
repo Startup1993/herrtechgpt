@@ -50,9 +50,9 @@ export default function HerrTechGptPage() {
   }
 
   return (
-    <div className="max-w-4xl mx-auto px-4 sm:px-6 py-6 sm:py-10">
-      {/* Welcome + Smart Input */}
-      <div className="mb-8">
+    <div className="flex flex-col items-center justify-center min-h-[calc(100vh-120px)] px-4 sm:px-6 py-6 sm:py-10">
+      {/* Centered Welcome + Smart Input */}
+      <div className="w-full max-w-3xl text-center mb-10">
         <h1 className="text-2xl sm:text-3xl font-bold text-foreground mb-2">
           Herr Tech GPT
         </h1>
@@ -61,7 +61,7 @@ export default function HerrTechGptPage() {
         </p>
 
         {/* Smart Input */}
-        <div className="card-static p-4 flex items-center gap-3">
+        <div className="card-static p-4 flex items-center gap-3 text-left">
           <MessageSquare size={20} className="text-muted shrink-0" />
           <input
             type="text"
@@ -82,7 +82,8 @@ export default function HerrTechGptPage() {
       </div>
 
       {/* Agent Cards */}
-      <h2 className="text-sm font-semibold text-muted uppercase tracking-wider mb-4">
+      <div className="w-full max-w-4xl">
+      <h2 className="text-sm font-semibold text-muted uppercase tracking-wider mb-4 text-center">
         Oder wähle einen Spezialisten
       </h2>
 
@@ -106,6 +107,7 @@ export default function HerrTechGptPage() {
             </div>
           </button>
         ))}
+      </div>
       </div>
     </div>
   )
