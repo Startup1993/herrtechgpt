@@ -91,6 +91,7 @@ function LearningPathWidget() {
   const [path, setPath] = useState<LearningPath | null>(null)
   const [loading, setLoading] = useState(true)
   const [hasPath, setHasPath] = useState(false)
+  const [completed, setCompleted] = useState(0)
 
   useEffect(() => {
     const load = async () => {
@@ -121,6 +122,13 @@ function LearningPathWidget() {
     load()
   }, [])
 
+  useEffect(() => {
+    try {
+      const stored = localStorage.getItem('herr_tech_path_progress')
+      if (stored) setCompleted(parseInt(stored, 10))
+    } catch {}
+  }, [])
+
   if (loading) {
     return (
       <div className="card-static p-6 animate-pulse">
@@ -130,7 +138,6 @@ function LearningPathWidget() {
     )
   }
 
-  // No path yet → show onboarding CTA
   if (!hasPath) {
     return (
       <div className="card-static p-6 flex flex-col sm:flex-row items-start sm:items-center gap-4">
@@ -148,16 +155,7 @@ function LearningPathWidget() {
     )
   }
 
-  // Has path → show progress widget
   const totalVideos = path?.videos?.length ?? 0
-  // TODO: Track actual completion in DB. For now estimate from localStorage or default to 0
-  const [completed, setCompleted] = useState(0)
-  useEffect(() => {
-    try {
-      const stored = localStorage.getItem('herr_tech_path_progress')
-      if (stored) setCompleted(parseInt(stored, 10))
-    } catch {}
-  }, [])
   const progress = totalVideos > 0 ? Math.round((completed / totalVideos) * 100) : 0
   const nextVideo = path?.videos?.[completed] ?? path?.videos?.[0]
 

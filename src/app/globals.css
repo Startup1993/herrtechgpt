@@ -2,43 +2,91 @@
 
 /* ═══════════════════════════════════════════════════════════
    HERR TECH DESIGN SYSTEM
-   Light Mode (default) + Dark Mode via html.dark
-   Primary: Herr Tech Lila #B598E2
+
+   Approach: @theme references CSS custom properties.
+   :root sets light values, html.dark overrides them.
+   This guarantees dark mode works with Tailwind v4.
    ═══════════════════════════════════════════════════════════ */
 
-@theme inline {
-  /* ── Light Mode Tokens ────────────────────────────────── */
-  --color-background: #F5F0EB;
-  --color-foreground: #1a1a1a;
-  --color-primary: #B598E2;
-  --color-primary-hover: #9b51e0;
-  --color-primary-light: #B598E220;
-  --color-primary-glow: #B598E210;
-  --color-surface: #FFFFFF;
-  --color-surface-secondary: #FAF7F4;
-  --color-surface-hover: #F0EBE5;
-  --color-border: #E8E0D8;
-  --color-border-light: #F0EBE5;
-  --color-muted: #7A7067;
-  --color-muted-light: #A59B91;
-  --color-card-hover: #FDFCFB;
-  --color-glass: #FFFFFF80;
-  --color-success: #34D399;
-  --color-warning: #FBBF24;
-  --color-danger: #F87171;
-  --color-info: #60A5FA;
+/* ── Color definitions (light = default) ─────────────────── */
+:root {
+  --ht-background: #F5F0EB;
+  --ht-foreground: #1a1a1a;
+  --ht-primary: #B598E2;
+  --ht-primary-hover: #9b51e0;
+  --ht-primary-light: #B598E220;
+  --ht-primary-glow: #B598E210;
+  --ht-surface: #FFFFFF;
+  --ht-surface-secondary: #FAF7F4;
+  --ht-surface-hover: #F0EBE5;
+  --ht-border: #E8E0D8;
+  --ht-border-light: #F0EBE5;
+  --ht-muted: #7A7067;
+  --ht-muted-light: #A59B91;
+  --ht-card-hover: #FDFCFB;
+  --ht-glass: #FFFFFF80;
+  --ht-success: #34D399;
+  --ht-warning: #FBBF24;
+  --ht-danger: #F87171;
+  --ht-info: #60A5FA;
+  --ht-shadow-card: 0 1px 3px rgba(0,0,0,0.06), 0 1px 2px rgba(0,0,0,0.04);
+  --ht-shadow-card-hover: 0 10px 25px rgba(0,0,0,0.08), 0 4px 10px rgba(0,0,0,0.04);
+  --ht-shadow-sidebar: 2px 0 8px rgba(0,0,0,0.04);
+  --ht-shadow-dropdown: 0 10px 40px rgba(0,0,0,0.12);
+}
 
-  /* ── Typography ────────────────────────────────────────── */
+/* ── Dark mode overrides ─────────────────────────────────── */
+html.dark {
+  --ht-background: #0F0F13;
+  --ht-foreground: #E8E4E0;
+  --ht-primary: #B598E2;
+  --ht-primary-hover: #C9B2F0;
+  --ht-primary-light: #B598E225;
+  --ht-primary-glow: #B598E215;
+  --ht-surface: #1A1A23;
+  --ht-surface-secondary: #16161E;
+  --ht-surface-hover: #22222D;
+  --ht-border: #2A2A35;
+  --ht-border-light: #222230;
+  --ht-muted: #8A8A9A;
+  --ht-muted-light: #5A5A6A;
+  --ht-card-hover: #1E1E28;
+  --ht-glass: #1A1A2380;
+  --ht-success: #34D399;
+  --ht-warning: #FBBF24;
+  --ht-danger: #F87171;
+  --ht-info: #60A5FA;
+  --ht-shadow-card: 0 1px 3px rgba(0,0,0,0.3), 0 1px 2px rgba(0,0,0,0.2);
+  --ht-shadow-card-hover: 0 10px 25px rgba(0,0,0,0.4), 0 4px 10px rgba(0,0,0,0.2);
+  --ht-shadow-sidebar: 2px 0 8px rgba(0,0,0,0.3);
+  --ht-shadow-dropdown: 0 10px 40px rgba(0,0,0,0.5);
+}
+
+/* ── Tailwind theme (references the custom properties) ───── */
+@theme inline {
+  --color-background: var(--ht-background);
+  --color-foreground: var(--ht-foreground);
+  --color-primary: var(--ht-primary);
+  --color-primary-hover: var(--ht-primary-hover);
+  --color-primary-light: var(--ht-primary-light);
+  --color-primary-glow: var(--ht-primary-glow);
+  --color-surface: var(--ht-surface);
+  --color-surface-secondary: var(--ht-surface-secondary);
+  --color-surface-hover: var(--ht-surface-hover);
+  --color-border: var(--ht-border);
+  --color-border-light: var(--ht-border-light);
+  --color-muted: var(--ht-muted);
+  --color-muted-light: var(--ht-muted-light);
+  --color-card-hover: var(--ht-card-hover);
+  --color-glass: var(--ht-glass);
+  --color-success: var(--ht-success);
+  --color-warning: var(--ht-warning);
+  --color-danger: var(--ht-danger);
+  --color-info: var(--ht-info);
+
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
 
-  /* ── Shadows ───────────────────────────────────────────── */
-  --shadow-card: 0 1px 3px rgba(0,0,0,0.06), 0 1px 2px rgba(0,0,0,0.04);
-  --shadow-card-hover: 0 10px 25px rgba(0,0,0,0.08), 0 4px 10px rgba(0,0,0,0.04);
-  --shadow-sidebar: 2px 0 8px rgba(0,0,0,0.04);
-  --shadow-dropdown: 0 10px 40px rgba(0,0,0,0.12);
-
-  /* ── Radius ────────────────────────────────────────────── */
   --radius-sm: 0.5rem;
   --radius-md: 0.75rem;
   --radius-lg: 1rem;
@@ -47,41 +95,11 @@
 }
 
 /* ═══════════════════════════════════════════════════════════
-   DARK MODE
-   ═══════════════════════════════════════════════════════════ */
-html.dark, .dark {
-  --color-background: #0F0F13 !important;
-  --color-foreground: #E8E4E0 !important;
-  --color-primary: #B598E2 !important;
-  --color-primary-hover: #C9B2F0 !important;
-  --color-primary-light: #B598E225 !important;
-  --color-primary-glow: #B598E215 !important;
-  --color-surface: #1A1A23 !important;
-  --color-surface-secondary: #16161E !important;
-  --color-surface-hover: #22222D !important;
-  --color-border: #2A2A35 !important;
-  --color-border-light: #222230 !important;
-  --color-muted: #8A8A9A !important;
-  --color-muted-light: #5A5A6A !important;
-  --color-card-hover: #1E1E28 !important;
-  --color-glass: #1A1A2380 !important;
-  --color-success: #34D399 !important;
-  --color-warning: #FBBF24 !important;
-  --color-danger: #F87171 !important;
-  --color-info: #60A5FA !important;
-
-  --shadow-card: 0 1px 3px rgba(0,0,0,0.3), 0 1px 2px rgba(0,0,0,0.2) !important;
-  --shadow-card-hover: 0 10px 25px rgba(0,0,0,0.4), 0 4px 10px rgba(0,0,0,0.2) !important;
-  --shadow-sidebar: 2px 0 8px rgba(0,0,0,0.3) !important;
-  --shadow-dropdown: 0 10px 40px rgba(0,0,0,0.5) !important;
-}
-
-/* ═══════════════════════════════════════════════════════════
    BASE STYLES
    ═══════════════════════════════════════════════════════════ */
 body {
-  background: var(--color-background);
-  color: var(--color-foreground);
+  background: var(--ht-background);
+  color: var(--ht-foreground);
   font-family: var(--font-sans), Arial, Helvetica, sans-serif;
 }
 
@@ -92,63 +110,44 @@ body {
   transition: background-color 0.2s ease, border-color 0.2s ease, color 0.2s ease, box-shadow 0.2s ease;
 }
 
-/* Scrollbar-Styling (Chrome/Edge) */
-::-webkit-scrollbar {
-  width: 6px;
-}
-::-webkit-scrollbar-track {
-  background: transparent;
-}
-::-webkit-scrollbar-thumb {
-  background: var(--color-border);
-  border-radius: 3px;
-}
-::-webkit-scrollbar-thumb:hover {
-  background: var(--color-muted);
-}
-
-/* Firefox */
-* {
-  scrollbar-width: thin;
-  scrollbar-color: var(--color-border) transparent;
-}
+/* Scrollbar */
+::-webkit-scrollbar { width: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--ht-border); border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: var(--ht-muted); }
+* { scrollbar-width: thin; scrollbar-color: var(--ht-border) transparent; }
 
 /* ═══════════════════════════════════════════════════════════
    UTILITY CLASSES
    ═══════════════════════════════════════════════════════════ */
-
-/* Glass Morphism */
 .glass {
-  background: var(--color-glass);
+  background: var(--ht-glass);
   backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);
 }
 
-/* Card */
 .card {
-  background: var(--color-surface);
-  border: 1px solid var(--color-border);
+  background: var(--ht-surface);
+  border: 1px solid var(--ht-border);
   border-radius: var(--radius-2xl);
-  box-shadow: var(--shadow-card);
+  box-shadow: var(--ht-shadow-card);
   transition: all 0.2s ease;
 }
 .card:hover {
-  box-shadow: var(--shadow-card-hover);
-  border-color: var(--color-primary);
+  box-shadow: var(--ht-shadow-card-hover);
+  border-color: var(--ht-primary);
   transform: translateY(-2px);
 }
 
-/* Card ohne Hover-Animation */
 .card-static {
-  background: var(--color-surface);
-  border: 1px solid var(--color-border);
+  background: var(--ht-surface);
+  border: 1px solid var(--ht-border);
   border-radius: var(--radius-2xl);
-  box-shadow: var(--shadow-card);
+  box-shadow: var(--ht-shadow-card);
 }
 
-/* Primary Button */
 .btn-primary {
-  background: var(--color-primary);
+  background: var(--ht-primary);
   color: white;
   padding: 0.625rem 1.25rem;
   border-radius: var(--radius-lg);
@@ -162,15 +161,14 @@ body {
   gap: 0.5rem;
 }
 .btn-primary:hover {
-  background: var(--color-primary-hover);
+  background: var(--ht-primary-hover);
   transform: translateY(-1px);
-  box-shadow: 0 4px 12px var(--color-primary-light);
+  box-shadow: 0 4px 12px var(--ht-primary-light);
 }
 
-/* Ghost Button */
 .btn-ghost {
   background: transparent;
-  color: var(--color-muted);
+  color: var(--ht-muted);
   padding: 0.5rem 0.75rem;
   border-radius: var(--radius-md);
   font-weight: 400;
@@ -180,11 +178,10 @@ body {
   border: none;
 }
 .btn-ghost:hover {
-  background: var(--color-surface-hover);
-  color: var(--color-foreground);
+  background: var(--ht-surface-hover);
+  color: var(--ht-foreground);
 }
 
-/* Glow accent (subtiler Lila-Schimmer) */
 .glow-primary {
-  box-shadow: 0 0 20px var(--color-primary-light), 0 0 40px var(--color-primary-glow);
+  box-shadow: 0 0 20px var(--ht-primary-light), 0 0 40px var(--ht-primary-glow);
 }
