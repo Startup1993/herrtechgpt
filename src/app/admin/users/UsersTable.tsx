@@ -119,9 +119,13 @@ export default function UsersTable({ users }: { users: UserRow[] }) {
               </tr>
             )}
             {filtered.map((u) => (
-              <tr key={u.id} className="hover:bg-surface-secondary/50 transition-colors">
+              <tr
+                key={u.id}
+                className="hover:bg-surface-secondary/50 transition-colors cursor-pointer"
+                onClick={() => router.push(`/admin/users/${u.id}`)}
+              >
                 <td className="px-5 py-3.5">
-                  <span className="font-medium text-foreground">{u.email}</span>
+                  <span className="font-medium text-foreground underline decoration-transparent hover:decoration-primary transition-colors">{u.email}</span>
                 </td>
                 <td className="px-4 py-3.5">
                   <button

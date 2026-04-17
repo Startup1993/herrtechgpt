@@ -184,12 +184,21 @@ export default function ClassroomPage() {
               </button>
             </div>
             <div className="relative pb-[56.25%]">
-              <iframe
-                src={`https://fast.wistia.net/embed/iframe/${playingVideo}?autoPlay=true`}
-                allow="autoplay; fullscreen"
-                allowFullScreen
-                className="absolute inset-0 w-full h-full"
-              />
+              {/^[a-z0-9]{10}$/i.test(playingVideo) ? (
+                <iframe
+                  src={`https://fast.wistia.net/embed/iframe/${playingVideo}?autoPlay=true`}
+                  allow="autoplay; fullscreen"
+                  allowFullScreen
+                  className="absolute inset-0 w-full h-full"
+                />
+              ) : (
+                <div className="absolute inset-0 flex items-center justify-center text-white text-center p-6">
+                  <div>
+                    <p className="text-lg font-semibold mb-2">Video nicht verfügbar</p>
+                    <p className="text-sm text-white/60">WISTIA_API_KEY ist nicht konfiguriert. Bitte in .env.local eintragen.</p>
+                  </div>
+                </div>
+              )}
             </div>
           </div>
         </div>

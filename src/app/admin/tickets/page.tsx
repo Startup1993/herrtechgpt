@@ -1,24 +1,47 @@
-'use client'
+import { createAdminClient } from '@/lib/supabase/admin'
+import { TicketsClient } from './TicketsClient'
 
-import { Ticket } from 'lucide-react'
+export default async function AdminTicketsPage() {
+  const admin = createAdminClient()
 
-export default function AdminTicketsPage() {
-  return (
-    <div className="p-4 sm:p-8 max-w-4xl mx-auto">
-      <div className="mb-8">
-        <h1 className="text-2xl font-bold text-foreground mb-1">Support-Tickets</h1>
-        <p className="text-sm text-muted">Offene Anfragen und Verlauf.</p>
-      </div>
+  // Load all help conversations (agent_id = 'help') as "tickets"
+  const { data: helpConvs } = await admin
+    .from('conversations')
+    .select('id, user_id, title, created_at, updated_at')
+    .eq('agent_id', 'help')
+    .order('updated_at', { ascending: false })
+    .limit(50)
 
-      <div className="card-static p-8 text-center">
-        <div className="w-16 h-16 rounded-full bg-primary/10 flex items-center justify-center mx-auto mb-4">
-          <Ticket size={32} className="text-primary" />
-        </div>
-        <h2 className="text-lg font-semibold text-foreground mb-2">Ticketsystem kommt bald</h2>
-        <p className="text-sm text-muted max-w-md mx-auto">
-          Hier siehst du bald alle Support-Anfragen von Nutzern, kannst direkt antworten und den Status verwalten.
-        </p>
-      </div>
-    </div>
-  )
+  // Get user emails
+  const { data: { users: authUsers } } = await admin.auth.admin.listUsers()
+  const emailMap: Record<string, string> = {}
+  authUsers?.forEach(u => { emailMap[u.id] = u.email ?? '' })
+
+  // Get message counts + latest message per conversation
+  const convIds = (helpConvs ?? []).map(c => c.id)
+  const { data: allMessages } = convIds.length > 0
+    ? await admin
+        .from('messages')
+        .select('conversation_id, role, content, created_at')
+        .in('conversation_id', convIds)
+        .order('created_at', { ascending: false })
+    : { data: [] }
+
+  const tickets = (helpConvs ?? []).map(conv => {
+    const msgs = (allMessages ?? []).filter(m => m.conversation_id === conv.id)
+    const lastUserMsg = msgs.find(m => m.role === 'user')
+    return {
+      id: conv.id,
+      userId: conv.user_id,
+      userEmail: emailMap[conv.user_id] ?? '—',
+      title: conv.title ?? 'Hilfe-Anfrage',
+      messageCount: msgs.length,
+      lastMessage: lastUserMsg?.content?.substring(0, 100) ?? '',
+      createdAt: conv.created_at,
+      updatedAt: conv.updated_at,
+      hasUnread: msgs.length > 0 && msgs[0].role === 'user',
+    }
+  })
+
+  return <TicketsClient tickets={tickets} />
 }
