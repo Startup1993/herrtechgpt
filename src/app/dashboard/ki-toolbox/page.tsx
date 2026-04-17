@@ -20,9 +20,9 @@ const tools = [
     iconBg: 'bg-gradient-to-br from-blue-500 to-indigo-600',
     title: 'KI Video Editor',
     subtitle: 'Upload → Analyse → fertig',
-    description: 'Lade dein Rohvideo hoch. KI transkribiert, analysiert Szenen und schneidet automatisch.',
+    description: 'Füge dein Transkript ein. KI analysiert Szenen und schlägt automatische Schnitte vor.',
     href: '/dashboard/ki-toolbox/video-editor',
-    ready: false,
+    ready: true,
   },
   {
     id: 'video-creator',
@@ -30,9 +30,9 @@ const tools = [
     iconBg: 'bg-gradient-to-br from-purple-500 to-violet-600',
     title: 'KI Video Creator',
     subtitle: 'Text-Prompt → Video',
-    description: 'Beschreibe dein Video per Text. KI generiert Szenen, Bilder und Video-Clips vollautomatisch.',
+    description: 'Beschreibe dein Video per Text. KI erstellt ein komplettes Szenen-Skript mit Bildprompts.',
     href: '/dashboard/ki-toolbox/video-creator',
-    ready: false,
+    ready: true,
   },
 ]
 
