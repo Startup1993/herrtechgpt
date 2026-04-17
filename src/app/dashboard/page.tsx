@@ -114,7 +114,7 @@ function LearningPathWidget() {
           href="/dashboard/onboarding"
           className="btn-primary shrink-0"
         >
-          Quiz starten
+          Onboarding beginnen
         </Link>
       </div>
     )

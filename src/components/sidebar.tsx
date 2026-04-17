@@ -27,13 +27,17 @@ import {
   Sun,
   Moon,
   MoreVertical,
+  Palette,
+  Video,
+  Search,
+  Play,
 } from 'lucide-react'
 
 // ═══════════════════════════════════════════════════════════
 // TYPES
 // ═══════════════════════════════════════════════════════════
 
-type SidebarMode = 'main' | 'chat' | 'admin'
+type SidebarMode = 'main' | 'chat' | 'admin' | 'classroom' | 'toolbox'
 
 interface SidebarProps {
   conversations: Conversation[]
@@ -244,7 +248,7 @@ function NavItem({
   onClick?: () => void
   description?: string
 }) {
-  const baseClass = `flex items-center gap-3 px-3 py-2.5 rounded-[var(--radius-lg)] text-sm transition-all w-full ${
+  const baseClass = `flex items-center gap-3 px-3 py-2.5 rounded-[var(--radius-lg)] text-sm transition-all w-full text-left ${
     isActive
       ? 'bg-primary/12 text-primary font-medium'
       : 'text-muted hover:bg-surface-hover hover:text-foreground'
@@ -315,10 +319,10 @@ function MainSidebar({
           isActive={pathname === '/dashboard'}
         />
         <NavItem
-          href="/dashboard/classroom"
           icon={GraduationCap}
           label="Classroom"
           isActive={pathname.startsWith('/dashboard/classroom')}
+          onClick={() => onDrillDown('classroom')}
         />
         <NavItem
           icon={Bot}
@@ -329,11 +333,12 @@ function MainSidebar({
           href={isPremium ? undefined : '/dashboard/upgrade'}
         />
         <NavItem
-          href={isPremium ? '/dashboard/ki-toolbox' : '/dashboard/upgrade'}
           icon={Wrench}
           label="KI Toolbox"
           isActive={pathname.startsWith('/dashboard/ki-toolbox')}
           locked={!isPremium}
+          onClick={() => isPremium ? onDrillDown('toolbox') : undefined}
+          href={isPremium ? undefined : '/dashboard/upgrade'}
         />
         <NavItem
           href="/dashboard/help"
@@ -528,6 +533,126 @@ function AdminSidebar({
 }
 
 // ═══════════════════════════════════════════════════════════
+// CLASSROOM SIDEBAR (Drill-Down Modus 4)
+// ═══════════════════════════════════════════════════════════
+
+const VIDEO_CATEGORIES = [
+  { id: 'all', label: 'Alle Videos', icon: Play },
+  { id: 'content-hook', label: 'Content & Hooks', icon: GraduationCap },
+  { id: 'funnel-monetization', label: 'Funnel & Monetarisierung', icon: GraduationCap },
+  { id: 'personal-growth', label: 'Persönliches Wachstum', icon: GraduationCap },
+  { id: 'ai-prompt', label: 'KI & Prompting', icon: GraduationCap },
+  { id: 'herr-tech', label: 'Herr Tech Allgemein', icon: GraduationCap },
+  { id: 'business-coach', label: 'Business & Strategie', icon: GraduationCap },
+]
+
+function ClassroomSidebar({
+  pathname,
+  onBack,
+}: {
+  pathname: string
+  onBack: () => void
+}) {
+  return (
+    <div className="flex-1 overflow-y-auto">
+      <button
+        onClick={onBack}
+        className="flex items-center gap-2 px-4 py-3 text-sm text-muted hover:text-foreground hover:bg-surface-hover transition-colors border-b border-border w-full text-left"
+      >
+        <ChevronLeft size={16} />
+        <span>Zurück zur Übersicht</span>
+      </button>
+
+      <nav className="px-3 py-4">
+        <SectionHeader label="Lernvideos" />
+        <div className="space-y-1">
+          <NavItem
+            href="/dashboard/classroom"
+            icon={Search}
+            label="Alle Videos durchsuchen"
+            isActive={pathname === '/dashboard/classroom'}
+          />
+        </div>
+
+        <SectionHeader label="Kategorien" />
+        <div className="space-y-1">
+          {VIDEO_CATEGORIES.filter(c => c.id !== 'all').map((cat) => (
+            <NavItem
+              key={cat.id}
+              href={`/dashboard/classroom?category=${cat.id}`}
+              icon={cat.icon}
+              label={cat.label}
+              isActive={pathname.includes(`category=${cat.id}`)}
+            />
+          ))}
+        </div>
+      </nav>
+    </div>
+  )
+}
+
+// ═══════════════════════════════════════════════════════════
+// TOOLBOX SIDEBAR (Drill-Down Modus 5)
+// ═══════════════════════════════════════════════════════════
+
+function ToolboxSidebar({
+  pathname,
+  onBack,
+}: {
+  pathname: string
+  onBack: () => void
+}) {
+  return (
+    <div className="flex-1 overflow-y-auto">
+      <button
+        onClick={onBack}
+        className="flex items-center gap-2 px-4 py-3 text-sm text-muted hover:text-foreground hover:bg-surface-hover transition-colors border-b border-border w-full text-left"
+      >
+        <ChevronLeft size={16} />
+        <span>Zurück zur Übersicht</span>
+      </button>
+
+      <nav className="px-3 py-4">
+        <SectionHeader label="Verfügbare Tools" />
+        <div className="space-y-1">
+          <NavItem
+            href="/dashboard/ki-toolbox/carousel"
+            icon={Palette}
+            label="Karussell-Generator"
+            description="Text → Instagram-Slides"
+            isActive={pathname.startsWith('/dashboard/ki-toolbox/carousel')}
+          />
+          <NavItem
+            href="/dashboard/ki-toolbox/video-editor"
+            icon={Film}
+            label="KI Video Editor"
+            description="Upload → Analyse → Schnitt"
+            isActive={pathname.startsWith('/dashboard/ki-toolbox/video-editor')}
+          />
+          <NavItem
+            href="/dashboard/ki-toolbox/video-creator"
+            icon={Video}
+            label="KI Video Creator"
+            description="Text-Prompt → KI-Video"
+            isActive={pathname.startsWith('/dashboard/ki-toolbox/video-creator')}
+          />
+        </div>
+
+        <SectionHeader label="Übersicht" />
+        <div className="space-y-1">
+          <NavItem
+            href="/dashboard/ki-toolbox"
+            icon={Wrench}
+            label="Alle Tools anzeigen"
+            isActive={pathname === '/dashboard/ki-toolbox'}
+          />
+        </div>
+      </nav>
+    </div>
+  )
+}
+
+// ═══════════════════════════════════════════════════════════
 // MAIN SIDEBAR EXPORT
 // ═══════════════════════════════════════════════════════════
 
@@ -540,6 +665,8 @@ export function Sidebar({ conversations, userEmail, userName, isAdmin, accessTie
   const autoMode = useMemo<SidebarMode>(() => {
     if (pathname.startsWith('/admin')) return 'admin'
     if (pathname.startsWith('/dashboard/herr-tech-gpt')) return 'chat'
+    if (pathname.startsWith('/dashboard/classroom')) return 'classroom'
+    if (pathname.startsWith('/dashboard/ki-toolbox')) return 'toolbox'
     return 'main'
   }, [pathname])
 
@@ -554,6 +681,8 @@ export function Sidebar({ conversations, userEmail, userName, isAdmin, accessTie
     setMode(newMode)
     if (newMode === 'chat') router.push('/dashboard/herr-tech-gpt')
     if (newMode === 'admin') router.push('/admin')
+    if (newMode === 'classroom') router.push('/dashboard/classroom')
+    if (newMode === 'toolbox') router.push('/dashboard/ki-toolbox')
   }
 
   const handleBack = () => {
@@ -616,6 +745,28 @@ export function Sidebar({ conversations, userEmail, userName, isAdmin, accessTie
           }}
         >
           <AdminSidebar pathname={pathname} onBack={handleBack} />
+        </div>
+
+        <div
+          className="absolute inset-0 overflow-y-auto transition-transform duration-200 ease-in-out"
+          style={{
+            transform: mode === 'classroom' ? 'translateX(0)' : 'translateX(100%)',
+            visibility: mode === 'classroom' ? 'visible' : 'hidden',
+            pointerEvents: mode === 'classroom' ? 'auto' : 'none',
+          }}
+        >
+          <ClassroomSidebar pathname={pathname} onBack={handleBack} />
+        </div>
+
+        <div
+          className="absolute inset-0 overflow-y-auto transition-transform duration-200 ease-in-out"
+          style={{
+            transform: mode === 'toolbox' ? 'translateX(0)' : 'translateX(100%)',
+            visibility: mode === 'toolbox' ? 'visible' : 'hidden',
+            pointerEvents: mode === 'toolbox' ? 'auto' : 'none',
+          }}
+        >
+          <ToolboxSidebar pathname={pathname} onBack={handleBack} />
         </div>
       </div>
 
