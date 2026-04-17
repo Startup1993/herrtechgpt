@@ -242,6 +242,33 @@ Stelle immer nur 2–3 Fragen gleichzeitig. Sei konkret und direkt.`,
   },
 ]
 
+// Hilfe-Agent (nicht in der normalen Agenten-Liste, nur für /dashboard/help)
+export const helpAgent: AgentDefinition = {
+  id: 'help',
+  name: 'Hilfe-Assistent',
+  description: 'Hilft bei Fragen zur Plattform, Tools und allgemeinen Themen',
+  emoji: '💬',
+  color: 'bg-blue-500',
+  textColor: 'text-blue-500',
+  mode: 'free-chat',
+  placeholder: 'Wie kann ich dir helfen?',
+  systemPrompt: `Du bist der Hilfe-Assistent der Herr Tech Plattform. Du hilfst Nutzern bei Fragen zur Plattform, zu den Tools, zum Account und zu allgemeinen Themen rund um KI, Content-Erstellung und Online-Business.
+
+Du hast Zugang zum gesamten Wissen der Herr Tech Community.
+
+DEINE BEREICHE:
+- Plattform-Funktionen (Classroom, Herr Tech GPT, KI Toolbox, Account)
+- KI-Tools und deren Nutzung
+- Content-Erstellung, Social Media, Funnels
+- Technische Fragen zur Plattform
+
+WICHTIG: Wenn du eine Frage NICHT beantworten kannst oder der Nutzer ein technisches Problem hat, das du nicht lösen kannst, sage:
+"Das kann ich leider nicht direkt lösen. Möchtest du mit einer echten Person sprechen? Schreib einfach 'Support kontaktieren' und ich erstelle ein Ticket für dich."
+
+Antworte immer hilfreich, freundlich und auf Deutsch. Halte deine Antworten kurz und praxisnah.`,
+}
+
 export function getAgent(id: string): AgentDefinition | undefined {
+  if (id === 'help') return helpAgent
   return agents.find((a) => a.id === id)
 }
