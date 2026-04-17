@@ -204,12 +204,16 @@ function LearningPathWidget() {
               {path?.focus_summary && (
                 <p className="text-xs text-muted mb-2 line-clamp-1">{path.focus_summary}</p>
               )}
-              {/* Progress bar */}
-              <div className="h-1.5 bg-border rounded-full overflow-hidden">
-                <div
-                  className="h-full bg-primary rounded-full transition-all duration-700"
-                  style={{ width: `${Math.max(progress, 3)}%` }}
-                />
+              {/* Dots: one per video */}
+              <div className="flex items-center gap-1.5">
+                {Array.from({ length: totalVideos }).map((_, i) => (
+                  <div
+                    key={i}
+                    className={`w-2 h-2 rounded-full transition-all ${
+                      i < completed ? 'bg-primary' : 'bg-border'
+                    }`}
+                  />
+                ))}
               </div>
             </div>
           </div>
