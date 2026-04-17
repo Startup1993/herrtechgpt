@@ -2,7 +2,8 @@
 
 import Link from 'next/link'
 import { useState, useEffect } from 'react'
-import { GraduationCap, Bot, Wrench, ArrowRight, Sparkles, Play, Zap } from 'lucide-react'
+import { GraduationCap, Bot, Wrench, ArrowRight, Sparkles, Play, Zap, CheckCircle2, Circle } from 'lucide-react'
+import { createClient } from '@/lib/supabase/client'
 
 // ═══════════════════════════════════════════════════════════
 // DASHBOARD TILE
@@ -78,17 +79,46 @@ function DashboardTile({
 // LEARNING PATH WIDGET
 // ═══════════════════════════════════════════════════════════
 
+interface LearningPath {
+  greeting?: string
+  focus_summary?: string
+  videos?: Array<{ id: string; title: string; why: string }>
+  agents?: Array<{ id: string; why: string }>
+  milestones?: { '30'?: string[]; '60'?: string[]; '90'?: string[] }
+}
+
 function LearningPathWidget() {
-  const [path, setPath] = useState<{ videos?: unknown[]; milestones?: unknown[] } | null>(null)
+  const [path, setPath] = useState<LearningPath | null>(null)
   const [loading, setLoading] = useState(true)
+  const [hasPath, setHasPath] = useState(false)
 
   useEffect(() => {
-    // Fetch learning path from profile
-    fetch('/api/onboarding/path')
-      .then((r) => r.ok ? r.json() : null)
-      .then((data) => setPath(data))
-      .catch(() => null)
-      .finally(() => setLoading(false))
+    const load = async () => {
+      try {
+        const supabase = createClient()
+        const { data: { user } } = await supabase.auth.getUser()
+        if (!user) { setLoading(false); return }
+
+        const { data: profile } = await supabase
+          .from('profiles')
+          .select('learning_path, learning_path_generated_at')
+          .eq('id', user.id)
+          .single()
+
+        if (profile?.learning_path) {
+          const lp = profile.learning_path as LearningPath
+          if (lp.videos && lp.videos.length > 0) {
+            setPath(lp)
+            setHasPath(true)
+          }
+        }
+      } catch {
+        // silent
+      } finally {
+        setLoading(false)
+      }
+    }
+    load()
   }, [])
 
   if (loading) {
@@ -100,38 +130,61 @@ function LearningPathWidget() {
     )
   }
 
-  if (!path) {
+  // No path yet → show onboarding CTA
+  if (!hasPath) {
     return (
-      <div className="card-static p-6 flex items-center gap-4">
+      <div className="card-static p-6 flex flex-col sm:flex-row items-start sm:items-center gap-4">
         <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center shrink-0">
           <Sparkles size={20} className="text-primary" />
         </div>
         <div className="flex-1">
           <h3 className="text-sm font-semibold text-foreground">Dein persönlicher Lernpfad</h3>
-          <p className="text-sm text-muted">Starte das Onboarding-Quiz und erhalte personalisierte Empfehlungen.</p>
+          <p className="text-sm text-muted">Starte das Onboarding und erhalte personalisierte Empfehlungen.</p>
         </div>
-        <Link
-          href="/dashboard/onboarding"
-          className="btn-primary shrink-0"
-        >
+        <Link href="/dashboard/onboarding" className="btn-primary shrink-0">
           Onboarding beginnen
         </Link>
       </div>
     )
   }
 
+  // Has path → show progress overview
+  const totalVideos = path?.videos?.length ?? 0
+
   return (
-    <Link href="/dashboard/path" className="card-static p-6 flex items-center gap-4 hover:bg-surface-hover transition-colors group">
-      <div className="w-10 h-10 rounded-full bg-success/10 flex items-center justify-center shrink-0">
-        <Play size={18} className="text-success" />
+    <Link href="/dashboard/path" className="card-static p-5 hover:border-primary/30 transition-all group block">
+      <div className="flex items-center justify-between mb-3">
+        <div className="flex items-center gap-3">
+          <div className="w-9 h-9 rounded-full bg-primary/10 flex items-center justify-center shrink-0">
+            <Play size={16} className="text-primary" />
+          </div>
+          <div>
+            <h3 className="text-sm font-semibold text-foreground">Dein Lernpfad</h3>
+            <p className="text-xs text-muted">{totalVideos} Videos empfohlen</p>
+          </div>
+        </div>
+        <ArrowRight size={16} className="text-muted group-hover:text-primary group-hover:translate-x-1 transition-all" />
       </div>
-      <div className="flex-1 min-w-0">
-        <h3 className="text-sm font-semibold text-foreground">Dein Lernpfad</h3>
-        <p className="text-sm text-muted truncate">
-          {path.videos ? `${(path.videos as unknown[]).length} Videos empfohlen` : 'Fortschritt anzeigen'}
-        </p>
-      </div>
-      <ArrowRight size={16} className="text-muted group-hover:text-foreground group-hover:translate-x-1 transition-all shrink-0" />
+
+      {/* Progress summary */}
+      {path?.focus_summary && (
+        <p className="text-xs text-muted mb-3 line-clamp-1">{path.focus_summary}</p>
+      )}
+
+      {/* Video mini-list (first 3) */}
+      {path?.videos && path.videos.length > 0 && (
+        <div className="space-y-1.5">
+          {path.videos.slice(0, 3).map((video, i) => (
+            <div key={video.id || i} className="flex items-center gap-2">
+              <Circle size={12} className="text-border shrink-0" />
+              <span className="text-xs text-foreground truncate">{video.title}</span>
+            </div>
+          ))}
+          {path.videos.length > 3 && (
+            <p className="text-xs text-muted pl-5">+ {path.videos.length - 3} weitere Videos</p>
+          )}
+        </div>
+      )}
     </Link>
   )
 }
