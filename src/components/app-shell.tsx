@@ -10,10 +10,11 @@ interface AppShellProps {
   userEmail?: string
   userName?: string
   isAdmin?: boolean
+  accessTier?: 'basic' | 'premium'
   children: React.ReactNode
 }
 
-export function AppShell({ conversations, userEmail, userName, isAdmin, children }: AppShellProps) {
+export function AppShell({ conversations, userEmail, userName, isAdmin, accessTier, children }: AppShellProps) {
   const [sidebarOpen, setSidebarOpen] = useState(false)       // mobile overlay
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false) // desktop collapse
   const pathname = usePathname()
@@ -47,6 +48,7 @@ export function AppShell({ conversations, userEmail, userName, isAdmin, children
           userEmail={userEmail}
           userName={userName}
           isAdmin={isAdmin}
+          accessTier={accessTier}
         />
       </div>
 

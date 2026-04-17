@@ -1,244 +1,217 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
+import Link from 'next/link'
+import { useState, useEffect } from 'react'
+import { GraduationCap, Bot, Wrench, ArrowRight, Sparkles, Play, Zap } from 'lucide-react'
 
-interface VideoItem {
-  id: string
-  hashedId: string
+// ═══════════════════════════════════════════════════════════
+// DASHBOARD TILE
+// ═══════════════════════════════════════════════════════════
+
+function DashboardTile({
+  href,
+  icon: Icon,
+  iconBg,
+  title,
+  subtitle,
+  description,
+  features,
+  ctaLabel,
+  locked,
+}: {
+  href: string
+  icon: React.ElementType
+  iconBg: string
   title: string
-  duration: number | null
-  categories: string[]
+  subtitle: string
+  description: string
+  features: string[]
+  ctaLabel: string
+  locked?: boolean
+}) {
+  return (
+    <Link
+      href={href}
+      className="card group relative flex flex-col p-6 min-h-[280px] overflow-hidden"
+    >
+      {/* Locked overlay */}
+      {locked && (
+        <div className="absolute inset-0 z-10 bg-surface/60 backdrop-blur-[2px] flex items-center justify-center rounded-[var(--radius-2xl)]">
+          <span className="px-4 py-2 bg-primary/15 text-primary text-sm font-semibold rounded-full">
+            Premium
+          </span>
+        </div>
+      )}
+
+      {/* Icon */}
+      <div className={`w-12 h-12 rounded-[var(--radius-xl)] ${iconBg} flex items-center justify-center mb-4`}>
+        <Icon size={24} className="text-white" />
+      </div>
+
+      {/* Title */}
+      <h3 className="text-lg font-semibold text-foreground mb-1">{title}</h3>
+      <p className="text-sm text-muted mb-4">{subtitle}</p>
+
+      {/* Description */}
+      <p className="text-sm text-foreground/80 mb-4 leading-relaxed">{description}</p>
+
+      {/* Features */}
+      <ul className="space-y-1.5 mb-6 flex-1">
+        {features.map((f) => (
+          <li key={f} className="flex items-center gap-2 text-sm text-muted">
+            <span className="w-1 h-1 rounded-full bg-primary shrink-0" />
+            {f}
+          </li>
+        ))}
+      </ul>
+
+      {/* CTA */}
+      <div className="flex items-center gap-2 text-sm font-medium text-primary group-hover:gap-3 transition-all">
+        {ctaLabel}
+        <ArrowRight size={16} className="transition-transform group-hover:translate-x-1" />
+      </div>
+    </Link>
+  )
 }
 
-interface Category {
-  id: string
-  label: string
-  emoji: string
-  videos: VideoItem[]
-}
+// ═══════════════════════════════════════════════════════════
+// LEARNING PATH WIDGET
+// ═══════════════════════════════════════════════════════════
 
-export default function DashboardPage() {
-  const [categories, setCategories] = useState<Category[]>([])
+function LearningPathWidget() {
+  const [path, setPath] = useState<{ videos?: unknown[]; milestones?: unknown[] } | null>(null)
   const [loading, setLoading] = useState(true)
-  const [search, setSearch] = useState('')
-  const [activeFilter, setActiveFilter] = useState<string | null>(null)
-  const [playingVideo, setPlayingVideo] = useState<string | null>(null)
-  const [total, setTotal] = useState(0)
 
-  const load = useCallback(async () => {
-    try {
-      const res = await fetch('/api/videos')
-      const data = await res.json()
-      setCategories(data.categories ?? [])
-      setTotal(data.total ?? 0)
-    } catch {
-      // silent
-    } finally {
-      setLoading(false)
-    }
+  useEffect(() => {
+    // Fetch learning path from profile
+    fetch('/api/onboarding/path')
+      .then((r) => r.ok ? r.json() : null)
+      .then((data) => setPath(data))
+      .catch(() => null)
+      .finally(() => setLoading(false))
   }, [])
 
-  useEffect(() => { load() }, [load])
+  if (loading) {
+    return (
+      <div className="card-static p-6 animate-pulse">
+        <div className="h-4 bg-surface-secondary rounded w-48 mb-3" />
+        <div className="h-2 bg-surface-secondary rounded w-full" />
+      </div>
+    )
+  }
 
-  // Suche + Filter
-  const filteredCategories = categories
-    .filter((cat) => !activeFilter || cat.id === activeFilter)
-    .map((cat) => ({
-      ...cat,
-      videos: cat.videos.filter((v) =>
-        v.title.toLowerCase().includes(search.toLowerCase()),
-      ),
-    }))
-    .filter((cat) => cat.videos.length > 0)
-
-  const filteredTotal = filteredCategories.reduce((n, c) => n + c.videos.length, 0)
+  if (!path) {
+    return (
+      <div className="card-static p-6 flex items-center gap-4">
+        <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center shrink-0">
+          <Sparkles size={20} className="text-primary" />
+        </div>
+        <div className="flex-1">
+          <h3 className="text-sm font-semibold text-foreground">Dein persönlicher Lernpfad</h3>
+          <p className="text-sm text-muted">Starte das Onboarding-Quiz und erhalte personalisierte Empfehlungen.</p>
+        </div>
+        <Link
+          href="/dashboard/onboarding"
+          className="btn-primary shrink-0"
+        >
+          Quiz starten
+        </Link>
+      </div>
+    )
+  }
 
   return (
-    <div className="max-w-6xl mx-auto px-6 py-8">
+    <Link href="/dashboard/path" className="card-static p-6 flex items-center gap-4 hover:bg-surface-hover transition-colors group">
+      <div className="w-10 h-10 rounded-full bg-success/10 flex items-center justify-center shrink-0">
+        <Play size={18} className="text-success" />
+      </div>
+      <div className="flex-1 min-w-0">
+        <h3 className="text-sm font-semibold text-foreground">Dein Lernpfad</h3>
+        <p className="text-sm text-muted truncate">
+          {path.videos ? `${(path.videos as unknown[]).length} Videos empfohlen` : 'Fortschritt anzeigen'}
+        </p>
+      </div>
+      <ArrowRight size={16} className="text-muted group-hover:text-foreground group-hover:translate-x-1 transition-all shrink-0" />
+    </Link>
+  )
+}
+
+// ═══════════════════════════════════════════════════════════
+// MAIN DASHBOARD PAGE
+// ═══════════════════════════════════════════════════════════
+
+export default function DashboardPage() {
+  return (
+    <div className="max-w-5xl mx-auto px-4 sm:px-6 py-6 sm:py-10">
       {/* Header */}
       <div className="mb-8">
-        <h1 className="text-2xl font-bold text-foreground mb-1">Lernvideos</h1>
-        <p className="text-sm text-muted">
-          {total} Videos aus der Community — jederzeit anschauen, immer aktuell.
+        <div className="flex items-center gap-3 mb-2">
+          <h1 className="text-2xl sm:text-3xl font-bold text-foreground">
+            Willkommen bei Herr Tech
+          </h1>
+          <Zap size={24} className="text-primary" />
+        </div>
+        <p className="text-muted text-sm sm:text-base">
+          Deine All-in-One KI-Plattform für Content, Business & Wachstum.
         </p>
       </div>
 
-      {/* Search + Filter */}
-      <div className="flex flex-col sm:flex-row gap-3 mb-6">
-        <div className="relative flex-1">
-          <svg className="absolute left-3 top-1/2 -translate-y-1/2 text-muted" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-            <circle cx="11" cy="11" r="8" /><path d="m21 21-4.35-4.35" />
-          </svg>
-          <input
-            type="text"
-            placeholder="Video suchen…"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            className="w-full pl-10 pr-4 py-2.5 text-sm border border-border rounded-xl bg-surface focus:outline-none focus:ring-2 focus:ring-primary/30 placeholder:text-muted"
-          />
-        </div>
-        <div className="flex flex-wrap gap-1.5">
-          <FilterChip
-            label="Alle"
-            active={!activeFilter}
-            onClick={() => setActiveFilter(null)}
-          />
-          {categories.map((cat) => (
-            <FilterChip
-              key={cat.id}
-              label={`${cat.emoji} ${cat.label}`}
-              active={activeFilter === cat.id}
-              onClick={() => setActiveFilter(activeFilter === cat.id ? null : cat.id)}
-            />
-          ))}
-        </div>
+      {/* Learning Path Widget */}
+      <div className="mb-8">
+        <LearningPathWidget />
       </div>
 
-      {/* Loading */}
-      {loading && (
-        <div className="flex items-center justify-center py-20 text-muted text-sm">
-          <div className="flex items-center gap-2">
-            <div className="w-4 h-4 border-2 border-primary/30 border-t-primary rounded-full animate-spin" />
-            Videos werden geladen…
-          </div>
-        </div>
-      )}
+      {/* Main Tiles */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5 mb-10">
+        <DashboardTile
+          href="/dashboard/classroom"
+          icon={GraduationCap}
+          iconBg="bg-gradient-to-br from-amber-500 to-orange-600"
+          title="Classroom"
+          subtitle="Lernvideos & Tutorials"
+          description="Alle Lernvideos zu KI, Content-Erstellung, Funnels und Online-Business."
+          features={['Kategorisierte Videos', 'Suchfunktion', 'Alle Themen abgedeckt']}
+          ctaLabel="Videos ansehen"
+        />
 
-      {/* Empty state */}
-      {!loading && filteredTotal === 0 && (
-        <div className="text-center py-16">
-          <div className="text-4xl mb-4">🔍</div>
-          <p className="text-foreground font-medium mb-1">Keine Videos gefunden</p>
-          <p className="text-sm text-muted">Versuche einen anderen Suchbegriff.</p>
-        </div>
-      )}
+        <DashboardTile
+          href="/dashboard/herr-tech-gpt"
+          icon={Bot}
+          iconBg="bg-gradient-to-br from-[#B598E2] to-[#9b51e0]"
+          title="Herr Tech GPT"
+          subtitle="Dein KI-Assistent"
+          description="6 spezialisierte KI-Agenten mit dem gesamten Wissen aus allen Lernvideos."
+          features={['Content & Hook Agent', 'Business Coach', 'Prompt Engineer']}
+          ctaLabel="Chat starten"
+        />
 
-      {/* Ergebnis-Info bei Suche */}
-      {!loading && search && filteredTotal > 0 && (
-        <p className="text-xs text-muted mb-4">
-          {filteredTotal} Ergebnis{filteredTotal !== 1 ? 'se' : ''} für &ldquo;{search}&rdquo;
+        <DashboardTile
+          href="/dashboard/ki-toolbox"
+          icon={Wrench}
+          iconBg="bg-gradient-to-br from-emerald-500 to-teal-600"
+          title="KI Toolbox"
+          subtitle="KI-Workflows & Tools"
+          description="Praktische KI-Tools: Karussell-Generator, Video-Editor und mehr."
+          features={['Karussell-Generator', 'KI Video Editor', 'KI Video Creator']}
+          ctaLabel="Tools entdecken"
+        />
+      </div>
+
+      {/* Footer */}
+      <div className="card-static p-6 text-center">
+        <p className="text-lg font-semibold text-foreground mb-1">
+          Viel Spaß beim Erstellen! 🚀
         </p>
-      )}
-
-      {/* Kategorien + Videos */}
-      {!loading && filteredCategories.map((cat) => (
-        <section key={cat.id} className="mb-10">
-          <h2 className="text-sm font-semibold text-muted uppercase tracking-wider mb-3 flex items-center gap-2">
-            <span>{cat.emoji}</span> {cat.label}
-            <span className="text-xs font-normal">({cat.videos.length})</span>
-          </h2>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-            {cat.videos.map((video) => (
-              <VideoCard
-                key={`${cat.id}-${video.id}`}
-                video={video}
-                isPlaying={playingVideo === video.hashedId}
-                onPlay={() => setPlayingVideo(playingVideo === video.hashedId ? null : video.hashedId)}
-              />
-            ))}
-          </div>
-        </section>
-      ))}
-
-      {/* Wistia Player Modal */}
-      {playingVideo && (
-        <div
-          className="fixed inset-0 z-50 bg-black/70 flex items-center justify-center p-4"
-          onClick={() => setPlayingVideo(null)}
+        <p className="text-sm text-muted mb-4">
+          Wenn du Fragen oder Probleme hast, wende dich gern an unseren Support.
+        </p>
+        <Link
+          href="/dashboard/help"
+          className="btn-ghost inline-flex items-center gap-2 border border-border"
         >
-          <div
-            className="w-full max-w-4xl bg-black rounded-2xl overflow-hidden shadow-2xl"
-            onClick={(e) => e.stopPropagation()}
-          >
-            {/* Close button */}
-            <div className="flex justify-end p-2 bg-black">
-              <button
-                onClick={() => setPlayingVideo(null)}
-                className="p-2 rounded-lg text-white/60 hover:text-white hover:bg-white/10 transition-colors"
-              >
-                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
-                </svg>
-              </button>
-            </div>
-            {/* Wistia iframe embed */}
-            <div className="relative pb-[56.25%]">
-              <iframe
-                src={`https://fast.wistia.net/embed/iframe/${playingVideo}?autoPlay=true`}
-                allow="autoplay; fullscreen"
-                allowFullScreen
-                className="absolute inset-0 w-full h-full"
-              />
-            </div>
-          </div>
-        </div>
-      )}
-    </div>
-  )
-}
-
-function VideoCard({
-  video,
-  isPlaying,
-  onPlay,
-}: {
-  video: VideoItem
-  isPlaying: boolean
-  onPlay: () => void
-}) {
-  const duration = video.duration
-    ? video.duration >= 60
-      ? `${Math.round(video.duration / 60 * 10) / 10}h`
-      : `${Math.round(video.duration)} Min.`
-    : null
-
-  return (
-    <button
-      onClick={onPlay}
-      className={`group text-left w-full p-4 rounded-xl border transition-all ${
-        isPlaying
-          ? 'border-primary bg-primary/5 shadow-sm'
-          : 'border-border bg-surface hover:border-primary/30 hover:shadow-sm'
-      }`}
-    >
-      <div className="flex items-start gap-3">
-        <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center shrink-0 group-hover:bg-primary/20 transition-colors">
-          <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="currentColor" className="text-primary ml-0.5">
-            <polygon points="5 3 19 12 5 21 5 3" />
-          </svg>
-        </div>
-        <div className="flex-1 min-w-0">
-          <p className="text-sm font-medium text-foreground leading-snug mb-1 line-clamp-2">
-            {video.title}
-          </p>
-          {duration && (
-            <p className="text-xs text-muted">{duration}</p>
-          )}
-        </div>
+          Support kontaktieren
+        </Link>
       </div>
-    </button>
-  )
-}
-
-function FilterChip({
-  label,
-  active,
-  onClick,
-}: {
-  label: string
-  active: boolean
-  onClick: () => void
-}) {
-  return (
-    <button
-      onClick={onClick}
-      className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors whitespace-nowrap ${
-        active
-          ? 'bg-primary text-white'
-          : 'bg-surface border border-border text-muted hover:text-foreground hover:border-primary/30'
-      }`}
-    >
-      {label}
-    </button>
+    </div>
   )
 }

@@ -42,6 +42,33 @@ export async function middleware(request: NextRequest) {
     return NextResponse.redirect(url)
   }
 
+  // ── Alte /assistants Routen → Redirect auf neue /dashboard Routen ──────
+  if (user && pathname.startsWith('/assistants')) {
+    const url = request.nextUrl.clone()
+
+    if (pathname.startsWith('/assistants/onboarding')) {
+      url.pathname = '/dashboard/onboarding'
+    } else if (pathname.startsWith('/assistants/workflows/carousel')) {
+      url.pathname = '/dashboard/ki-toolbox/carousel'
+    } else if (pathname.startsWith('/assistants/workflows/video-editor')) {
+      url.pathname = '/dashboard/ki-toolbox/video-editor'
+    } else if (pathname.startsWith('/assistants/chat')) {
+      url.pathname = '/dashboard/herr-tech-gpt'
+    } else if (pathname.startsWith('/assistants/path')) {
+      url.pathname = '/dashboard/path'
+    } else if (pathname.startsWith('/assistants/library')) {
+      url.pathname = '/dashboard/herr-tech-gpt'
+    } else if (pathname.startsWith('/assistants/profile')) {
+      url.pathname = '/dashboard/account'
+    } else if (pathname.startsWith('/assistants/admin')) {
+      url.pathname = pathname.replace('/assistants/admin', '/admin')
+    } else {
+      url.pathname = '/dashboard'
+    }
+
+    return NextResponse.redirect(url)
+  }
+
   // ── Admin-Routen: nur Admins ───────────────────────────────────────────
   if (user && pathname.startsWith('/admin')) {
     const { data: profile } = await supabase
@@ -56,13 +83,11 @@ export async function middleware(request: NextRequest) {
     }
   }
 
-  // ── /assistants: nur Premium + Admin ───────────────────────────────────
-  if (user && pathname.startsWith('/assistants')) {
-    // Onboarding-Page ist auch für basic erlaubt (damit sie den Quiz machen können)
-    if (pathname.startsWith('/assistants/onboarding')) {
-      return supabaseResponse
-    }
-
+  // ── Premium-Routen: nur Premium + Admin ────────────────────────────────
+  if (user && (
+    pathname.startsWith('/dashboard/herr-tech-gpt') ||
+    pathname.startsWith('/dashboard/ki-toolbox')
+  )) {
     const { data: profile } = await supabase
       .from('profiles')
       .select('role, access_tier')
