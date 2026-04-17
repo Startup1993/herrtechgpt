@@ -88,16 +88,17 @@ export default function AccountPage() {
           </div>
           <button
             onClick={toggleTheme}
-            className={`relative w-12 h-7 rounded-full transition-colors ${
+            className={`relative w-14 h-8 rounded-full transition-colors duration-200 ${
               theme === 'dark' ? 'bg-primary' : 'bg-border'
             }`}
+            aria-label="Dark Mode Toggle"
           >
             <div
-              className={`absolute top-0.5 w-6 h-6 rounded-full bg-white shadow-sm transition-transform ${
-                theme === 'dark' ? 'translate-x-5.5 left-0' : 'left-0.5'
-              }`}
-              style={{ transform: theme === 'dark' ? 'translateX(22px)' : 'translateX(0)' }}
-            />
+              className="absolute top-1 left-1 w-6 h-6 rounded-full bg-white shadow-md flex items-center justify-center transition-transform duration-200"
+              style={{ transform: theme === 'dark' ? 'translateX(24px)' : 'translateX(0)' }}
+            >
+              {theme === 'dark' ? <Moon size={12} className="text-primary" /> : <Sun size={12} className="text-amber-500" />}
+            </div>
           </button>
         </div>
       </section>

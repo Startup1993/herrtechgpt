@@ -267,10 +267,17 @@ function NavItem({
     </>
   )
 
-  if (onClick) {
-    return <button className={baseClass} onClick={onClick}>{content}</button>
+  // If locked with an href (upgrade link), render as Link
+  if (locked && href) {
+    return <Link href={href} className={baseClass}>{content}</Link>
   }
 
+  // If onClick is provided and not locked, render as button
+  if (onClick && !locked) {
+    return <button type="button" className={baseClass} onClick={onClick}>{content}</button>
+  }
+
+  // Default: render as Link
   return (
     <Link href={href ?? '#'} className={baseClass}>
       {content}

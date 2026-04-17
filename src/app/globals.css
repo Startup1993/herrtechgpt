@@ -49,31 +49,31 @@
 /* ═══════════════════════════════════════════════════════════
    DARK MODE
    ═══════════════════════════════════════════════════════════ */
-html.dark {
-  --color-background: #0F0F13;
-  --color-foreground: #E8E4E0;
-  --color-primary: #B598E2;
-  --color-primary-hover: #C9B2F0;
-  --color-primary-light: #B598E225;
-  --color-primary-glow: #B598E215;
-  --color-surface: #1A1A23;
-  --color-surface-secondary: #16161E;
-  --color-surface-hover: #22222D;
-  --color-border: #2A2A35;
-  --color-border-light: #222230;
-  --color-muted: #8A8A9A;
-  --color-muted-light: #5A5A6A;
-  --color-card-hover: #1E1E28;
-  --color-glass: #1A1A2380;
-  --color-success: #34D399;
-  --color-warning: #FBBF24;
-  --color-danger: #F87171;
-  --color-info: #60A5FA;
+html.dark, .dark {
+  --color-background: #0F0F13 !important;
+  --color-foreground: #E8E4E0 !important;
+  --color-primary: #B598E2 !important;
+  --color-primary-hover: #C9B2F0 !important;
+  --color-primary-light: #B598E225 !important;
+  --color-primary-glow: #B598E215 !important;
+  --color-surface: #1A1A23 !important;
+  --color-surface-secondary: #16161E !important;
+  --color-surface-hover: #22222D !important;
+  --color-border: #2A2A35 !important;
+  --color-border-light: #222230 !important;
+  --color-muted: #8A8A9A !important;
+  --color-muted-light: #5A5A6A !important;
+  --color-card-hover: #1E1E28 !important;
+  --color-glass: #1A1A2380 !important;
+  --color-success: #34D399 !important;
+  --color-warning: #FBBF24 !important;
+  --color-danger: #F87171 !important;
+  --color-info: #60A5FA !important;
 
-  --shadow-card: 0 1px 3px rgba(0,0,0,0.3), 0 1px 2px rgba(0,0,0,0.2);
-  --shadow-card-hover: 0 10px 25px rgba(0,0,0,0.4), 0 4px 10px rgba(0,0,0,0.2);
-  --shadow-sidebar: 2px 0 8px rgba(0,0,0,0.3);
-  --shadow-dropdown: 0 10px 40px rgba(0,0,0,0.5);
+  --shadow-card: 0 1px 3px rgba(0,0,0,0.3), 0 1px 2px rgba(0,0,0,0.2) !important;
+  --shadow-card-hover: 0 10px 25px rgba(0,0,0,0.4), 0 4px 10px rgba(0,0,0,0.2) !important;
+  --shadow-sidebar: 2px 0 8px rgba(0,0,0,0.3) !important;
+  --shadow-dropdown: 0 10px 40px rgba(0,0,0,0.5) !important;
 }
 
 /* ═══════════════════════════════════════════════════════════
