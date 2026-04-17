@@ -23,7 +23,7 @@ function CopyableCodeBlock({ children }: { children: React.ReactNode }) {
 
   return (
     <div className="relative group/code my-2">
-      <pre className="bg-black/5 border border-black/8 rounded-lg p-3 pr-10 overflow-x-auto whitespace-pre-wrap break-words font-mono text-xs leading-relaxed text-foreground">
+      <pre className="bg-surface-secondary border border-border rounded-lg p-3 pr-10 overflow-x-auto whitespace-pre-wrap break-words font-mono text-xs leading-relaxed text-foreground">
         {children}
       </pre>
       <button
@@ -31,8 +31,8 @@ function CopyableCodeBlock({ children }: { children: React.ReactNode }) {
         title={copied ? 'Kopiert!' : 'Kopieren'}
         className={`absolute top-2 right-2 p-1.5 rounded-md border transition-all text-xs ${
           copied
-            ? 'bg-green-50 border-green-200 text-green-600'
-            : 'bg-white border-black/10 text-black/50 hover:text-black/70 hover:bg-white'
+            ? 'bg-green-50 border-green-200 text-green-600 dark:bg-green-950/30'
+            : 'bg-surface border-border text-muted hover:text-foreground hover:bg-surface-hover'
         }`}
       >
         {copied ? (
@@ -111,9 +111,9 @@ export function ChatMessage({ role, content, agentId, agentName }: ChatMessagePr
                 const isBlock = String(children).includes('\n')
                 return isBlock
                   ? <code className="font-mono text-xs">{children}</code>
-                  : <code className="bg-black/7 rounded px-1.5 py-0.5 font-mono text-xs">{children}</code>
+                  : <code className="bg-surface-secondary rounded px-1.5 py-0.5 font-mono text-xs">{children}</code>
               },
-              hr: () => <hr className="border-black/10 my-4" />,
+              hr: () => <hr className="border-border my-4" />,
             }}
           >
             {content}
@@ -127,8 +127,8 @@ export function ChatMessage({ role, content, agentId, agentName }: ChatMessagePr
           title={saved ? 'Gespeichert!' : 'In Bibliothek speichern'}
           className={`mt-1 opacity-0 group-hover:opacity-100 transition-all p-1.5 rounded-full border shadow-sm text-xs ${
             saved
-              ? 'bg-green-50 border-green-200 text-green-600 opacity-100'
-              : 'bg-white border-border text-muted hover:text-primary hover:border-primary/30'
+              ? 'bg-green-50 dark:bg-green-950/30 border-green-200 dark:border-green-800 text-green-600 opacity-100'
+              : 'bg-surface border-border text-muted hover:text-primary hover:border-primary/30'
           }`}
         >
           {saved ? (
