@@ -148,43 +148,91 @@ function LearningPathWidget() {
     )
   }
 
-  // Has path → show progress overview
+  // Has path → show progress widget
   const totalVideos = path?.videos?.length ?? 0
+  // TODO: Track actual completion in DB. For now estimate from localStorage or default to 0
+  const [completed, setCompleted] = useState(0)
+  useEffect(() => {
+    try {
+      const stored = localStorage.getItem('herr_tech_path_progress')
+      if (stored) setCompleted(parseInt(stored, 10))
+    } catch {}
+  }, [])
+  const progress = totalVideos > 0 ? Math.round((completed / totalVideos) * 100) : 0
+  const nextVideo = path?.videos?.[completed] ?? path?.videos?.[0]
+
+  // SVG progress ring values
+  const ringSize = 56
+  const strokeWidth = 4
+  const radius = (ringSize - strokeWidth) / 2
+  const circumference = 2 * Math.PI * radius
+  const strokeDashoffset = circumference - (progress / 100) * circumference
 
   return (
-    <Link href="/dashboard/path" className="card-static p-5 hover:border-primary/30 transition-all group block">
-      <div className="flex items-center justify-between mb-3">
-        <div className="flex items-center gap-3">
-          <div className="w-9 h-9 rounded-full bg-primary/10 flex items-center justify-center shrink-0">
-            <Play size={16} className="text-primary" />
-          </div>
-          <div>
-            <h3 className="text-sm font-semibold text-foreground">Dein Lernpfad</h3>
-            <p className="text-xs text-muted">{totalVideos} Videos empfohlen</p>
-          </div>
-        </div>
-        <ArrowRight size={16} className="text-muted group-hover:text-primary group-hover:translate-x-1 transition-all" />
-      </div>
-
-      {/* Progress summary */}
-      {path?.focus_summary && (
-        <p className="text-xs text-muted mb-3 line-clamp-1">{path.focus_summary}</p>
-      )}
-
-      {/* Video mini-list (first 3) */}
-      {path?.videos && path.videos.length > 0 && (
-        <div className="space-y-1.5">
-          {path.videos.slice(0, 3).map((video, i) => (
-            <div key={video.id || i} className="flex items-center gap-2">
-              <Circle size={12} className="text-border shrink-0" />
-              <span className="text-xs text-foreground truncate">{video.title}</span>
+    <Link href="/dashboard/path" className="group block">
+      <div className="card-static overflow-hidden hover:border-primary/30 transition-all">
+        <div className="flex flex-col sm:flex-row">
+          {/* Left: Progress Ring + Stats */}
+          <div className="flex items-center gap-5 p-5 sm:p-6 flex-1 min-w-0">
+            {/* Progress Ring */}
+            <div className="relative shrink-0">
+              <svg width={ringSize} height={ringSize} className="-rotate-90">
+                <circle
+                  cx={ringSize / 2} cy={ringSize / 2} r={radius}
+                  fill="none" stroke="var(--color-border)" strokeWidth={strokeWidth}
+                />
+                <circle
+                  cx={ringSize / 2} cy={ringSize / 2} r={radius}
+                  fill="none" stroke="var(--color-primary)" strokeWidth={strokeWidth}
+                  strokeLinecap="round"
+                  strokeDasharray={circumference}
+                  strokeDashoffset={strokeDashoffset}
+                  className="transition-all duration-700"
+                />
+              </svg>
+              <div className="absolute inset-0 flex items-center justify-center">
+                <span className="text-sm font-bold text-foreground">{progress}%</span>
+              </div>
             </div>
-          ))}
-          {path.videos.length > 3 && (
-            <p className="text-xs text-muted pl-5">+ {path.videos.length - 3} weitere Videos</p>
+
+            {/* Info */}
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center gap-2 mb-1">
+                <h3 className="text-base font-semibold text-foreground">Dein Lernpfad</h3>
+                <span className="text-xs px-2 py-0.5 rounded-full bg-primary/10 text-primary font-medium">
+                  {completed}/{totalVideos} Videos
+                </span>
+              </div>
+              {path?.focus_summary && (
+                <p className="text-xs text-muted mb-2 line-clamp-1">{path.focus_summary}</p>
+              )}
+              {/* Progress bar */}
+              <div className="h-1.5 bg-border rounded-full overflow-hidden">
+                <div
+                  className="h-full bg-primary rounded-full transition-all duration-700"
+                  style={{ width: `${Math.max(progress, 3)}%` }}
+                />
+              </div>
+            </div>
+          </div>
+
+          {/* Right: Next Video CTA */}
+          {nextVideo && (
+            <div className="flex items-center gap-3 px-5 sm:px-6 pb-5 sm:pb-0 sm:border-l border-border sm:min-w-[260px]">
+              <div className="w-9 h-9 rounded-[var(--radius-lg)] bg-primary/10 flex items-center justify-center shrink-0">
+                <Play size={16} className="text-primary" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="text-[10px] uppercase tracking-wider text-muted font-semibold mb-0.5">
+                  {completed > 0 ? 'Weiter mit' : 'Starte mit'}
+                </p>
+                <p className="text-sm font-medium text-foreground truncate">{nextVideo.title}</p>
+              </div>
+              <ArrowRight size={16} className="text-muted group-hover:text-primary group-hover:translate-x-1 transition-all shrink-0" />
+            </div>
           )}
         </div>
-      )}
+      </div>
     </Link>
   )
 }
