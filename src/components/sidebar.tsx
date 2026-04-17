@@ -380,10 +380,14 @@ function ChatSidebar({
   conversations,
   pathname,
   onBack,
+  isAdmin,
+  onDrillDown,
 }: {
   conversations: Conversation[]
   pathname: string
   onBack: () => void
+  isAdmin?: boolean
+  onDrillDown: (mode: SidebarMode) => void
 }) {
   return (
     <div className="flex-1 overflow-y-auto flex flex-col">
@@ -441,6 +445,18 @@ function ChatSidebar({
               />
             ))}
           </div>
+        </div>
+      )}
+
+      {/* Admin Quick-Link */}
+      {isAdmin && (
+        <div className="px-3 py-2 border-t border-border mt-auto">
+          <NavItem
+            icon={Shield}
+            label="Admin-Bereich"
+            isActive={false}
+            onClick={() => onDrillDown('admin')}
+          />
         </div>
       )}
     </div>
@@ -556,9 +572,13 @@ const VIDEO_CATEGORIES = [
 function ClassroomSidebar({
   pathname,
   onBack,
+  isAdmin,
+  onDrillDown,
 }: {
   pathname: string
   onBack: () => void
+  isAdmin?: boolean
+  onDrillDown: (mode: SidebarMode) => void
 }) {
   return (
     <div className="flex-1 overflow-y-auto">
@@ -593,6 +613,16 @@ function ClassroomSidebar({
             />
           ))}
         </div>
+
+        {/* Admin Quick-Link */}
+        {isAdmin && (
+          <>
+            <SectionHeader label="Admin" />
+            <div className="space-y-1">
+              <NavItem icon={Shield} label="Admin-Bereich" isActive={false} onClick={() => onDrillDown('admin')} />
+            </div>
+          </>
+        )}
       </nav>
     </div>
   )
@@ -605,9 +635,13 @@ function ClassroomSidebar({
 function ToolboxSidebar({
   pathname,
   onBack,
+  isAdmin,
+  onDrillDown,
 }: {
   pathname: string
   onBack: () => void
+  isAdmin?: boolean
+  onDrillDown: (mode: SidebarMode) => void
 }) {
   return (
     <div className="flex-1 overflow-y-auto">
@@ -654,6 +688,16 @@ function ToolboxSidebar({
             isActive={pathname === '/dashboard/ki-toolbox'}
           />
         </div>
+
+        {/* Admin Quick-Link */}
+        {isAdmin && (
+          <>
+            <SectionHeader label="Admin" />
+            <div className="space-y-1">
+              <NavItem icon={Shield} label="Admin-Bereich" isActive={false} onClick={() => onDrillDown('admin')} />
+            </div>
+          </>
+        )}
       </nav>
     </div>
   )
@@ -740,6 +784,8 @@ export function Sidebar({ conversations, userEmail, userName, isAdmin, accessTie
             conversations={conversations}
             pathname={pathname}
             onBack={handleBack}
+            isAdmin={isAdmin}
+            onDrillDown={handleDrillDown}
           />
         </div>
 
@@ -762,7 +808,7 @@ export function Sidebar({ conversations, userEmail, userName, isAdmin, accessTie
             pointerEvents: mode === 'classroom' ? 'auto' : 'none',
           }}
         >
-          <ClassroomSidebar pathname={pathname} onBack={handleBack} />
+          <ClassroomSidebar pathname={pathname} onBack={handleBack} isAdmin={isAdmin} onDrillDown={handleDrillDown} />
         </div>
 
         <div
@@ -773,7 +819,7 @@ export function Sidebar({ conversations, userEmail, userName, isAdmin, accessTie
             pointerEvents: mode === 'toolbox' ? 'auto' : 'none',
           }}
         >
-          <ToolboxSidebar pathname={pathname} onBack={handleBack} />
+          <ToolboxSidebar pathname={pathname} onBack={handleBack} isAdmin={isAdmin} onDrillDown={handleDrillDown} />
         </div>
       </div>
 
