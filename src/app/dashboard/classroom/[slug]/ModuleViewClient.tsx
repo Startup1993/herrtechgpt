@@ -4,7 +4,7 @@ import { useState, useMemo } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import ReactMarkdown from 'react-markdown'
-import { ChevronLeft, Play, CheckCircle2, Circle, BookOpen, ChevronDown } from 'lucide-react'
+import { ChevronLeft, Play, CheckCircle2, Circle, BookOpen, ChevronDown, FileText, Link as LinkIcon, Image as ImageIcon, Film } from 'lucide-react'
 
 interface CourseModule {
   id: string
@@ -31,6 +31,15 @@ interface Chapter {
   sort_order: number
 }
 
+interface VideoResource {
+  id: string
+  video_id: string
+  title: string
+  url: string
+  resource_type: string
+  sort_order: number
+}
+
 interface Group {
   kind: 'chapter' | 'direct'
   chapter?: Chapter
@@ -41,11 +50,13 @@ export function ModuleViewClient({
   module,
   videos,
   chapters,
+  resources,
   activeVideoId,
 }: {
   module: CourseModule
   videos: ModuleVideo[]
   chapters: Chapter[]
+  resources: VideoResource[]
   activeVideoId: string | null
 }) {
   const router = useRouter()
@@ -54,6 +65,10 @@ export function ModuleViewClient({
 
   const activeVideo = videos.find(v => v.id === activeId) ?? videos[0]
   const activeIndex = videos.findIndex(v => v.id === activeVideo?.id)
+  const activeResources = useMemo(
+    () => resources.filter(r => r.video_id === activeVideo?.id),
+    [resources, activeVideo?.id],
+  )
 
   // Group videos: direct-first, then by chapter
   const groups = useMemo<Group[]>(() => {
@@ -272,6 +287,39 @@ export function ModuleViewClient({
               </div>
             ) : (
               <p className="text-sm text-muted italic">Keine Beschreibung verfügbar.</p>
+            )}
+
+            {activeResources.length > 0 && (
+              <div className="mt-8 pt-6 border-t border-border">
+                <h3 className="text-sm font-semibold text-foreground mb-3">Resources</h3>
+                <div className="space-y-2">
+                  {activeResources.map(r => (
+                    <a
+                      key={r.id}
+                      href={r.url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="flex items-center gap-3 px-3 py-2.5 border border-border rounded-[var(--radius-md)] hover:bg-surface-hover transition-colors group"
+                    >
+                      <span className={`shrink-0 w-9 h-9 rounded-[var(--radius-sm)] flex items-center justify-center ${
+                        r.resource_type === 'pdf' ? 'bg-red-500/15 text-red-500' :
+                        r.resource_type === 'image' ? 'bg-primary/15 text-primary' :
+                        r.resource_type === 'video' ? 'bg-blue-500/15 text-blue-500' :
+                        'bg-surface-secondary text-muted'
+                      }`}>
+                        {r.resource_type === 'pdf' ? <FileText size={16} /> :
+                         r.resource_type === 'image' ? <ImageIcon size={16} /> :
+                         r.resource_type === 'video' ? <Film size={16} /> :
+                         <LinkIcon size={16} />}
+                      </span>
+                      <span className="flex-1 min-w-0">
+                        <span className="block text-sm font-medium text-foreground group-hover:text-primary truncate">{r.title}</span>
+                        <span className="block text-xs text-muted truncate">{r.url}</span>
+                      </span>
+                    </a>
+                  ))}
+                </div>
+              </div>
             )}
 
             <div className="flex items-center justify-between mt-8 pt-6 border-t border-border">

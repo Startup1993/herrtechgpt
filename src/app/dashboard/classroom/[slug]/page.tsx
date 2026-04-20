@@ -39,6 +39,16 @@ export default async function ModuleViewPage({
       .order('sort_order', { ascending: true }),
   ])
 
+  // Fetch resources for all videos in this module (one query)
+  const videoIds = (videos ?? []).map(v => v.id)
+  const { data: resources } = videoIds.length > 0
+    ? await supabase
+        .from('module_video_resources')
+        .select('*')
+        .in('video_id', videoIds)
+        .order('sort_order', { ascending: true })
+    : { data: [] }
+
   // Determine active video
   const activeVideo = videoId
     ? videos?.find(v => v.id === videoId)
@@ -49,6 +59,7 @@ export default async function ModuleViewPage({
       module={courseModule}
       videos={videos ?? []}
       chapters={chapters ?? []}
+      resources={resources ?? []}
       activeVideoId={activeVideo?.id ?? null}
     />
   )
