@@ -1,9 +1,9 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { ChevronLeft, Plus, Edit, Trash2, Eye, EyeOff, Search, Loader2, X, Video as VideoIcon, Save } from 'lucide-react'
+import { ChevronLeft, Plus, Edit, Trash2, Eye, EyeOff, Search, Loader2, X, Video as VideoIcon, Save, Image as ImageIcon, Upload } from 'lucide-react'
 
 interface Module {
   id: string
@@ -338,6 +338,57 @@ function EditVideoModal({
   const [sortOrder, setSortOrder] = useState(video.sort_order)
   const [moduleId, setModuleId] = useState(video.module_id)
   const [isPublished, setIsPublished] = useState(video.is_published)
+  const [wistiaId, setWistiaId] = useState(video.wistia_hashed_id)
+  const [uploading, setUploading] = useState(false)
+  const fileInputRef = useRef<HTMLInputElement>(null)
+  const textareaRef = useRef<HTMLTextAreaElement>(null)
+
+  const handleFileUpload = async (file: File) => {
+    setUploading(true)
+    try {
+      const formData = new FormData()
+      formData.append('file', file)
+      const res = await fetch('/api/admin/upload-image', { method: 'POST', body: formData })
+      const data = await res.json()
+      if (!res.ok) {
+        alert(data.error || 'Upload fehlgeschlagen')
+        return
+      }
+      // Insert markdown at cursor position
+      const textarea = textareaRef.current
+      if (textarea) {
+        const start = textarea.selectionStart
+        const end = textarea.selectionEnd
+        const newDesc = description.substring(0, start) + '\n\n' + data.markdown + '\n\n' + description.substring(end)
+        setDescription(newDesc)
+        setTimeout(() => {
+          textarea.focus()
+          const cursorPos = start + data.markdown.length + 4
+          textarea.setSelectionRange(cursorPos, cursorPos)
+        }, 0)
+      } else {
+        setDescription(description + '\n\n' + data.markdown)
+      }
+    } catch (e) {
+      alert('Upload-Fehler: ' + String(e))
+    } finally {
+      setUploading(false)
+    }
+  }
+
+  const handlePaste = async (e: React.ClipboardEvent) => {
+    const items = e.clipboardData?.items
+    if (!items) return
+    for (let i = 0; i < items.length; i++) {
+      const item = items[i]
+      if (item.type.startsWith('image/')) {
+        e.preventDefault()
+        const file = item.getAsFile()
+        if (file) await handleFileUpload(file)
+        return
+      }
+    }
+  }
 
   return (
     <div className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-4" onClick={onClose}>
@@ -356,16 +407,44 @@ function EditVideoModal({
           </div>
 
           <div>
-            <label className="block text-xs font-medium text-muted mb-1.5">
-              Beschreibung (Markdown)
-            </label>
+            <div className="flex items-center justify-between mb-1.5">
+              <label className="block text-xs font-medium text-muted">
+                Beschreibung (Markdown)
+              </label>
+              <div className="flex items-center gap-2">
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept="image/*"
+                  className="hidden"
+                  onChange={(e) => {
+                    const file = e.target.files?.[0]
+                    if (file) handleFileUpload(file)
+                    e.target.value = ''
+                  }}
+                />
+                <button
+                  type="button"
+                  onClick={() => fileInputRef.current?.click()}
+                  disabled={uploading}
+                  className="text-xs inline-flex items-center gap-1 text-primary hover:text-primary-hover disabled:opacity-50"
+                >
+                  {uploading ? <><Loader2 size={12} className="animate-spin" /> Lade hoch...</> : <><ImageIcon size={12} /> Bild einfügen</>}
+                </button>
+              </div>
+            </div>
             <textarea
+              ref={textareaRef}
               value={description}
               onChange={(e) => setDescription(e.target.value)}
+              onPaste={handlePaste}
               rows={10}
-              placeholder="Hier kann eine ausführliche Beschreibung mit Markdown stehen..."
+              placeholder="Hier kann eine ausführliche Beschreibung mit Markdown stehen. Bilder kannst du mit dem Button oben oder per Paste (Cmd+V) einfügen."
               className="w-full px-3 py-2 border border-border rounded-[var(--radius-md)] bg-background text-sm font-mono resize-none focus:outline-none focus:ring-2 focus:ring-primary/30"
             />
+            <p className="text-xs text-muted mt-1">
+              Tipp: **fett**, *kursiv*, [Link](url), `![alt](bild-url)`, # Überschrift, - Liste
+            </p>
           </div>
 
           <div className="flex gap-3">
@@ -393,13 +472,26 @@ function EditVideoModal({
           </div>
 
           <div>
-            <label className="block text-xs font-medium text-muted mb-1.5">Wistia ID</label>
+            <label className="block text-xs font-medium text-muted mb-1.5">
+              Wistia Video-ID oder URL
+            </label>
             <input
               type="text"
-              value={video.wistia_hashed_id}
-              disabled
-              className="w-full px-3 py-2 border border-border rounded-[var(--radius-md)] bg-surface-secondary text-sm font-mono text-muted"
+              value={wistiaId}
+              onChange={(e) => {
+                const val = e.target.value.trim()
+                // Auto-extract hashed_id from Wistia URLs
+                const match = val.match(/wistia\.(?:com|net)\/(?:medias|embed\/iframe|embed\/channel\/\w+\/iframe)\/([a-z0-9]{10})/i)
+                setWistiaId(match ? match[1] : val)
+              }}
+              placeholder="abc123xyz0 oder https://wistia.com/medias/abc123xyz0"
+              className="w-full px-3 py-2 border border-border rounded-[var(--radius-md)] bg-background text-sm font-mono focus:outline-none focus:ring-2 focus:ring-primary/30"
             />
+            <p className="text-xs text-muted mt-1">
+              {/^[a-z0-9]{10}$/i.test(wistiaId) ? '✓ Gültige Wistia-ID' :
+               wistiaId === 'MISSING___' || !wistiaId ? '⚠ Kein Video — Lektion zeigt nur Beschreibung' :
+               '⚠ Keine gültige 10-stellige Wistia-ID'}
+            </p>
           </div>
 
           <button
@@ -423,6 +515,7 @@ function EditVideoModal({
                 sort_order: sortOrder,
                 module_id: moduleId,
                 is_published: isPublished,
+                wistia_hashed_id: wistiaId || 'MISSING___',
               })}
               disabled={saving || !title.trim()}
               className="btn-primary flex-1 justify-center disabled:opacity-50"
