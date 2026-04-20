@@ -7,29 +7,36 @@ interface VideoItem {
   hashedId: string
   title: string
   duration: number | null
-  categories: string[]
+  thumbnail: string | null
+  date: string | null
 }
 
-interface Category {
-  id: string
-  label: string
-  emoji: string
+interface Folder {
+  id: number
+  name: string
   videos: VideoItem[]
 }
 
+function formatDate(iso: string | null) {
+  if (!iso) return null
+  const d = new Date(iso)
+  return d.toLocaleDateString('de-DE', { day: '2-digit', month: 'short', year: 'numeric' })
+}
+
 export default function DashboardPage() {
-  const [categories, setCategories] = useState<Category[]>([])
+  const [folders, setFolders] = useState<Folder[]>([])
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
-  const [activeFilter, setActiveFilter] = useState<string | null>(null)
+  const [activeFolder, setActiveFolder] = useState<number | null>(null)
   const [playingVideo, setPlayingVideo] = useState<string | null>(null)
   const [total, setTotal] = useState(0)
+  const [collapsedFolders, setCollapsedFolders] = useState<Set<number>>(new Set())
 
   const load = useCallback(async () => {
     try {
       const res = await fetch('/api/videos')
       const data = await res.json()
-      setCategories(data.categories ?? [])
+      setFolders(data.folders ?? [])
       setTotal(data.total ?? 0)
     } catch {
       // silent
@@ -40,18 +47,27 @@ export default function DashboardPage() {
 
   useEffect(() => { load() }, [load])
 
-  // Suche + Filter
-  const filteredCategories = categories
-    .filter((cat) => !activeFilter || cat.id === activeFilter)
-    .map((cat) => ({
-      ...cat,
-      videos: cat.videos.filter((v) =>
+  const toggleFolder = (id: number) => {
+    setCollapsedFolders((prev) => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+  }
+
+  // Filter
+  const filteredFolders = folders
+    .filter((f) => !activeFolder || f.id === activeFolder)
+    .map((f) => ({
+      ...f,
+      videos: f.videos.filter((v) =>
         v.title.toLowerCase().includes(search.toLowerCase()),
       ),
     }))
-    .filter((cat) => cat.videos.length > 0)
+    .filter((f) => f.videos.length > 0)
 
-  const filteredTotal = filteredCategories.reduce((n, c) => n + c.videos.length, 0)
+  const filteredTotal = filteredFolders.reduce((n, f) => n + f.videos.length, 0)
 
   return (
     <div className="max-w-6xl mx-auto px-6 py-8">
@@ -63,9 +79,9 @@ export default function DashboardPage() {
         </p>
       </div>
 
-      {/* Search + Filter */}
-      <div className="flex flex-col sm:flex-row gap-3 mb-6">
-        <div className="relative flex-1">
+      {/* Search + Folder Filter */}
+      <div className="flex flex-col gap-3 mb-6">
+        <div className="relative">
           <svg className="absolute left-3 top-1/2 -translate-y-1/2 text-muted" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
             <circle cx="11" cy="11" r="8" /><path d="m21 21-4.35-4.35" />
           </svg>
@@ -79,16 +95,16 @@ export default function DashboardPage() {
         </div>
         <div className="flex flex-wrap gap-1.5">
           <FilterChip
-            label="Alle"
-            active={!activeFilter}
-            onClick={() => setActiveFilter(null)}
+            label={`Alle (${total})`}
+            active={!activeFolder}
+            onClick={() => setActiveFolder(null)}
           />
-          {categories.map((cat) => (
+          {folders.map((f) => (
             <FilterChip
-              key={cat.id}
-              label={`${cat.emoji} ${cat.label}`}
-              active={activeFilter === cat.id}
-              onClick={() => setActiveFilter(activeFilter === cat.id ? null : cat.id)}
+              key={f.id}
+              label={`${f.name} (${f.videos.length})`}
+              active={activeFolder === f.id}
+              onClick={() => setActiveFolder(activeFolder === f.id ? null : f.id)}
             />
           ))}
         </div>
@@ -104,7 +120,7 @@ export default function DashboardPage() {
         </div>
       )}
 
-      {/* Empty state */}
+      {/* Empty */}
       {!loading && filteredTotal === 0 && (
         <div className="text-center py-16">
           <div className="text-4xl mb-4">🔍</div>
@@ -113,45 +129,76 @@ export default function DashboardPage() {
         </div>
       )}
 
-      {/* Ergebnis-Info bei Suche */}
+      {/* Suche Ergebnis-Info */}
       {!loading && search && filteredTotal > 0 && (
         <p className="text-xs text-muted mb-4">
           {filteredTotal} Ergebnis{filteredTotal !== 1 ? 'se' : ''} für &ldquo;{search}&rdquo;
         </p>
       )}
 
-      {/* Kategorien + Videos */}
-      {!loading && filteredCategories.map((cat) => (
-        <section key={cat.id} className="mb-10">
-          <h2 className="text-sm font-semibold text-muted uppercase tracking-wider mb-3 flex items-center gap-2">
-            <span>{cat.emoji}</span> {cat.label}
-            <span className="text-xs font-normal">({cat.videos.length})</span>
-          </h2>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-            {cat.videos.map((video) => (
-              <VideoCard
-                key={`${cat.id}-${video.id}`}
-                video={video}
-                isPlaying={playingVideo === video.hashedId}
-                onPlay={() => setPlayingVideo(playingVideo === video.hashedId ? null : video.hashedId)}
-              />
-            ))}
-          </div>
-        </section>
-      ))}
+      {/* Ordner + Videos */}
+      {!loading && filteredFolders.map((folder) => {
+        const isCollapsed = collapsedFolders.has(folder.id)
+        return (
+          <section key={folder.id} className="mb-8">
+            {/* Ordner-Header */}
+            <button
+              onClick={() => toggleFolder(folder.id)}
+              className="w-full flex items-center gap-3 mb-3 group text-left"
+            >
+              <div className="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
+                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="currentColor" className="text-primary">
+                  <path d="M2 6a2 2 0 0 1 2-2h5l2 2h9a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V6z" />
+                </svg>
+              </div>
+              <div className="flex-1 min-w-0">
+                <h2 className="text-sm font-semibold text-foreground group-hover:text-primary transition-colors">
+                  {folder.name}
+                </h2>
+                <p className="text-xs text-muted">{folder.videos.length} Video{folder.videos.length !== 1 ? 's' : ''}</p>
+              </div>
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                width="16" height="16"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                className={`text-muted shrink-0 transition-transform ${isCollapsed ? '' : 'rotate-180'}`}
+              >
+                <polyline points="6 9 12 15 18 9" />
+              </svg>
+            </button>
+
+            {/* Video Grid */}
+            {!isCollapsed && (
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                {folder.videos.map((video) => (
+                  <VideoCard
+                    key={video.id}
+                    video={video}
+                    onPlay={() => setPlayingVideo(video.hashedId)}
+                  />
+                ))}
+              </div>
+            )}
+          </section>
+        )
+      })}
 
       {/* Wistia Player Modal */}
       {playingVideo && (
         <div
-          className="fixed inset-0 z-50 bg-black/70 flex items-center justify-center p-4"
+          className="fixed inset-0 z-50 bg-black/80 flex items-center justify-center p-4"
           onClick={() => setPlayingVideo(null)}
         >
           <div
             className="w-full max-w-4xl bg-black rounded-2xl overflow-hidden shadow-2xl"
             onClick={(e) => e.stopPropagation()}
           >
-            {/* Close button */}
-            <div className="flex justify-end p-2 bg-black">
+            <div className="flex justify-end p-2 bg-black/60">
               <button
                 onClick={() => setPlayingVideo(null)}
                 className="p-2 rounded-lg text-white/60 hover:text-white hover:bg-white/10 transition-colors"
@@ -161,7 +208,6 @@ export default function DashboardPage() {
                 </svg>
               </button>
             </div>
-            {/* Wistia iframe embed */}
             <div className="relative pb-[56.25%]">
               <iframe
                 src={`https://fast.wistia.net/embed/iframe/${playingVideo}?autoPlay=true`}
@@ -177,48 +223,72 @@ export default function DashboardPage() {
   )
 }
 
+// ── Video Card mit Thumbnail ──────────────────────────────────────────────────
+
 function VideoCard({
   video,
-  isPlaying,
   onPlay,
 }: {
   video: VideoItem
-  isPlaying: boolean
   onPlay: () => void
 }) {
   const duration = video.duration
     ? video.duration >= 60
-      ? `${Math.round(video.duration / 60 * 10) / 10}h`
-      : `${Math.round(video.duration)} Min.`
+      ? `${Math.round(video.duration / 6) / 10}h`
+      : `${video.duration} Min.`
     : null
 
   return (
     <button
       onClick={onPlay}
-      className={`group text-left w-full p-4 rounded-xl border transition-all ${
-        isPlaying
-          ? 'border-primary bg-primary/5 shadow-sm'
-          : 'border-border bg-surface hover:border-primary/30 hover:shadow-sm'
-      }`}
+      className="group text-left w-full rounded-xl border border-border bg-surface hover:border-primary/30 hover:shadow-md transition-all overflow-hidden"
     >
-      <div className="flex items-start gap-3">
-        <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center shrink-0 group-hover:bg-primary/20 transition-colors">
-          <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="currentColor" className="text-primary ml-0.5">
-            <polygon points="5 3 19 12 5 21 5 3" />
-          </svg>
+      {/* Thumbnail */}
+      <div className="relative aspect-video bg-surface-secondary overflow-hidden">
+        {video.thumbnail ? (
+          <img
+            src={video.thumbnail}
+            alt={video.title}
+            className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+            loading="lazy"
+          />
+        ) : (
+          <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-primary/5 to-primary/15">
+            <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="currentColor" className="text-primary/40">
+              <polygon points="5 3 19 12 5 21 5 3" />
+            </svg>
+          </div>
+        )}
+        {/* Play overlay */}
+        <div className="absolute inset-0 flex items-center justify-center bg-black/0 group-hover:bg-black/30 transition-colors">
+          <div className="w-12 h-12 rounded-full bg-white/90 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity shadow-lg">
+            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="currentColor" className="text-primary ml-1">
+              <polygon points="5 3 19 12 5 21 5 3" />
+            </svg>
+          </div>
         </div>
-        <div className="flex-1 min-w-0">
-          <p className="text-sm font-medium text-foreground leading-snug mb-1 line-clamp-2">
-            {video.title}
-          </p>
-          {duration && (
-            <p className="text-xs text-muted">{duration}</p>
-          )}
-        </div>
+        {/* Dauer Badge */}
+        {duration && (
+          <div className="absolute bottom-2 right-2 px-1.5 py-0.5 rounded bg-black/70 text-white text-xs font-medium">
+            {duration}
+          </div>
+        )}
+      </div>
+
+      {/* Info */}
+      <div className="p-3">
+        <p className="text-sm font-medium text-foreground leading-snug mb-1 line-clamp-2">
+          {video.title}
+        </p>
+        {video.date && (
+          <p className="text-xs text-muted">{formatDate(video.date)}</p>
+        )}
       </div>
     </button>
   )
 }
+
+// ── Filter Chip ───────────────────────────────────────────────────────────────
 
 function FilterChip({
   label,
