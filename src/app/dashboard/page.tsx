@@ -6,6 +6,7 @@ interface VideoItem {
   id: string
   hashedId: string
   title: string
+  description: string | null
   duration: number | null
   thumbnail: string | null
   date: string | null
@@ -92,7 +93,8 @@ export default function DashboardPage() {
           ...f,
           videos: sortVideos(
             f.videos.filter((v) =>
-              v.title.toLowerCase().includes(search.toLowerCase()),
+              v.title.toLowerCase().includes(search.toLowerCase()) ||
+              (v.description ?? '').toLowerCase().includes(search.toLowerCase()),
             ),
           ),
         }))
@@ -364,8 +366,13 @@ function VideoCard({
         <p className="text-sm font-medium text-foreground leading-snug mb-1 line-clamp-2">
           {video.title}
         </p>
+        {video.description && (
+          <p className="text-xs text-muted leading-relaxed mb-1 line-clamp-2">
+            {video.description}
+          </p>
+        )}
         {video.date && (
-          <p className="text-xs text-muted">{formatDate(video.date)}</p>
+          <p className="text-xs text-muted/60">{formatDate(video.date)}</p>
         )}
       </div>
     </button>

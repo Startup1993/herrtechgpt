@@ -169,6 +169,15 @@ export async function GET() {
     })
   }
 
+  // ── Beschreibungen aus Supabase laden ──────────────────────────────────
+  const { data: descRows } = await supabase
+    .from('video_descriptions')
+    .select('video_id, description')
+  const descMap: Record<string, string> = {}
+  for (const d of descRows ?? []) {
+    descMap[d.video_id] = d.description
+  }
+
   // ── Videos filtern + nach Skool-Ordner gruppieren ──────────────────────
   const filtered = wistiaVideos
     .filter((v) => !shouldSkip(v.name))
@@ -183,6 +192,7 @@ export async function GET() {
       id: string
       hashedId: string
       title: string
+      description: string | null
       duration: number
       thumbnail: string | null
       date: string | null
@@ -209,6 +219,7 @@ export async function GET() {
       id: String(v.id),
       hashedId: v.hashed_id,
       title: decodeEntities(v.name),
+      description: descMap[String(v.id)] ?? null,
       duration: Math.round((v.duration ?? 0) / 60),
       thumbnail: hdThumbnail(v.thumbnail?.url),
       date: v.created ? v.created.split('T')[0] : null,
