@@ -2,18 +2,54 @@
 
 import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
-import { useState, useRef, useEffect } from 'react'
+import { useState, useRef, useEffect, useMemo } from 'react'
 import { agents } from '@/lib/agents'
-import { workflows } from '@/lib/workflows'
+import { useTheme } from '@/lib/theme-context'
 import { createClient } from '@/lib/supabase/client'
 import type { Conversation } from '@/lib/types'
+import {
+  LayoutDashboard,
+  GraduationCap,
+  Bot,
+  Wrench,
+  MessageCircleQuestion,
+  Shield,
+  ChevronLeft,
+  Plus,
+  BarChart3,
+  Users,
+  Lock,
+  BookOpen,
+  Film,
+  Ticket,
+  Settings,
+  LogOut,
+  Sun,
+  Moon,
+  MoreVertical,
+  Palette,
+  Video,
+  Search,
+  Play,
+} from 'lucide-react'
+
+// ═══════════════════════════════════════════════════════════
+// TYPES
+// ═══════════════════════════════════════════════════════════
+
+type SidebarMode = 'main' | 'chat' | 'admin' | 'classroom' | 'toolbox'
 
 interface SidebarProps {
   conversations: Conversation[]
   userEmail?: string
   userName?: string
   isAdmin?: boolean
+  accessTier?: 'basic' | 'premium'
 }
+
+// ═══════════════════════════════════════════════════════════
+// CONVERSATION ITEM (Chat-Sidebar)
+// ═══════════════════════════════════════════════════════════
 
 function ConversationItem({ conv, isActive }: { conv: Conversation; isActive: boolean }) {
   const agent = agents.find((a) => a.id === conv.agent_id)
@@ -44,10 +80,7 @@ function ConversationItem({ conv, isActive }: { conv: Conversation; isActive: bo
   const handleRename = async () => {
     if (!title.trim()) return
     const supabase = createClient()
-    await supabase
-      .from('conversations')
-      .update({ title: title.trim() })
-      .eq('id', conv.id)
+    await supabase.from('conversations').update({ title: title.trim() }).eq('id', conv.id)
     setIsRenaming(false)
     setMenuOpen(false)
     router.refresh()
@@ -57,7 +90,7 @@ function ConversationItem({ conv, isActive }: { conv: Conversation; isActive: bo
     const supabase = createClient()
     await supabase.from('conversations').delete().eq('id', conv.id)
     setMenuOpen(false)
-    router.push('/assistants')
+    router.push('/dashboard/herr-tech-gpt')
     router.refresh()
   }
 
@@ -73,7 +106,7 @@ function ConversationItem({ conv, isActive }: { conv: Conversation; isActive: bo
             if (e.key === 'Escape') { setIsRenaming(false); setTitle(conv.title) }
           }}
           onBlur={handleRename}
-          className="flex-1 text-sm px-2 py-1 border border-border rounded bg-surface focus:outline-none focus:ring-1 focus:ring-primary"
+          className="flex-1 text-sm px-2 py-1 border border-border rounded-[var(--radius-sm)] bg-surface focus:outline-none focus:ring-1 focus:ring-primary"
         />
       </div>
     )
@@ -82,11 +115,11 @@ function ConversationItem({ conv, isActive }: { conv: Conversation; isActive: bo
   return (
     <div className="group relative flex items-center">
       <Link
-        href={`/assistants/${conv.agent_id}/${conv.id}`}
-        className={`flex-1 min-w-0 flex items-center gap-3 px-3 py-2 rounded-lg text-sm transition-colors pr-8 ${
+        href={`/dashboard/herr-tech-gpt/${conv.id}`}
+        className={`flex-1 min-w-0 flex items-center gap-3 px-3 py-2 rounded-[var(--radius-md)] text-sm transition-colors pr-8 ${
           isActive
-            ? 'bg-surface-secondary shadow-sm text-foreground'
-            : 'text-muted hover:bg-surface-secondary hover:text-foreground'
+            ? 'bg-primary/10 text-foreground font-medium'
+            : 'text-muted hover:bg-surface-hover hover:text-foreground'
         }`}
       >
         <span className="text-sm shrink-0">{agent?.emoji ?? '💬'}</span>
@@ -96,26 +129,22 @@ function ConversationItem({ conv, isActive }: { conv: Conversation; isActive: bo
       <div className="relative" ref={menuRef}>
         <button
           onClick={(e) => { e.preventDefault(); setMenuOpen(!menuOpen) }}
-          className="opacity-0 group-hover:opacity-100 p-1 rounded hover:bg-surface-secondary text-muted hover:text-foreground transition-all absolute right-1 top-1/2 -translate-y-1/2"
+          className="opacity-0 group-hover:opacity-100 p-1 rounded-[var(--radius-sm)] hover:bg-surface-hover text-muted hover:text-foreground transition-all absolute right-1 top-1/2 -translate-y-1/2"
         >
-          <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
-            <circle cx="12" cy="5" r="2" />
-            <circle cx="12" cy="12" r="2" />
-            <circle cx="12" cy="19" r="2" />
-          </svg>
+          <MoreVertical size={14} />
         </button>
 
         {menuOpen && (
-          <div className="absolute right-0 top-full mt-1 z-50 bg-surface border border-border rounded-lg shadow-lg py-1 min-w-[140px]">
+          <div className="absolute right-0 top-full mt-1 z-50 bg-surface border border-border rounded-[var(--radius-lg)] shadow-[var(--shadow-dropdown)] py-1 min-w-[140px]">
             <button
               onClick={() => { setIsRenaming(true); setMenuOpen(false) }}
-              className="w-full text-left px-3 py-2 text-sm text-foreground hover:bg-surface-secondary transition-colors"
+              className="w-full text-left px-3 py-2 text-sm text-foreground hover:bg-surface-hover transition-colors"
             >
               Umbenennen
             </button>
             <button
               onClick={handleDelete}
-              className="w-full text-left px-3 py-2 text-sm text-red-600 hover:bg-red-50 transition-colors"
+              className="w-full text-left px-3 py-2 text-sm text-danger hover:bg-danger/10 transition-colors"
             >
               Löschen
             </button>
@@ -126,10 +155,13 @@ function ConversationItem({ conv, isActive }: { conv: Conversation; isActive: bo
   )
 }
 
-function UserMenu({ userEmail, userName, isAdmin }: { userEmail: string; userName: string; isAdmin?: boolean }) {
+// ═══════════════════════════════════════════════════════════
+// USER MENU (Bottom Dropdown)
+// ═══════════════════════════════════════════════════════════
+
+function UserMenu({ userEmail, userName }: { userEmail: string; userName: string }) {
   const [open, setOpen] = useState(false)
   const menuRef = useRef<HTMLDivElement>(null)
-  const pathname = usePathname()
   const router = useRouter()
 
   useEffect(() => {
@@ -157,85 +189,35 @@ function UserMenu({ userEmail, userName, isAdmin }: { userEmail: string; userNam
     <div className="relative" ref={menuRef}>
       <button
         onClick={() => setOpen(!open)}
-        className="w-full flex items-center gap-3 px-3 py-3 rounded-lg hover:bg-surface-secondary transition-colors"
+        className="w-full flex items-center gap-3 px-3 py-3 rounded-[var(--radius-lg)] hover:bg-surface-hover transition-colors"
       >
         <div className="w-8 h-8 rounded-full bg-primary/15 text-primary flex items-center justify-center text-xs font-semibold shrink-0">
           {initials}
         </div>
         <div className="flex-1 text-left min-w-0">
           <p className="text-sm font-medium text-foreground truncate">{userName || userEmail}</p>
+          <p className="text-xs text-muted truncate">{userEmail}</p>
         </div>
-        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-muted shrink-0">
-          <polyline points="6 9 12 15 18 9" />
-        </svg>
       </button>
 
       {open && (
-        <div className="absolute bottom-full left-0 right-0 mb-2 z-50 bg-white dark:bg-surface border-2 border-primary/20 rounded-xl shadow-xl overflow-hidden">
-          {/* User info header */}
-          <div className="px-4 py-3 bg-primary/8 border-b-2 border-primary/15">
-            <div className="flex items-center gap-3">
-              <div className="w-9 h-9 rounded-full bg-primary/20 text-primary flex items-center justify-center text-sm font-bold shrink-0">
-                {initials}
-              </div>
-              <div className="min-w-0">
-                <p className="text-sm font-semibold text-foreground truncate">{userName || 'Nutzer'}</p>
-                <p className="text-xs text-muted truncate">{userEmail}</p>
-              </div>
-            </div>
+        <div className="absolute bottom-full left-0 right-0 mb-2 z-50 bg-surface border border-border rounded-[var(--radius-xl)] shadow-[var(--shadow-dropdown)] overflow-hidden">
+          <div className="py-1">
+            <Link
+              href="/dashboard/account"
+              onClick={() => setOpen(false)}
+              className="flex items-center gap-2.5 px-4 py-2.5 text-sm text-foreground hover:bg-surface-hover transition-colors"
+            >
+              <Settings size={15} className="text-muted" />
+              Einstellungen
+            </Link>
           </div>
-
-          {/* Navigation items */}
-          <div className="py-0.5">
-            <Link
-              href="/assistants/path"
-              onClick={() => setOpen(false)}
-              className="flex items-center gap-2.5 px-4 py-1 text-sm text-foreground hover:bg-surface-secondary transition-colors"
-            >
-              <span className="text-sm leading-none">🎯</span>
-              Mein Lernpfad
-            </Link>
-            <Link
-              href="/assistants/library"
-              onClick={() => setOpen(false)}
-              className="flex items-center gap-2.5 px-4 py-1 text-sm text-foreground hover:bg-surface-secondary transition-colors"
-            >
-              <span className="text-sm leading-none">📚</span>
-              Bibliothek
-            </Link>
-            <Link
-              href="/assistants/profile"
-              onClick={() => setOpen(false)}
-              className="flex items-center gap-2.5 px-4 py-1 text-sm text-foreground hover:bg-surface-secondary transition-colors"
-            >
-              <span className="text-sm leading-none">🧠</span>
-              Wissensbasis
-            </Link>
-            {isAdmin && (
-              <Link
-                href="/assistants/admin"
-                onClick={() => setOpen(false)}
-                className="flex items-center gap-2.5 px-4 py-1 text-sm text-foreground hover:bg-surface-secondary transition-colors"
-              >
-                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className="text-muted shrink-0">
-                  <circle cx="12" cy="8" r="4"/><path d="M20 21a8 8 0 1 0-16 0"/>
-                </svg>
-                Admin-Bereich
-              </Link>
-            )}
-          </div>
-
-          {/* Logout — clearly separated */}
-          <div className="border-t border-border py-0.5">
+          <div className="border-t border-border py-1">
             <button
               onClick={handleLogout}
-              className="w-full flex items-center gap-2.5 px-4 py-1 text-sm text-red-600 hover:bg-red-50 dark:hover:bg-red-950/20 transition-colors"
+              className="w-full flex items-center gap-2.5 px-4 py-2.5 text-sm text-danger hover:bg-danger/10 transition-colors"
             >
-              <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="shrink-0">
-                <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
-                <polyline points="16 17 21 12 16 7" />
-                <line x1="21" y1="12" x2="9" y2="12" />
-              </svg>
+              <LogOut size={15} />
               Abmelden
             </button>
           </div>
@@ -245,113 +227,644 @@ function UserMenu({ userEmail, userName, isAdmin }: { userEmail: string; userNam
   )
 }
 
-export function Sidebar({ conversations, userEmail, userName, isAdmin }: SidebarProps) {
-  const pathname = usePathname()
+// ═══════════════════════════════════════════════════════════
+// NAV ITEM COMPONENT
+// ═══════════════════════════════════════════════════════════
 
-  // Conversations are already sorted by updated_at DESC from the server query
+function NavItem({
+  href,
+  icon: Icon,
+  label,
+  isActive,
+  locked,
+  onClick,
+  description,
+}: {
+  href?: string
+  icon: React.ElementType
+  label: string
+  isActive?: boolean
+  locked?: boolean
+  onClick?: () => void
+  description?: string
+}) {
+  const baseClass = `flex items-center gap-3 px-3 py-2.5 rounded-[var(--radius-lg)] text-sm transition-all w-full text-left ${
+    isActive
+      ? 'bg-primary/12 text-primary font-medium'
+      : 'text-muted hover:bg-surface-hover hover:text-foreground'
+  } ${locked ? 'opacity-60' : ''}`
+
+  const content = (
+    <>
+      <Icon size={18} className={isActive ? 'text-primary' : 'text-muted-light'} />
+      <div className="flex-1 min-w-0">
+        <span className="truncate block">{label}</span>
+        {description && (
+          <span className="text-xs text-muted truncate block mt-0.5">{description}</span>
+        )}
+      </div>
+      {locked && <Lock size={14} className="text-muted shrink-0" />}
+    </>
+  )
+
+  // If locked with an href (upgrade link), render as Link
+  if (locked && href) {
+    return <Link href={href} className={baseClass}>{content}</Link>
+  }
+
+  // If onClick is provided and not locked, render as button
+  if (onClick && !locked) {
+    return <button type="button" className={baseClass} onClick={onClick}>{content}</button>
+  }
+
+  // Default: render as Link
   return (
-    <aside className="w-72 bg-surface border-r border-border flex flex-col h-full shrink-0">
-      {/* Logo */}
-      <div className="px-5 pt-5 pb-4">
-        <Link href="/assistants">
-          <img src="/logo.png" alt="Herr Tech" className="h-6 w-auto" />
-        </Link>
+    <Link href={href ?? '#'} className={baseClass}>
+      {content}
+    </Link>
+  )
+}
+
+// ═══════════════════════════════════════════════════════════
+// SECTION HEADER
+// ═══════════════════════════════════════════════════════════
+
+function SectionHeader({ label }: { label: string }) {
+  return (
+    <h3 className="text-[11px] font-semibold text-muted uppercase tracking-wider px-3 mb-2 mt-5 first:mt-0">
+      {label}
+    </h3>
+  )
+}
+
+// ═══════════════════════════════════════════════════════════
+// MAIN SIDEBAR
+// ═══════════════════════════════════════════════════════════
+
+function MainSidebar({
+  isAdmin,
+  accessTier,
+  pathname,
+  onDrillDown,
+}: {
+  isAdmin?: boolean
+  accessTier?: string
+  pathname: string
+  onDrillDown: (mode: SidebarMode) => void
+}) {
+  const isPremium = accessTier === 'premium' || isAdmin
+
+  return (
+    <nav className="flex-1 overflow-y-auto px-3 py-4">
+      <SectionHeader label="Navigation" />
+
+      <div className="space-y-1">
+        <NavItem
+          href="/dashboard"
+          icon={LayoutDashboard}
+          label="Dashboard"
+          isActive={pathname === '/dashboard'}
+        />
+        <NavItem
+          icon={GraduationCap}
+          label="Classroom"
+          isActive={pathname.startsWith('/dashboard/classroom')}
+          onClick={() => onDrillDown('classroom')}
+        />
+        <NavItem
+          icon={Bot}
+          label="Herr Tech GPT"
+          isActive={pathname.startsWith('/dashboard/herr-tech-gpt')}
+          locked={!isPremium}
+          onClick={() => isPremium ? onDrillDown('chat') : undefined}
+          href={isPremium ? undefined : '/dashboard/upgrade'}
+        />
+        <NavItem
+          icon={Wrench}
+          label="KI Toolbox"
+          isActive={pathname.startsWith('/dashboard/ki-toolbox')}
+          locked={!isPremium}
+          onClick={() => isPremium ? onDrillDown('toolbox') : undefined}
+          href={isPremium ? undefined : '/dashboard/upgrade'}
+        />
+        <NavItem
+          href="/dashboard/help"
+          icon={MessageCircleQuestion}
+          label="Hilfe & Kontakt"
+          isActive={pathname.startsWith('/dashboard/help')}
+        />
       </div>
 
-      {/* New Conversation Button */}
-      <div className="px-4 pb-4">
+      {isAdmin && (
+        <>
+          <SectionHeader label="Administration" />
+          <div className="space-y-1">
+            <NavItem
+              icon={Shield}
+              label="Admin-Bereich"
+              isActive={pathname.startsWith('/admin')}
+              onClick={() => onDrillDown('admin')}
+            />
+          </div>
+        </>
+      )}
+    </nav>
+  )
+}
+
+// ═══════════════════════════════════════════════════════════
+// CHAT SIDEBAR (Drill-Down Modus 2)
+// ═══════════════════════════════════════════════════════════
+
+function ChatSidebar({
+  conversations,
+  pathname,
+  onBack,
+  isAdmin,
+  onDrillDown,
+}: {
+  conversations: Conversation[]
+  pathname: string
+  onBack: () => void
+  isAdmin?: boolean
+  onDrillDown: (mode: SidebarMode) => void
+}) {
+  return (
+    <div className="flex-1 overflow-y-auto flex flex-col">
+      {/* Back button */}
+      <button
+        onClick={onBack}
+        className="flex items-center gap-2 px-4 py-3 text-sm text-muted hover:text-foreground hover:bg-surface-hover transition-colors border-b border-border"
+      >
+        <ChevronLeft size={16} />
+        <span>Zurück zur Übersicht</span>
+      </button>
+
+      {/* New Chat */}
+      <div className="px-3 pt-4 pb-2">
         <Link
-          href="/assistants/chat"
-          className="flex items-center justify-center gap-2 w-full px-4 py-2.5 bg-primary hover:bg-primary-hover text-white rounded-lg text-sm font-medium transition-colors"
+          href="/dashboard/herr-tech-gpt"
+          className="btn-primary w-full justify-center"
         >
-          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-            <line x1="12" y1="5" x2="12" y2="19" />
-            <line x1="5" y1="12" x2="19" y2="12" />
-          </svg>
+          <Plus size={16} />
           Neuer Chat
         </Link>
       </div>
 
-      {/* Agents + Conversations */}
-      <div className="flex-1 overflow-y-auto border-t border-border">
-        {/* Agents */}
-        <div className="p-4">
-          <h2 className="text-xs font-semibold text-muted uppercase tracking-wider mb-3">
-            Workspace-Assistenten
-          </h2>
-          <nav className="space-y-1">
-            {agents.map((agent) => {
-              const isActive = pathname.startsWith(`/assistants/${agent.id}`)
-              return (
-                <Link
-                  key={agent.id}
-                  href={`/assistants/${agent.id}`}
-                  className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-colors ${
-                    isActive
-                      ? 'bg-surface-secondary shadow-sm text-foreground font-medium border border-border'
-                      : 'text-muted hover:bg-surface-secondary hover:text-foreground'
-                  }`}
-                >
-                  <span className="text-base shrink-0">{agent.emoji}</span>
-                  <span className="truncate">{agent.name}</span>
-                </Link>
-              )
-            })}
-          </nav>
+      {/* Agents */}
+      <div className="px-3 py-2">
+        <SectionHeader label="Agenten" />
+        <div className="space-y-1">
+          {agents.map((agent) => (
+            <Link
+              key={agent.id}
+              href={`/dashboard/herr-tech-gpt?agent=${agent.id}`}
+              className={`flex items-center gap-3 px-3 py-2 rounded-[var(--radius-md)] text-sm transition-colors ${
+                pathname === `/dashboard/herr-tech-gpt` && false /* TODO: active agent detection */
+                  ? 'bg-primary/10 text-foreground font-medium'
+                  : 'text-muted hover:bg-surface-hover hover:text-foreground'
+              }`}
+            >
+              <span className="text-base shrink-0">{agent.emoji}</span>
+              <span className="truncate">{agent.name}</span>
+            </Link>
+          ))}
         </div>
-
-        {/* Workflows */}
-        <div className="p-4 border-t border-border">
-          <h2 className="text-xs font-semibold text-muted uppercase tracking-wider mb-3">
-            Workflows
-          </h2>
-          <nav className="space-y-1">
-            {workflows.map((workflow) => {
-              const isActive = pathname.startsWith(`/assistants/workflows/${workflow.id}`)
-              return (
-                <Link
-                  key={workflow.id}
-                  href={`/assistants/workflows/${workflow.id}`}
-                  className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-colors ${
-                    isActive
-                      ? 'bg-surface-secondary shadow-sm text-foreground font-medium border border-border'
-                      : 'text-muted hover:bg-surface-secondary hover:text-foreground'
-                  }`}
-                >
-                  <span className="text-base shrink-0">{workflow.emoji}</span>
-                  <span className="truncate">{workflow.name}</span>
-                </Link>
-              )
-            })}
-          </nav>
-        </div>
-
-
-        {/* Conversations */}
-        {conversations.length > 0 && (
-          <div className="p-4 border-t border-border">
-            <h2 className="text-xs font-semibold text-muted uppercase tracking-wider mb-3">
-              Letzte Chats
-            </h2>
-            <nav className="space-y-0.5">
-              {conversations.map((conv) => (
-                <ConversationItem
-                  key={conv.id}
-                  conv={conv}
-                  isActive={pathname.includes(conv.id)}
-                />
-              ))}
-            </nav>
-          </div>
-        )}
       </div>
 
-      {/* Bottom — User Profile Dropdown */}
-      <div className="border-t border-border">
+      {/* Recent Chats */}
+      {conversations.length > 0 && (
+        <div className="px-3 py-2 border-t border-border">
+          <SectionHeader label="Letzte Chats" />
+          <div className="space-y-0.5">
+            {conversations.map((conv) => (
+              <ConversationItem
+                key={conv.id}
+                conv={conv}
+                isActive={pathname.includes(conv.id)}
+              />
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Admin Quick-Link */}
+      {isAdmin && (
+        <div className="px-3 py-2 border-t border-border mt-auto">
+          <NavItem
+            icon={Shield}
+            label="Admin-Bereich"
+            isActive={false}
+            onClick={() => onDrillDown('admin')}
+          />
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ═══════════════════════════════════════════════════════════
+// ADMIN SIDEBAR (Drill-Down Modus 3)
+// ═══════════════════════════════════════════════════════════
+
+function AdminSidebar({
+  pathname,
+  onBack,
+}: {
+  pathname: string
+  onBack: () => void
+}) {
+  return (
+    <div className="flex-1 overflow-y-auto">
+      {/* Back button */}
+      <button
+        onClick={onBack}
+        className="flex items-center gap-2 px-4 py-3 text-sm text-muted hover:text-foreground hover:bg-surface-hover transition-colors border-b border-border w-full"
+      >
+        <ChevronLeft size={16} />
+        <span>Zurück zur Übersicht</span>
+      </button>
+
+      <nav className="px-3 py-4">
+        <SectionHeader label="Übersicht" />
+        <div className="space-y-1">
+          <NavItem
+            href="/admin"
+            icon={BarChart3}
+            label="Dashboard & KPIs"
+            description="Statistiken, Wachstum, Aktivität"
+            isActive={pathname === '/admin' || pathname === '/admin/dashboard'}
+          />
+        </div>
+
+        <SectionHeader label="Nutzer" />
+        <div className="space-y-1">
+          <NavItem
+            href="/admin/users"
+            icon={Users}
+            label="Nutzerverwaltung"
+            description="Alle User, Suche, CSV-Import"
+            isActive={pathname.startsWith('/admin/users')}
+          />
+          <NavItem
+            href="/admin/groups"
+            icon={Lock}
+            label="Gruppen & Rechte"
+            description="Berechtigungen, Paid/Free"
+            isActive={pathname.startsWith('/admin/groups')}
+          />
+        </div>
+
+        <SectionHeader label="Inhalte" />
+        <div className="space-y-1">
+          <NavItem
+            href="/admin/content/modules"
+            icon={BookOpen}
+            label="Classroom-Module"
+            description="Lern-Module + Video-Zuordnung"
+            isActive={pathname.startsWith('/admin/content/modules')}
+          />
+          <NavItem
+            href="/admin/content/agents"
+            icon={Bot}
+            label="Assistenten verwalten"
+            description="Agenten, System-Prompts"
+            isActive={pathname.startsWith('/admin/content/agents')}
+          />
+          <NavItem
+            href="/admin/content/knowledge"
+            icon={BookOpen}
+            label="Wissensbasis"
+            description="Video-Chunks, Zuordnung"
+            isActive={pathname.startsWith('/admin/content/knowledge')}
+          />
+          <NavItem
+            href="/admin/content/videos"
+            icon={Film}
+            label="Video-Sync"
+            description="Wistia-Status, Transkriptionen"
+            isActive={pathname.startsWith('/admin/content/videos')}
+          />
+        </div>
+
+        <SectionHeader label="Support" />
+        <div className="space-y-1">
+          <NavItem
+            href="/admin/tickets"
+            icon={Ticket}
+            label="Support-Tickets"
+            description="Anfragen, Verlauf, Antworten"
+            isActive={pathname.startsWith('/admin/tickets')}
+          />
+        </div>
+      </nav>
+    </div>
+  )
+}
+
+// ═══════════════════════════════════════════════════════════
+// CLASSROOM SIDEBAR (Drill-Down Modus 4) — loads real modules from DB
+// ═══════════════════════════════════════════════════════════
+
+interface ModuleNavItem {
+  id: string
+  title: string
+  slug: string
+  emoji: string
+}
+
+function ClassroomSidebar({
+  pathname,
+  onBack,
+  isAdmin,
+  onDrillDown,
+}: {
+  pathname: string
+  onBack: () => void
+  isAdmin?: boolean
+  onDrillDown: (mode: SidebarMode) => void
+}) {
+  const [modules, setModules] = useState<ModuleNavItem[]>([])
+
+  useEffect(() => {
+    const supabase = createClient()
+    supabase
+      .from('course_modules')
+      .select('id, title, slug, emoji')
+      .eq('is_published', true)
+      .order('sort_order', { ascending: true })
+      .then(({ data }) => {
+        if (data) setModules(data as ModuleNavItem[])
+      })
+  }, [])
+
+  return (
+    <div className="flex-1 overflow-y-auto">
+      <button
+        onClick={onBack}
+        className="flex items-center gap-2 px-4 py-3 text-sm text-muted hover:text-foreground hover:bg-surface-hover transition-colors border-b border-border w-full text-left"
+      >
+        <ChevronLeft size={16} />
+        <span>Zurück zur Übersicht</span>
+      </button>
+
+      <nav className="px-3 py-4">
+        <SectionHeader label="Classroom" />
+        <div className="space-y-1">
+          <NavItem
+            href="/dashboard/classroom"
+            icon={Search}
+            label="Alle Module"
+            isActive={pathname === '/dashboard/classroom'}
+          />
+        </div>
+
+        {modules.length > 0 && (
+          <>
+            <SectionHeader label="Module" />
+            <div className="space-y-1">
+              {modules.map((m) => (
+                <Link
+                  key={m.id}
+                  href={`/dashboard/classroom/${m.slug}`}
+                  className={`flex items-center gap-3 px-3 py-2 rounded-[var(--radius-md)] text-sm transition-colors ${
+                    pathname === `/dashboard/classroom/${m.slug}`
+                      ? 'bg-primary/10 text-foreground font-medium'
+                      : 'text-muted hover:bg-surface-hover hover:text-foreground'
+                  }`}
+                >
+                  <span className="text-base shrink-0">{m.emoji}</span>
+                  <span className="truncate">{m.title}</span>
+                </Link>
+              ))}
+            </div>
+          </>
+        )}
+
+        {/* Admin Quick-Link */}
+        {isAdmin && (
+          <>
+            <SectionHeader label="Admin" />
+            <div className="space-y-1">
+              <NavItem icon={Shield} label="Admin-Bereich" isActive={false} onClick={() => onDrillDown('admin')} />
+            </div>
+          </>
+        )}
+      </nav>
+    </div>
+  )
+}
+
+// ═══════════════════════════════════════════════════════════
+// TOOLBOX SIDEBAR (Drill-Down Modus 5)
+// ═══════════════════════════════════════════════════════════
+
+function ToolboxSidebar({
+  pathname,
+  onBack,
+  isAdmin,
+  onDrillDown,
+}: {
+  pathname: string
+  onBack: () => void
+  isAdmin?: boolean
+  onDrillDown: (mode: SidebarMode) => void
+}) {
+  return (
+    <div className="flex-1 overflow-y-auto">
+      <button
+        onClick={onBack}
+        className="flex items-center gap-2 px-4 py-3 text-sm text-muted hover:text-foreground hover:bg-surface-hover transition-colors border-b border-border w-full text-left"
+      >
+        <ChevronLeft size={16} />
+        <span>Zurück zur Übersicht</span>
+      </button>
+
+      <nav className="px-3 py-4">
+        <SectionHeader label="Verfügbare Tools" />
+        <div className="space-y-1">
+          <NavItem
+            href="/dashboard/ki-toolbox/carousel"
+            icon={Palette}
+            label="Karussell-Generator"
+            description="Text → Instagram-Slides"
+            isActive={pathname.startsWith('/dashboard/ki-toolbox/carousel')}
+          />
+          <NavItem
+            href="/dashboard/ki-toolbox/video-editor"
+            icon={Film}
+            label="KI Video Editor"
+            description="Upload → Analyse → Schnitt"
+            isActive={pathname.startsWith('/dashboard/ki-toolbox/video-editor')}
+          />
+          <NavItem
+            href="/dashboard/ki-toolbox/video-creator"
+            icon={Video}
+            label="KI Video Creator"
+            description="Text-Prompt → KI-Video"
+            isActive={pathname.startsWith('/dashboard/ki-toolbox/video-creator')}
+          />
+        </div>
+
+        <SectionHeader label="Übersicht" />
+        <div className="space-y-1">
+          <NavItem
+            href="/dashboard/ki-toolbox"
+            icon={Wrench}
+            label="Alle Tools anzeigen"
+            isActive={pathname === '/dashboard/ki-toolbox'}
+          />
+        </div>
+
+        {/* Admin Quick-Link */}
+        {isAdmin && (
+          <>
+            <SectionHeader label="Admin" />
+            <div className="space-y-1">
+              <NavItem icon={Shield} label="Admin-Bereich" isActive={false} onClick={() => onDrillDown('admin')} />
+            </div>
+          </>
+        )}
+      </nav>
+    </div>
+  )
+}
+
+// ═══════════════════════════════════════════════════════════
+// MAIN SIDEBAR EXPORT
+// ═══════════════════════════════════════════════════════════
+
+export function Sidebar({ conversations, userEmail, userName, isAdmin, accessTier }: SidebarProps) {
+  const pathname = usePathname()
+  const router = useRouter()
+  const { theme, toggleTheme } = useTheme()
+
+  // Determine sidebar mode from URL
+  const autoMode = useMemo<SidebarMode>(() => {
+    if (pathname.startsWith('/admin')) return 'admin'
+    if (pathname.startsWith('/dashboard/herr-tech-gpt')) return 'chat'
+    if (pathname.startsWith('/dashboard/classroom')) return 'classroom'
+    if (pathname.startsWith('/dashboard/ki-toolbox')) return 'toolbox'
+    return 'main'
+  }, [pathname])
+
+  const [mode, setMode] = useState<SidebarMode>(autoMode)
+
+  // Sync mode with URL changes
+  useEffect(() => {
+    setMode(autoMode)
+  }, [autoMode])
+
+  const handleDrillDown = (newMode: SidebarMode) => {
+    setMode(newMode)
+    if (newMode === 'chat') router.push('/dashboard/herr-tech-gpt')
+    if (newMode === 'admin') router.push('/admin')
+    if (newMode === 'classroom') router.push('/dashboard/classroom')
+    if (newMode === 'toolbox') router.push('/dashboard/ki-toolbox')
+  }
+
+  const handleBack = () => {
+    setMode('main')
+    router.push('/dashboard')
+  }
+
+  return (
+    <aside className="w-72 bg-surface border-r border-border flex flex-col h-full shrink-0 shadow-[var(--shadow-sidebar)]">
+      {/* Logo */}
+      <div className="px-5 pt-5 pb-4 flex items-center">
+        <Link href="/dashboard" className="block">
+          <img
+            src="/logo.png"
+            alt="Herr Tech"
+            className="h-6 w-auto object-contain"
+          />
+        </Link>
+      </div>
+
+      {/* Content — animated slide between modes */}
+      <div className="flex-1 overflow-hidden relative">
+        <div
+          className="absolute inset-0 overflow-y-auto transition-transform duration-200 ease-in-out"
+          style={{
+            transform: mode === 'main' ? 'translateX(0)' : 'translateX(-100%)',
+            visibility: mode === 'main' ? 'visible' : 'hidden',
+            pointerEvents: mode === 'main' ? 'auto' : 'none',
+          }}
+        >
+          <MainSidebar
+            isAdmin={isAdmin}
+            accessTier={accessTier}
+            pathname={pathname}
+            onDrillDown={handleDrillDown}
+          />
+        </div>
+
+        <div
+          className="absolute inset-0 overflow-y-auto transition-transform duration-200 ease-in-out"
+          style={{
+            transform: mode === 'chat' ? 'translateX(0)' : 'translateX(100%)',
+            visibility: mode === 'chat' ? 'visible' : 'hidden',
+            pointerEvents: mode === 'chat' ? 'auto' : 'none',
+          }}
+        >
+          <ChatSidebar
+            conversations={conversations}
+            pathname={pathname}
+            onBack={handleBack}
+            isAdmin={isAdmin}
+            onDrillDown={handleDrillDown}
+          />
+        </div>
+
+        <div
+          className="absolute inset-0 overflow-y-auto transition-transform duration-200 ease-in-out"
+          style={{
+            transform: mode === 'admin' ? 'translateX(0)' : 'translateX(100%)',
+            visibility: mode === 'admin' ? 'visible' : 'hidden',
+            pointerEvents: mode === 'admin' ? 'auto' : 'none',
+          }}
+        >
+          <AdminSidebar pathname={pathname} onBack={handleBack} />
+        </div>
+
+        <div
+          className="absolute inset-0 overflow-y-auto transition-transform duration-200 ease-in-out"
+          style={{
+            transform: mode === 'classroom' ? 'translateX(0)' : 'translateX(100%)',
+            visibility: mode === 'classroom' ? 'visible' : 'hidden',
+            pointerEvents: mode === 'classroom' ? 'auto' : 'none',
+          }}
+        >
+          <ClassroomSidebar pathname={pathname} onBack={handleBack} isAdmin={isAdmin} onDrillDown={handleDrillDown} />
+        </div>
+
+        <div
+          className="absolute inset-0 overflow-y-auto transition-transform duration-200 ease-in-out"
+          style={{
+            transform: mode === 'toolbox' ? 'translateX(0)' : 'translateX(100%)',
+            visibility: mode === 'toolbox' ? 'visible' : 'hidden',
+            pointerEvents: mode === 'toolbox' ? 'auto' : 'none',
+          }}
+        >
+          <ToolboxSidebar pathname={pathname} onBack={handleBack} isAdmin={isAdmin} onDrillDown={handleDrillDown} />
+        </div>
+      </div>
+
+      {/* Bottom — Theme Toggle + User Menu */}
+      <div className="border-t border-border px-3 pb-2 pt-1">
+        {/* Theme toggle */}
+        <button
+          onClick={toggleTheme}
+          className="w-full flex items-center gap-3 px-3 py-2 rounded-[var(--radius-md)] text-sm text-muted hover:bg-surface-hover hover:text-foreground transition-colors"
+        >
+          {theme === 'dark' ? <Sun size={16} /> : <Moon size={16} />}
+          <span>{theme === 'dark' ? 'Light Mode' : 'Dark Mode'}</span>
+        </button>
+
+        {/* User menu */}
         <UserMenu
           userEmail={userEmail ?? ''}
           userName={userName ?? ''}
-          isAdmin={isAdmin}
         />
       </div>
     </aside>

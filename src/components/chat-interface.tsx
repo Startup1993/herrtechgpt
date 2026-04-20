@@ -60,7 +60,7 @@ export function ChatInterface({
     if (autoSend && !autoSentRef.current) {
       autoSentRef.current = true
       sendMessage({ text: autoSend })
-      router.replace(`/assistants/${agent.id}/${conversationId}`)
+      router.replace(`/dashboard/herr-tech-gpt/${conversationId}`)
     }
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -183,7 +183,7 @@ export function ChatInterface({
   return (
     <div className="flex flex-col h-full">
       {/* Messages area */}
-      <div ref={scrollRef} className="flex-1 overflow-y-auto px-4 py-6 md:px-8 bg-white">
+      <div ref={scrollRef} className="flex-1 overflow-y-auto px-4 py-6 md:px-8 bg-background">
         {messages.length === 0 ? (
           <div className="flex flex-col items-center justify-center h-full text-center">
             <div className="text-4xl mb-4">{agent.emoji}</div>

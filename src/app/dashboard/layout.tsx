@@ -1,7 +1,6 @@
 import { createClient } from '@/lib/supabase/server'
 import { redirect } from 'next/navigation'
-import Link from 'next/link'
-import { DashboardNav } from './DashboardNav'
+import { AppShell } from '@/components/app-shell'
 
 export default async function DashboardLayout({
   children,
@@ -12,13 +11,20 @@ export default async function DashboardLayout({
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) redirect('/login')
 
-  const { data: profile } = await supabase
-    .from('profiles')
-    .select('role, access_tier')
-    .eq('id', user.id)
-    .single()
-
-  const isPremium = profile?.access_tier === 'premium' || profile?.role === 'admin'
+  // Fetch profile and conversations in parallel
+  const [{ data: profile }, { data: conversations }] = await Promise.all([
+    supabase
+      .from('profiles')
+      .select('role, access_tier, background, market, target_audience, offer')
+      .eq('id', user.id)
+      .single(),
+    supabase
+      .from('conversations')
+      .select('id, agent_id, title, updated_at')
+      .eq('user_id', user.id)
+      .order('updated_at', { ascending: false })
+      .limit(15),
+  ])
 
   const userEmail = user.email ?? ''
   const userName =
@@ -26,45 +32,21 @@ export default async function DashboardLayout({
     (user.user_metadata?.name as string) ??
     userEmail.split('@')[0]
 
-  const initials = userName
-    ? userName.split(' ').map((n: string) => n[0]).join('').toUpperCase().slice(0, 2)
-    : userEmail.slice(0, 2).toUpperCase()
+  const isAdmin = profile?.role === 'admin'
+  const accessTier = (profile?.access_tier ?? 'basic') as 'basic' | 'premium'
+
+  // Check if profile is complete for onboarding guard
+  const profileComplete = !!(profile?.background || profile?.market || profile?.target_audience || profile?.offer)
 
   return (
-    <div className="flex flex-col h-screen bg-background">
-      {/* Header */}
-      <header className="border-b border-border bg-surface shrink-0">
-        <div className="max-w-7xl mx-auto flex items-center justify-between px-6 h-14">
-          {/* Logo */}
-          <Link href="/dashboard" className="shrink-0">
-            <img src="/logo.png" alt="Herr Tech" className="h-6 w-auto" />
-          </Link>
-
-          {/* Navigation */}
-          <DashboardNav isPremium={isPremium} />
-
-          {/* User */}
-          <div className="flex items-center gap-3">
-            {isPremium && (
-              <span className="hidden sm:inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full bg-primary/10 text-primary font-medium">
-                Premium
-              </span>
-            )}
-            <Link
-              href="/dashboard"
-              className="w-8 h-8 rounded-full bg-primary/15 text-primary flex items-center justify-center text-xs font-semibold"
-              title={userEmail}
-            >
-              {initials}
-            </Link>
-          </div>
-        </div>
-      </header>
-
-      {/* Content */}
-      <main className="flex-1 overflow-y-auto">
-        {children}
-      </main>
-    </div>
+    <AppShell
+      conversations={conversations ?? []}
+      userEmail={userEmail}
+      userName={userName}
+      isAdmin={isAdmin}
+      accessTier={accessTier}
+    >
+      {children}
+    </AppShell>
   )
 }
