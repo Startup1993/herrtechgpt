@@ -518,6 +518,13 @@ function AdminSidebar({
         <SectionHeader label="Inhalte" />
         <div className="space-y-1">
           <NavItem
+            href="/admin/content/modules"
+            icon={BookOpen}
+            label="Classroom-Module"
+            description="Lern-Module + Video-Zuordnung"
+            isActive={pathname.startsWith('/admin/content/modules')}
+          />
+          <NavItem
             href="/admin/content/agents"
             icon={Bot}
             label="Assistenten verwalten"
@@ -556,18 +563,15 @@ function AdminSidebar({
 }
 
 // ═══════════════════════════════════════════════════════════
-// CLASSROOM SIDEBAR (Drill-Down Modus 4)
+// CLASSROOM SIDEBAR (Drill-Down Modus 4) — loads real modules from DB
 // ═══════════════════════════════════════════════════════════
 
-const VIDEO_CATEGORIES = [
-  { id: 'all', label: 'Alle Videos', icon: Play },
-  { id: 'content-hook', label: 'Content & Hooks', icon: GraduationCap },
-  { id: 'funnel-monetization', label: 'Funnel & Monetarisierung', icon: GraduationCap },
-  { id: 'personal-growth', label: 'Persönliches Wachstum', icon: GraduationCap },
-  { id: 'ai-prompt', label: 'KI & Prompting', icon: GraduationCap },
-  { id: 'herr-tech', label: 'Herr Tech Allgemein', icon: GraduationCap },
-  { id: 'business-coach', label: 'Business & Strategie', icon: GraduationCap },
-]
+interface ModuleNavItem {
+  id: string
+  title: string
+  slug: string
+  emoji: string
+}
 
 function ClassroomSidebar({
   pathname,
@@ -580,6 +584,20 @@ function ClassroomSidebar({
   isAdmin?: boolean
   onDrillDown: (mode: SidebarMode) => void
 }) {
+  const [modules, setModules] = useState<ModuleNavItem[]>([])
+
+  useEffect(() => {
+    const supabase = createClient()
+    supabase
+      .from('course_modules')
+      .select('id, title, slug, emoji')
+      .eq('is_published', true)
+      .order('sort_order', { ascending: true })
+      .then(({ data }) => {
+        if (data) setModules(data as ModuleNavItem[])
+      })
+  }, [])
+
   return (
     <div className="flex-1 overflow-y-auto">
       <button
@@ -591,28 +609,37 @@ function ClassroomSidebar({
       </button>
 
       <nav className="px-3 py-4">
-        <SectionHeader label="Lernvideos" />
+        <SectionHeader label="Classroom" />
         <div className="space-y-1">
           <NavItem
             href="/dashboard/classroom"
             icon={Search}
-            label="Alle Videos durchsuchen"
+            label="Alle Module"
             isActive={pathname === '/dashboard/classroom'}
           />
         </div>
 
-        <SectionHeader label="Kategorien" />
-        <div className="space-y-1">
-          {VIDEO_CATEGORIES.filter(c => c.id !== 'all').map((cat) => (
-            <NavItem
-              key={cat.id}
-              href={`/dashboard/classroom?category=${cat.id}`}
-              icon={cat.icon}
-              label={cat.label}
-              isActive={pathname.includes(`category=${cat.id}`)}
-            />
-          ))}
-        </div>
+        {modules.length > 0 && (
+          <>
+            <SectionHeader label="Module" />
+            <div className="space-y-1">
+              {modules.map((m) => (
+                <Link
+                  key={m.id}
+                  href={`/dashboard/classroom/${m.slug}`}
+                  className={`flex items-center gap-3 px-3 py-2 rounded-[var(--radius-md)] text-sm transition-colors ${
+                    pathname === `/dashboard/classroom/${m.slug}`
+                      ? 'bg-primary/10 text-foreground font-medium'
+                      : 'text-muted hover:bg-surface-hover hover:text-foreground'
+                  }`}
+                >
+                  <span className="text-base shrink-0">{m.emoji}</span>
+                  <span className="truncate">{m.title}</span>
+                </Link>
+              ))}
+            </div>
+          </>
+        )}
 
         {/* Admin Quick-Link */}
         {isAdmin && (
