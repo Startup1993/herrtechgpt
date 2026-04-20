@@ -7,8 +7,8 @@ const SKIP_PATTERNS = [
   'Referenz', 'Empfehlung', 'KIMarketingClub',
 ]
 
-/** Skool-Ordner in exakter Reihenfolge — nur diese werden angezeigt */
-const SKOOL_FOLDERS = [
+/** Skool-Ordner in exakter Reihenfolge */
+const SKOOL_FOLDER_ORDER = [
   'Einfach starten - Der rote Faden!',
   'KI Marketing Course',
   'KI Content Erstellung',
@@ -30,20 +30,59 @@ const SKOOL_FOLDERS = [
   'Aufzeichnungen der Live Calls',
 ]
 
+/**
+ * Explizite Zuordnung: Wistia-Projektname → Skool-Kursname
+ * Mehrere Wistia-Projekte können in denselben Skool-Ordner gemappt werden.
+ */
+const WISTIA_TO_SKOOL: Record<string, string> = {
+  // Module → Skool-Kurse
+  'Modul 1 - KI Marketing':          'KI Marketing Course',
+  'Modul 2 - KI Content Erstellung': 'KI Content Erstellung',
+  'Modul 3 - KI Vertrieb':           'KI Vertrieb',
+
+  // Exakte / nahe Matches
+  'KI Telefonie':                     'KI Telefonie',
+  'Rechtliche Grenzen von KI':        'Rechtliche Grenzen von KI',
+  'KI Musik':                         'KI Musik',
+  'Passives Einkommen mit KI':        'Passives Einkommen mit KI',
+  'Community Wünsche':                'Community Wünsche',
+
+  // Umbenennungen Wistia → Skool
+  'KI Agenten':                       'KI Agenten & Automatisierung',
+  'Automatisierung':                  'KI Agenten & Automatisierung',
+  'Live Calls':                       'Aufzeichnungen der Live Calls',
+  'KI im SEO':                        'KI SEO',
+  'Toolboard':                        'KI Toolboard',
+  'Prompting':                        'Zur Prompt Legende werden',
+  'Veo3':                             'Viral mit Veo3',
+  'Sora2':                            'Super Viral mit SORA 2',
+  'Content Automatisierung':          'Viralen Content finden & Automatisieren',
+  'Social Media':                     'Viralen Content finden & Automatisieren',
+
+  // Einfach starten
+  'Just start!':                      'Einfach starten - Der rote Faden!',
+  'Willkommen zum KI Marketing Club!':'Einfach starten - Der rote Faden!',
+
+  // Weitere Zuordnungen
+  'AI Video Creations':               'Seedance 2.0',
+  'Anleitung Adobe Express':          'KI Content Erstellung',
+  'Viral mit KI Musik':               'KI Musik',
+  'Webseite':                         'KI Marketing Course',
+  'Landingpage':                      'KI Marketing Course',
+  'Kunden':                           'KI Vertrieb',
+  'Webinar 14.04.2026':               'Aufzeichnungen der Live Calls',
+}
+
 /** Findet den passenden Skool-Ordner für einen Wistia-Projektnamen */
 function matchSkoolFolder(wistiaName: string): { name: string; order: number } | null {
   const decoded = decodeEntities(wistiaName).trim()
-  const lower = decoded.toLowerCase()
+  const skoolName = WISTIA_TO_SKOOL[decoded]
+  if (!skoolName) return null
 
-  for (let i = 0; i < SKOOL_FOLDERS.length; i++) {
-    const skool = SKOOL_FOLDERS[i]
-    const skoolLower = skool.toLowerCase()
-    // Exakt, startsWith oder der Skool-Name ist im Wistia-Namen enthalten
-    if (lower === skoolLower || lower.startsWith(skoolLower) || skoolLower.startsWith(lower)) {
-      return { name: skool, order: i }
-    }
-  }
-  return null
+  const order = SKOOL_FOLDER_ORDER.indexOf(skoolName)
+  if (order === -1) return null
+
+  return { name: skoolName, order }
 }
 
 interface WistiaMedia {
