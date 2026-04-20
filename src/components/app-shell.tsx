@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { usePathname } from 'next/navigation'
+import Link from 'next/link'
 import { Sidebar } from './sidebar'
 import type { Conversation } from '@/lib/types'
 
@@ -90,7 +91,21 @@ export function AppShell({ conversations, userEmail, userName, isAdmin, accessTi
           )}
         </button>
 
-        <main className="flex-1 min-h-0 overflow-y-auto">{children}</main>
+        <main className="flex-1 min-h-0 overflow-y-auto relative">
+          {/* Übersicht-Button — oben rechts */}
+          <div className="absolute top-4 right-4 z-10">
+            <Link
+              href="/dashboard"
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium text-muted hover:text-foreground bg-surface/80 hover:bg-surface-secondary border border-border backdrop-blur-sm transition-colors shadow-sm"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <polyline points="15 18 9 12 15 6" />
+              </svg>
+              Übersicht
+            </Link>
+          </div>
+          {children}
+        </main>
       </div>
     </div>
   )
