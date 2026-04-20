@@ -221,7 +221,13 @@ export async function GET() {
     .sort((a, b) => a.order - b.order)
     .map(({ order: _order, ...f }) => ({
       ...f,
-      videos: f.videos.sort((a, b) => a.title.localeCompare(b.title, 'de')),
+      // Standard: nach Datum (neueste zuerst), Frontend kann umsortieren
+      videos: f.videos.sort((a, b) => {
+        if (!a.date && !b.date) return 0
+        if (!a.date) return 1
+        if (!b.date) return -1
+        return b.date.localeCompare(a.date)
+      }),
     }))
 
   const totalInFolders = folders.reduce((n, f) => n + f.videos.length, 0)
