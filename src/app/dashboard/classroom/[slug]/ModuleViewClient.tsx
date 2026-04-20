@@ -1,10 +1,10 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useMemo } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import ReactMarkdown from 'react-markdown'
-import { ChevronLeft, Play, CheckCircle2, Circle, BookOpen } from 'lucide-react'
+import { ChevronLeft, Play, CheckCircle2, Circle, BookOpen, ChevronDown } from 'lucide-react'
 
 interface CourseModule {
   id: string
@@ -21,21 +21,58 @@ interface ModuleVideo {
   description: string
   sort_order: number
   duration_seconds: number | null
+  chapter_id: string | null
+}
+
+interface Chapter {
+  id: string
+  title: string
+  description: string
+  sort_order: number
+}
+
+interface Group {
+  kind: 'chapter' | 'direct'
+  chapter?: Chapter
+  videos: ModuleVideo[]
 }
 
 export function ModuleViewClient({
   module,
   videos,
+  chapters,
   activeVideoId,
 }: {
   module: CourseModule
   videos: ModuleVideo[]
+  chapters: Chapter[]
   activeVideoId: string | null
 }) {
   const router = useRouter()
   const [activeId, setActiveId] = useState<string | null>(activeVideoId)
+  const [collapsedChapters, setCollapsedChapters] = useState<Set<string>>(new Set())
+
   const activeVideo = videos.find(v => v.id === activeId) ?? videos[0]
   const activeIndex = videos.findIndex(v => v.id === activeVideo?.id)
+
+  // Group videos: direct-first, then by chapter
+  const groups = useMemo<Group[]>(() => {
+    const directVideos = videos.filter(v => !v.chapter_id)
+    const result: Group[] = []
+    if (directVideos.length > 0) {
+      result.push({ kind: 'direct', videos: directVideos })
+    }
+    for (const chapter of chapters) {
+      const chapterVideos = videos.filter(v => v.chapter_id === chapter.id)
+      if (chapterVideos.length > 0) {
+        result.push({ kind: 'chapter', chapter, videos: chapterVideos })
+      }
+    }
+    return result
+  }, [videos, chapters])
+
+  // Active chapter (for showing which is open)
+  const activeChapterId = activeVideo?.chapter_id ?? null
 
   const formatDuration = (sec: number | null) => {
     if (!sec) return null
@@ -48,11 +85,22 @@ export function ModuleViewClient({
     router.replace(`/dashboard/classroom/${module.slug}?video=${id}`, { scroll: false })
   }
 
+  const toggleChapter = (chapterId: string) => {
+    setCollapsedChapters(prev => {
+      const next = new Set(prev)
+      if (next.has(chapterId)) next.delete(chapterId)
+      else next.add(chapterId)
+      return next
+    })
+  }
+
+  // Global lesson number tracker
+  let globalIndex = 0
+
   return (
     <div className="flex flex-col lg:flex-row h-full">
-      {/* Sidebar with Video List (Skool-Style) */}
+      {/* Sidebar */}
       <aside className="lg:w-80 lg:border-r border-border bg-surface lg:h-full lg:overflow-y-auto shrink-0">
-        {/* Header */}
         <div className="p-4 border-b border-border">
           <Link
             href="/dashboard/classroom"
@@ -63,44 +111,79 @@ export function ModuleViewClient({
           <div className="flex items-center gap-3">
             <span className="text-2xl">{module.emoji}</span>
             <div className="flex-1 min-w-0">
-              <h2 className="font-semibold text-foreground text-sm truncate">{module.title}</h2>
-              <p className="text-xs text-muted">{videos.length} Lektionen</p>
+              <h2 className="font-semibold text-foreground text-sm">{module.title}</h2>
+              <p className="text-xs text-muted">{videos.length} Lektionen{chapters.length > 0 && ` · ${chapters.length} Kapitel`}</p>
             </div>
           </div>
         </div>
 
-        {/* Video List */}
         <nav className="p-2">
           {videos.length === 0 ? (
             <p className="text-sm text-muted text-center py-8">Noch keine Videos.</p>
           ) : (
-            <div className="space-y-0.5">
-              {videos.map((v, i) => {
-                const isActive = v.id === activeVideo?.id
-                return (
-                  <button
-                    key={v.id}
-                    onClick={() => handleVideoClick(v.id)}
-                    className={`w-full flex items-start gap-2.5 px-3 py-2.5 rounded-[var(--radius-md)] text-left transition-colors ${
-                      isActive
-                        ? 'bg-primary/10'
-                        : 'hover:bg-surface-hover'
-                    }`}
-                  >
-                    <span className={`text-xs font-mono mt-0.5 shrink-0 w-5 text-right ${
-                      isActive ? 'text-primary' : 'text-muted'
-                    }`}>{String(i + 1).padStart(2, '0')}</span>
-                    <Circle size={14} className={`mt-0.5 shrink-0 ${isActive ? 'text-primary' : 'text-muted-light'}`} fill={isActive ? 'currentColor' : 'none'} />
-                    <div className="flex-1 min-w-0">
-                      <p className={`text-sm leading-snug ${isActive ? 'text-foreground font-medium' : 'text-muted'}`}>
-                        {v.title}
-                      </p>
-                      {v.duration_seconds && (
-                        <p className="text-xs text-muted-light mt-0.5">{formatDuration(v.duration_seconds)}</p>
+            <div className="space-y-1">
+              {groups.map((group, gIdx) => {
+                if (group.kind === 'direct') {
+                  // Direct lessons (no chapter wrapper)
+                  return (
+                    <div key={`direct-${gIdx}`} className="space-y-0.5">
+                      {group.videos.map(v => {
+                        globalIndex++
+                        const isActive = v.id === activeVideo?.id
+                        const num = globalIndex
+                        return (
+                          <LessonRow
+                            key={v.id}
+                            video={v}
+                            num={num}
+                            isActive={isActive}
+                            onClick={() => handleVideoClick(v.id)}
+                            formatDuration={formatDuration}
+                          />
+                        )
+                      })}
+                    </div>
+                  )
+                } else {
+                  // Chapter with nested lessons
+                  const chapter = group.chapter!
+                  const isCollapsed = collapsedChapters.has(chapter.id) && chapter.id !== activeChapterId
+                  const chapterHasActive = group.videos.some(v => v.id === activeVideo?.id)
+                  return (
+                    <div key={chapter.id} className="mt-3">
+                      <button
+                        onClick={() => toggleChapter(chapter.id)}
+                        className={`w-full flex items-center gap-2 px-3 py-2 rounded-[var(--radius-md)] text-left transition-colors ${
+                          chapterHasActive ? 'bg-primary/5 text-primary' : 'text-foreground hover:bg-surface-hover'
+                        }`}
+                      >
+                        <ChevronDown size={14} className={`transition-transform shrink-0 ${isCollapsed ? '-rotate-90' : ''}`} />
+                        <span className="text-xs font-semibold uppercase tracking-wider flex-1 truncate">
+                          {chapter.title}
+                        </span>
+                        <span className="text-xs text-muted">{group.videos.length}</span>
+                      </button>
+                      {!isCollapsed && (
+                        <div className="ml-4 mt-1 space-y-0.5 border-l-2 border-border pl-2">
+                          {group.videos.map(v => {
+                            globalIndex++
+                            const isActive = v.id === activeVideo?.id
+                            return (
+                              <LessonRow
+                                key={v.id}
+                                video={v}
+                                num={globalIndex}
+                                isActive={isActive}
+                                onClick={() => handleVideoClick(v.id)}
+                                formatDuration={formatDuration}
+                              />
+                            )
+                          })}
+                        </div>
                       )}
                     </div>
-                  </button>
-                )
+                  )
+                }
               })}
             </div>
           )}
@@ -118,8 +201,15 @@ export function ModuleViewClient({
           </div>
         ) : (
           <article className="max-w-3xl mx-auto p-4 sm:p-8">
-            {/* Lesson Header */}
-            <div className="mb-4 flex items-center gap-2 text-xs text-muted">
+            <div className="mb-4 flex items-center gap-2 text-xs text-muted flex-wrap">
+              {activeVideo.chapter_id && (
+                <>
+                  <span className="font-medium">
+                    {chapters.find(c => c.id === activeVideo.chapter_id)?.title}
+                  </span>
+                  <span>·</span>
+                </>
+              )}
               <span>Lektion {activeIndex + 1} von {videos.length}</span>
               {activeVideo.duration_seconds && (
                 <>
@@ -133,7 +223,6 @@ export function ModuleViewClient({
               {activeVideo.title}
             </h1>
 
-            {/* Video Player */}
             <div className="card-static overflow-hidden mb-6">
               <div className="relative pb-[56.25%] bg-black">
                 {/^[a-z0-9]{10}$/i.test(activeVideo.wistia_hashed_id) ? (
@@ -148,16 +237,15 @@ export function ModuleViewClient({
                   <div className="absolute inset-0 flex items-center justify-center text-white text-center p-6">
                     <div>
                       <p className="text-lg font-semibold mb-2">Video nicht verfügbar</p>
-                      <p className="text-sm text-white/60">Wistia-ID ungültig.</p>
+                      <p className="text-sm text-white/60">Diese Lektion hat kein Video (reiner Text).</p>
                     </div>
                   </div>
                 )}
               </div>
             </div>
 
-            {/* Description (Markdown) */}
             {activeVideo.description ? (
-              <div className="prose prose-sm max-w-none text-foreground">
+              <div className="text-foreground">
                 <ReactMarkdown
                   components={{
                     h1: ({ children }) => <h2 className="text-lg font-semibold mt-6 mb-2 first:mt-0">{children}</h2>,
@@ -175,6 +263,8 @@ export function ModuleViewClient({
                       </a>
                     ),
                     hr: () => <hr className="border-border my-4" />,
+                    blockquote: ({ children }) => <blockquote className="border-l-4 border-primary/30 pl-4 italic my-3 text-muted">{children}</blockquote>,
+                    code: ({ children }) => <code className="bg-surface-secondary px-1.5 py-0.5 rounded text-xs font-mono">{children}</code>,
                   }}
                 >
                   {activeVideo.description}
@@ -184,7 +274,6 @@ export function ModuleViewClient({
               <p className="text-sm text-muted italic">Keine Beschreibung verfügbar.</p>
             )}
 
-            {/* Navigation Prev/Next */}
             <div className="flex items-center justify-between mt-8 pt-6 border-t border-border">
               {activeIndex > 0 ? (
                 <button
@@ -192,7 +281,7 @@ export function ModuleViewClient({
                   className="btn-ghost border border-border inline-flex"
                 >
                   <ChevronLeft size={14} />
-                  Vorherige Lektion
+                  Vorherige
                 </button>
               ) : <div />}
               {activeIndex < videos.length - 1 ? (
@@ -200,13 +289,13 @@ export function ModuleViewClient({
                   onClick={() => handleVideoClick(videos[activeIndex + 1].id)}
                   className="btn-primary inline-flex"
                 >
-                  Nächste Lektion
+                  Nächste
                   <Play size={14} />
                 </button>
               ) : (
                 <Link href="/dashboard/classroom" className="btn-primary inline-flex">
                   <CheckCircle2 size={14} />
-                  Modul abgeschlossen
+                  Abgeschlossen
                 </Link>
               )}
             </div>
@@ -214,5 +303,41 @@ export function ModuleViewClient({
         )}
       </main>
     </div>
+  )
+}
+
+function LessonRow({
+  video, num, isActive, onClick, formatDuration,
+}: {
+  video: ModuleVideo
+  num: number
+  isActive: boolean
+  onClick: () => void
+  formatDuration: (sec: number | null) => string | null
+}) {
+  return (
+    <button
+      onClick={onClick}
+      className={`w-full flex items-start gap-2.5 px-3 py-2 rounded-[var(--radius-md)] text-left transition-colors ${
+        isActive ? 'bg-primary/10' : 'hover:bg-surface-hover'
+      }`}
+    >
+      <span className={`text-xs font-mono mt-0.5 shrink-0 w-5 text-right ${
+        isActive ? 'text-primary' : 'text-muted'
+      }`}>{String(num).padStart(2, '0')}</span>
+      <Circle
+        size={12}
+        className={`mt-1 shrink-0 ${isActive ? 'text-primary' : 'text-muted-light'}`}
+        fill={isActive ? 'currentColor' : 'none'}
+      />
+      <div className="flex-1 min-w-0">
+        <p className={`text-sm leading-snug ${isActive ? 'text-foreground font-medium' : 'text-muted'}`}>
+          {video.title}
+        </p>
+        {video.duration_seconds && (
+          <p className="text-xs text-muted-light mt-0.5">{formatDuration(video.duration_seconds)}</p>
+        )}
+      </div>
+    </button>
   )
 }

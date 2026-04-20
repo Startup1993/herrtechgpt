@@ -23,12 +23,21 @@ export default async function ModuleViewPage({
 
   if (!courseModule) notFound()
 
-  const { data: videos } = await supabase
-    .from('module_videos')
-    .select('*')
-    .eq('module_id', courseModule.id)
-    .eq('is_published', true)
-    .order('sort_order', { ascending: true })
+  // Fetch videos + chapters in parallel
+  const [{ data: videos }, { data: chapters }] = await Promise.all([
+    supabase
+      .from('module_videos')
+      .select('*')
+      .eq('module_id', courseModule.id)
+      .eq('is_published', true)
+      .order('sort_order', { ascending: true }),
+    supabase
+      .from('module_chapters')
+      .select('*')
+      .eq('module_id', courseModule.id)
+      .eq('is_published', true)
+      .order('sort_order', { ascending: true }),
+  ])
 
   // Determine active video
   const activeVideo = videoId
@@ -39,6 +48,7 @@ export default async function ModuleViewPage({
     <ModuleViewClient
       module={courseModule}
       videos={videos ?? []}
+      chapters={chapters ?? []}
       activeVideoId={activeVideo?.id ?? null}
     />
   )
