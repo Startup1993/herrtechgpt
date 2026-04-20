@@ -27,7 +27,7 @@ export default function DashboardPage() {
   const [folders, setFolders] = useState<Folder[]>([])
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
-  const [activeFolder, setActiveFolder] = useState<number | null>(null)
+  const [activeFolder, setActiveFolder] = useState<number | 'newest' | null>(null)
   const [playingVideo, setPlayingVideo] = useState<string | null>(null)
   const [total, setTotal] = useState(0)
   const [collapsedFolders, setCollapsedFolders] = useState<Set<number>>(new Set())
@@ -56,18 +56,35 @@ export default function DashboardPage() {
     })
   }
 
-  // Filter
-  const filteredFolders = folders
-    .filter((f) => !activeFolder || f.id === activeFolder)
-    .map((f) => ({
-      ...f,
-      videos: f.videos.filter((v) =>
-        v.title.toLowerCase().includes(search.toLowerCase()),
-      ),
-    }))
-    .filter((f) => f.videos.length > 0)
+  // "Neueste" — alle Videos flach nach Datum sortiert
+  const allVideosSorted = folders
+    .flatMap((f) => f.videos)
+    .filter((v) => v.title.toLowerCase().includes(search.toLowerCase()))
+    .sort((a, b) => {
+      if (!a.date && !b.date) return 0
+      if (!a.date) return 1
+      if (!b.date) return -1
+      return b.date.localeCompare(a.date)
+    })
 
-  const filteredTotal = filteredFolders.reduce((n, f) => n + f.videos.length, 0)
+  const isNewest = activeFolder === 'newest'
+
+  // Filter
+  const filteredFolders = isNewest
+    ? []
+    : folders
+        .filter((f) => !activeFolder || f.id === activeFolder)
+        .map((f) => ({
+          ...f,
+          videos: f.videos.filter((v) =>
+            v.title.toLowerCase().includes(search.toLowerCase()),
+          ),
+        }))
+        .filter((f) => f.videos.length > 0)
+
+  const filteredTotal = isNewest
+    ? allVideosSorted.length
+    : filteredFolders.reduce((n, f) => n + f.videos.length, 0)
 
   return (
     <div className="max-w-6xl mx-auto px-6 py-8">
@@ -98,6 +115,11 @@ export default function DashboardPage() {
             label={`Alle (${total})`}
             active={!activeFolder}
             onClick={() => setActiveFolder(null)}
+          />
+          <FilterChip
+            label="Neueste"
+            active={activeFolder === 'newest'}
+            onClick={() => setActiveFolder(activeFolder === 'newest' ? null : 'newest')}
           />
           {folders.map((f) => (
             <FilterChip
@@ -136,8 +158,21 @@ export default function DashboardPage() {
         </p>
       )}
 
+      {/* Neueste Videos — flache Liste nach Datum */}
+      {!loading && isNewest && allVideosSorted.length > 0 && (
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+          {allVideosSorted.map((video) => (
+            <VideoCard
+              key={video.id}
+              video={video}
+              onPlay={() => setPlayingVideo(video.hashedId)}
+            />
+          ))}
+        </div>
+      )}
+
       {/* Ordner + Videos */}
-      {!loading && filteredFolders.map((folder) => {
+      {!loading && !isNewest && filteredFolders.map((folder) => {
         const isCollapsed = collapsedFolders.has(folder.id)
         return (
           <section key={folder.id} className="mb-8">
