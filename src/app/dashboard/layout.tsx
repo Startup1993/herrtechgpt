@@ -20,7 +20,7 @@ export default async function DashboardLayout({
       .single(),
     supabase
       .from('conversations')
-      .select('id, agent_id, title, updated_at')
+      .select('id, user_id, agent_id, title, created_at, updated_at')
       .eq('user_id', user.id)
       .order('updated_at', { ascending: false })
       .limit(15),
