@@ -8,12 +8,14 @@ CREATE TABLE IF NOT EXISTS public.video_descriptions (
 ALTER TABLE public.video_descriptions ENABLE ROW LEVEL SECURITY;
 
 -- Alle authentifizierten User dürfen lesen
+DROP POLICY IF EXISTS "Authenticated users can read video descriptions" ON public.video_descriptions;
 CREATE POLICY "Authenticated users can read video descriptions"
   ON public.video_descriptions FOR SELECT
   TO authenticated
   USING (true);
 
 -- Service Role kann alles (für Script)
+DROP POLICY IF EXISTS "Service role full access" ON public.video_descriptions;
 CREATE POLICY "Service role full access"
   ON public.video_descriptions FOR ALL
   TO service_role
