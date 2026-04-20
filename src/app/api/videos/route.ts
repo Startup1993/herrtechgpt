@@ -7,7 +7,44 @@ const SKIP_PATTERNS = [
   'Referenz', 'Empfehlung', 'KIMarketingClub',
 ]
 
-const SKIP_PROJECTS = ['Stuff', 'Untitled Folder']
+/** Skool-Ordner in exakter Reihenfolge — nur diese werden angezeigt */
+const SKOOL_FOLDERS = [
+  'Einfach starten - Der rote Faden!',
+  'KI Marketing Course',
+  'KI Content Erstellung',
+  'Seedance 2.0',
+  'Claude',
+  'KI Vertrieb',
+  'KI Telefonie',
+  'Rechtliche Grenzen von KI',
+  'Viralen Content finden & Automatisieren',
+  'Viral mit Veo3',
+  'Super Viral mit SORA 2',
+  'KI Agenten & Automatisierung',
+  'Zur Prompt Legende werden',
+  'KI SEO',
+  'KI Toolboard',
+  'KI Musik',
+  'Passives Einkommen mit KI',
+  'Community Wünsche',
+  'Aufzeichnungen der Live Calls',
+]
+
+/** Findet den passenden Skool-Ordner für einen Wistia-Projektnamen */
+function matchSkoolFolder(wistiaName: string): { name: string; order: number } | null {
+  const decoded = decodeEntities(wistiaName).trim()
+  const lower = decoded.toLowerCase()
+
+  for (let i = 0; i < SKOOL_FOLDERS.length; i++) {
+    const skool = SKOOL_FOLDERS[i]
+    const skoolLower = skool.toLowerCase()
+    // Exakt, startsWith oder der Skool-Name ist im Wistia-Namen enthalten
+    if (lower === skoolLower || lower.startsWith(skoolLower) || skoolLower.startsWith(lower)) {
+      return { name: skool, order: i }
+    }
+  }
+  return null
+}
 
 interface WistiaMedia {
   id: number
@@ -93,19 +130,16 @@ export async function GET() {
     })
   }
 
-  // ── Videos filtern + nach Wistia-Ordner gruppieren ────────────────────
+  // ── Videos filtern + nach Skool-Ordner gruppieren ──────────────────────
   const filtered = wistiaVideos
     .filter((v) => !shouldSkip(v.name))
     .filter((v) => (v.duration ?? 0) >= 60)
-    .filter((v) => {
-      const projName = v.project?.name ?? ''
-      return !SKIP_PROJECTS.some((s) => projName.startsWith(s))
-    })
 
-  // Nach Projekt-ID gruppieren
+  // Nach Skool-Ordner gruppieren (nur Videos deren Wistia-Projekt einem Skool-Ordner entspricht)
   const folderMap: Record<string, {
     id: number
     name: string
+    order: number
     videos: Array<{
       id: string
       hashedId: string
@@ -117,18 +151,22 @@ export async function GET() {
   }> = {}
 
   for (const v of filtered) {
-    const projId = String(v.project?.id ?? 'other')
-    const projName = v.project?.name ?? 'Sonstiges'
+    const projName = v.project?.name ?? ''
+    const match = matchSkoolFolder(projName)
+    if (!match) continue // Wistia-Ordner nicht in Skool → ausblenden
 
-    if (!folderMap[projId]) {
-      folderMap[projId] = {
+    const key = match.name
+
+    if (!folderMap[key]) {
+      folderMap[key] = {
         id: v.project?.id ?? 0,
-        name: decodeEntities(projName),
+        name: match.name,
+        order: match.order,
         videos: [],
       }
     }
 
-    folderMap[projId].videos.push({
+    folderMap[key].videos.push({
       id: String(v.id),
       hashedId: v.hashed_id,
       title: decodeEntities(v.name),
@@ -138,28 +176,19 @@ export async function GET() {
     })
   }
 
-  // Ordner sortieren: erst Module (numerisch), dann Themen, dann Live Calls am Ende
-  const folderOrder = (name: string): number => {
-    if (name.startsWith('Modul ')) return 0
-    if (name === 'Live Calls') return 99
-    if (name === 'Sonstiges') return 100
-    return 50
-  }
-
+  // Sortierung nach Skool-Reihenfolge
   const folders = Object.values(folderMap)
     .filter((f) => f.videos.length > 0)
-    .sort((a, b) => {
-      const orderDiff = folderOrder(a.name) - folderOrder(b.name)
-      if (orderDiff !== 0) return orderDiff
-      return a.name.localeCompare(b.name, 'de')
-    })
-    .map((f) => ({
+    .sort((a, b) => a.order - b.order)
+    .map(({ order: _order, ...f }) => ({
       ...f,
       videos: f.videos.sort((a, b) => a.title.localeCompare(b.title, 'de')),
     }))
 
+  const totalInFolders = folders.reduce((n, f) => n + f.videos.length, 0)
+
   return NextResponse.json({
-    total: filtered.length,
+    total: totalInFolders,
     folders,
   })
 }
