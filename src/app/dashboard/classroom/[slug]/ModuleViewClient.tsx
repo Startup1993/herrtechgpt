@@ -211,21 +211,21 @@ export function ModuleViewClient({
                 </>
               )}
               <span>Lektion {activeIndex + 1} von {videos.length}</span>
-              {activeVideo.duration_seconds && (
+              {(activeVideo.duration_seconds ?? 0) > 0 ? (
                 <>
                   <span>·</span>
                   <span>{formatDuration(activeVideo.duration_seconds)}</span>
                 </>
-              )}
+              ) : null}
             </div>
 
             <h1 className="text-xl sm:text-2xl font-bold text-foreground mb-6">
               {activeVideo.title}
             </h1>
 
-            <div className="card-static overflow-hidden mb-6">
-              <div className="relative pb-[56.25%] bg-black">
-                {/^[a-z0-9]{10}$/i.test(activeVideo.wistia_hashed_id) ? (
+            {/^[a-z0-9]{10}$/i.test(activeVideo.wistia_hashed_id) && (
+              <div className="card-static overflow-hidden mb-6">
+                <div className="relative pb-[56.25%] bg-black">
                   <iframe
                     key={activeVideo.id}
                     src={`https://fast.wistia.net/embed/iframe/${activeVideo.wistia_hashed_id}?autoPlay=false`}
@@ -233,16 +233,9 @@ export function ModuleViewClient({
                     allowFullScreen
                     className="absolute inset-0 w-full h-full"
                   />
-                ) : (
-                  <div className="absolute inset-0 flex items-center justify-center text-white text-center p-6">
-                    <div>
-                      <p className="text-lg font-semibold mb-2">Video nicht verfügbar</p>
-                      <p className="text-sm text-white/60">Diese Lektion hat kein Video (reiner Text).</p>
-                    </div>
-                  </div>
-                )}
+                </div>
               </div>
-            </div>
+            )}
 
             {activeVideo.description ? (
               <div className="text-foreground">
@@ -265,6 +258,13 @@ export function ModuleViewClient({
                     hr: () => <hr className="border-border my-4" />,
                     blockquote: ({ children }) => <blockquote className="border-l-4 border-primary/30 pl-4 italic my-3 text-muted">{children}</blockquote>,
                     code: ({ children }) => <code className="bg-surface-secondary px-1.5 py-0.5 rounded text-xs font-mono">{children}</code>,
+                    img: ({ src, alt }) => (
+                      <span className="block my-4">
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img src={src} alt={alt ?? ''} className="rounded-[var(--radius-lg)] max-w-full h-auto border border-border" />
+                        {alt && <span className="block text-xs text-muted mt-1 text-center italic">{alt}</span>}
+                      </span>
+                    ),
                   }}
                 >
                   {activeVideo.description}
@@ -334,9 +334,9 @@ function LessonRow({
         <p className={`text-sm leading-snug ${isActive ? 'text-foreground font-medium' : 'text-muted'}`}>
           {video.title}
         </p>
-        {video.duration_seconds && (
+        {(video.duration_seconds ?? 0) > 0 ? (
           <p className="text-xs text-muted-light mt-0.5">{formatDuration(video.duration_seconds)}</p>
-        )}
+        ) : null}
       </div>
     </button>
   )
