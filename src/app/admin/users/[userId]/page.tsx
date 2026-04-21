@@ -51,7 +51,7 @@ export default async function UserDetailPage({
     id: userId,
     email: authUser.email ?? '',
     role: (profile.role ?? 'user') as string,
-    accessTier: (profile.access_tier ?? 'basic') as string,
+    accessTier: (profile.access_tier ?? 'basic') as 'basic' | 'alumni' | 'premium',
     createdAt: profile.created_at,
     lastSignIn: authUser.last_sign_in_at ?? null,
     background: profile.background ?? '',

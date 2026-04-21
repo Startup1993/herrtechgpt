@@ -3,13 +3,15 @@
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { ChevronLeft, Mail, Shield, Crown, Calendar, MessageSquare, User, Save, Loader2 } from 'lucide-react'
+import { ChevronLeft, Mail, Shield, Calendar, MessageSquare, User, Save, Loader2 } from 'lucide-react'
+
+type AccessTier = 'basic' | 'alumni' | 'premium'
 
 interface UserData {
   id: string
   email: string
   role: string
-  accessTier: string
+  accessTier: AccessTier
   createdAt: string
   lastSignIn: string | null
   background: string
@@ -32,30 +34,85 @@ interface Stats {
   }[]
 }
 
+const TIER_OPTIONS: { value: AccessTier; label: string; hint: string }[] = [
+  { value: 'premium', label: 'Community (Premium)', hint: 'Aktives KI Marketing Club Mitglied — voller Zugriff' },
+  { value: 'alumni', label: 'Alumni', hint: 'Ehemalig — Classroom lebenslang frei, Chat & Toolbox gesperrt' },
+  { value: 'basic', label: 'Basic (Free)', hint: 'Noch kein Zugriff — muss Module einzeln erkaufen' },
+]
+
 export function UserDetailClient({ user, stats }: { user: UserData; stats: Stats }) {
   const router = useRouter()
-  const [role, setRole] = useState(user.role)
-  const [accessTier, setAccessTier] = useState(user.accessTier)
+  const [form, setForm] = useState({
+    email: user.email,
+    role: user.role,
+    accessTier: user.accessTier,
+    background: user.background,
+    market: user.market,
+    targetAudience: user.targetAudience,
+    offer: user.offer,
+    experienceLevel: user.experienceLevel,
+    primaryGoal: user.primaryGoal,
+  })
   const [saving, setSaving] = useState(false)
   const [saved, setSaved] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  const dirty =
+    form.email !== user.email ||
+    form.role !== user.role ||
+    form.accessTier !== user.accessTier ||
+    form.background !== user.background ||
+    form.market !== user.market ||
+    form.targetAudience !== user.targetAudience ||
+    form.offer !== user.offer ||
+    form.experienceLevel !== user.experienceLevel ||
+    form.primaryGoal !== user.primaryGoal
 
   const handleSave = async () => {
     setSaving(true)
-    await fetch('/api/admin/users', {
+    setError(null)
+    const payload: Record<string, string> = { userId: user.id }
+    if (form.email !== user.email) payload.email = form.email.trim()
+    if (form.role !== user.role) payload.role = form.role
+    if (form.accessTier !== user.accessTier) payload.access_tier = form.accessTier
+    if (form.background !== user.background) payload.background = form.background
+    if (form.market !== user.market) payload.market = form.market
+    if (form.targetAudience !== user.targetAudience) payload.target_audience = form.targetAudience
+    if (form.offer !== user.offer) payload.offer = form.offer
+    if (form.experienceLevel !== user.experienceLevel) payload.experience_level = form.experienceLevel
+    if (form.primaryGoal !== user.primaryGoal) payload.primary_goal = form.primaryGoal
+
+    const res = await fetch('/api/admin/users', {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ userId: user.id, role, access_tier: accessTier }),
+      body: JSON.stringify(payload),
     })
     setSaving(false)
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}))
+      setError(data.error ?? 'Fehler beim Speichern')
+      return
+    }
     setSaved(true)
     setTimeout(() => setSaved(false), 2000)
     router.refresh()
   }
 
+  const set = <K extends keyof typeof form>(key: K, value: (typeof form)[K]) =>
+    setForm((f) => ({ ...f, [key]: value }))
+
   const formatDate = (iso: string | null) => {
     if (!iso) return '—'
     return new Date(iso).toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })
   }
+
+  const tierBadgeClass = form.accessTier === 'premium'
+    ? 'bg-green-100 text-green-700 dark:bg-green-950/30 dark:text-green-400'
+    : form.accessTier === 'alumni'
+      ? 'bg-amber-100 text-amber-700 dark:bg-amber-950/30 dark:text-amber-400'
+      : 'bg-surface-secondary text-muted'
+
+  const tierLabel = form.accessTier === 'premium' ? 'Community' : form.accessTier === 'alumni' ? 'Alumni' : 'Basic'
 
   return (
     <div className="p-4 sm:p-8 max-w-5xl mx-auto">
@@ -68,17 +125,15 @@ export function UserDetailClient({ user, stats }: { user: UserData; stats: Stats
           <h1 className="text-2xl font-bold text-foreground">{user.email}</h1>
           <div className="flex items-center gap-2 mt-1">
             <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${
-              user.role === 'admin' ? 'bg-primary/10 text-primary' : 'bg-surface-secondary text-muted'
-            }`}>{role === 'admin' ? 'Admin' : 'Nutzer'}</span>
-            <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${
-              accessTier === 'premium' ? 'bg-green-100 text-green-700 dark:bg-green-950/30 dark:text-green-400' : 'bg-surface-secondary text-muted'
-            }`}>{accessTier === 'premium' ? 'Premium' : 'Basic'}</span>
+              form.role === 'admin' ? 'bg-primary/10 text-primary' : 'bg-surface-secondary text-muted'
+            }`}>{form.role === 'admin' ? 'Admin' : 'Nutzer'}</span>
+            <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${tierBadgeClass}`}>{tierLabel}</span>
           </div>
         </div>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Left Column: Stats + Edit */}
+        {/* Left Column: Stats + Account */}
         <div className="lg:col-span-1 space-y-5">
           {/* Quick Stats */}
           <div className="card-static p-5">
@@ -90,44 +145,6 @@ export function UserDetailClient({ user, stats }: { user: UserData; stats: Stats
               <StatRow icon={<Calendar size={14} />} label="Registriert" value={formatDate(user.createdAt)} />
               <StatRow icon={<Calendar size={14} />} label="Letzter Login" value={formatDate(user.lastSignIn)} />
               <StatRow icon={<Shield size={14} />} label="Lernpfad" value={user.hasLearningPath ? 'Erstellt' : 'Nicht erstellt'} />
-            </div>
-          </div>
-
-          {/* Edit Role & Tier */}
-          <div className="card-static p-5">
-            <h2 className="text-sm font-semibold text-foreground mb-4">Bearbeiten</h2>
-            <div className="space-y-4">
-              <div>
-                <label className="block text-xs font-medium text-muted mb-1.5">Rolle</label>
-                <select
-                  value={role}
-                  onChange={(e) => setRole(e.target.value)}
-                  className="w-full px-3 py-2 border border-border rounded-[var(--radius-md)] bg-background text-sm focus:outline-none focus:ring-2 focus:ring-primary/30"
-                >
-                  <option value="user">Nutzer</option>
-                  <option value="admin">Admin</option>
-                </select>
-              </div>
-              <div>
-                <label className="block text-xs font-medium text-muted mb-1.5">Zugang</label>
-                <select
-                  value={accessTier}
-                  onChange={(e) => setAccessTier(e.target.value)}
-                  className="w-full px-3 py-2 border border-border rounded-[var(--radius-md)] bg-background text-sm focus:outline-none focus:ring-2 focus:ring-primary/30"
-                >
-                  <option value="basic">Basic (Free)</option>
-                  <option value="premium">Premium</option>
-                </select>
-              </div>
-              <button
-                onClick={handleSave}
-                disabled={saving || (role === user.role && accessTier === user.accessTier)}
-                className="btn-primary w-full justify-center disabled:opacity-40"
-              >
-                {saving ? <><Loader2 size={14} className="animate-spin" /> Speichere...</> :
-                 saved ? '✓ Gespeichert' :
-                 <><Save size={14} /> Änderungen speichern</>}
-              </button>
             </div>
           </div>
 
@@ -148,18 +165,118 @@ export function UserDetailClient({ user, stats }: { user: UserData; stats: Stats
           )}
         </div>
 
-        {/* Right Column: Profile + Conversations */}
+        {/* Right Column: Edit Form */}
         <div className="lg:col-span-2 space-y-5">
+          {/* Account */}
+          <div className="card-static p-5">
+            <h2 className="text-sm font-semibold text-foreground mb-4">Account</h2>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <Field label="E-Mail" span2>
+                <input
+                  type="email"
+                  value={form.email}
+                  onChange={(e) => set('email', e.target.value)}
+                  className="w-full px-3 py-2 border border-border rounded-[var(--radius-md)] bg-background text-sm focus:outline-none focus:ring-2 focus:ring-primary/30"
+                />
+              </Field>
+              <Field label="Rolle">
+                <select
+                  value={form.role}
+                  onChange={(e) => set('role', e.target.value)}
+                  className="w-full px-3 py-2 border border-border rounded-[var(--radius-md)] bg-background text-sm focus:outline-none focus:ring-2 focus:ring-primary/30"
+                >
+                  <option value="user">Nutzer</option>
+                  <option value="admin">Admin</option>
+                </select>
+              </Field>
+              <Field label="Zugang">
+                <select
+                  value={form.accessTier}
+                  onChange={(e) => set('accessTier', e.target.value as AccessTier)}
+                  className="w-full px-3 py-2 border border-border rounded-[var(--radius-md)] bg-background text-sm focus:outline-none focus:ring-2 focus:ring-primary/30"
+                >
+                  {TIER_OPTIONS.map((opt) => (
+                    <option key={opt.value} value={opt.value}>{opt.label}</option>
+                  ))}
+                </select>
+                <p className="text-[11px] text-muted mt-1 leading-snug">
+                  {TIER_OPTIONS.find((o) => o.value === form.accessTier)?.hint}
+                </p>
+              </Field>
+            </div>
+          </div>
+
           {/* Profile Info */}
           <div className="card-static p-5">
             <h2 className="text-sm font-semibold text-foreground mb-4">Profil</h2>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <ProfileField label="Erfahrungslevel" value={user.experienceLevel} />
-              <ProfileField label="Hauptziel" value={user.primaryGoal} />
-              <ProfileField label="Hintergrund" value={user.background} span2 />
-              <ProfileField label="Markt / Nische" value={user.market} span2 />
-              <ProfileField label="Zielgruppe" value={user.targetAudience} span2 />
-              <ProfileField label="Angebote" value={user.offer} span2 />
+              <Field label="Erfahrungslevel">
+                <input
+                  type="text"
+                  value={form.experienceLevel}
+                  onChange={(e) => set('experienceLevel', e.target.value)}
+                  className="w-full px-3 py-2 border border-border rounded-[var(--radius-md)] bg-background text-sm focus:outline-none focus:ring-2 focus:ring-primary/30"
+                />
+              </Field>
+              <Field label="Hauptziel">
+                <input
+                  type="text"
+                  value={form.primaryGoal}
+                  onChange={(e) => set('primaryGoal', e.target.value)}
+                  className="w-full px-3 py-2 border border-border rounded-[var(--radius-md)] bg-background text-sm focus:outline-none focus:ring-2 focus:ring-primary/30"
+                />
+              </Field>
+              <Field label="Hintergrund" span2>
+                <textarea
+                  value={form.background}
+                  onChange={(e) => set('background', e.target.value)}
+                  rows={2}
+                  className="w-full px-3 py-2 border border-border rounded-[var(--radius-md)] bg-background text-sm focus:outline-none focus:ring-2 focus:ring-primary/30 resize-y"
+                />
+              </Field>
+              <Field label="Markt / Nische" span2>
+                <textarea
+                  value={form.market}
+                  onChange={(e) => set('market', e.target.value)}
+                  rows={2}
+                  className="w-full px-3 py-2 border border-border rounded-[var(--radius-md)] bg-background text-sm focus:outline-none focus:ring-2 focus:ring-primary/30 resize-y"
+                />
+              </Field>
+              <Field label="Zielgruppe" span2>
+                <textarea
+                  value={form.targetAudience}
+                  onChange={(e) => set('targetAudience', e.target.value)}
+                  rows={2}
+                  className="w-full px-3 py-2 border border-border rounded-[var(--radius-md)] bg-background text-sm focus:outline-none focus:ring-2 focus:ring-primary/30 resize-y"
+                />
+              </Field>
+              <Field label="Angebote" span2>
+                <textarea
+                  value={form.offer}
+                  onChange={(e) => set('offer', e.target.value)}
+                  rows={2}
+                  className="w-full px-3 py-2 border border-border rounded-[var(--radius-md)] bg-background text-sm focus:outline-none focus:ring-2 focus:ring-primary/30 resize-y"
+                />
+              </Field>
+            </div>
+          </div>
+
+          {/* Save Bar */}
+          <div className="sticky bottom-4 z-10">
+            <div className="card-static p-4 flex items-center gap-3 shadow-lg">
+              <div className="flex-1 text-xs text-muted">
+                {error ? <span className="text-red-500">{error}</span> :
+                 dirty ? 'Ungespeicherte Änderungen' :
+                 saved ? '✓ Gespeichert' : 'Keine Änderungen'}
+              </div>
+              <button
+                onClick={handleSave}
+                disabled={saving || !dirty}
+                className="btn-primary justify-center disabled:opacity-40"
+              >
+                {saving ? <><Loader2 size={14} className="animate-spin" /> Speichere...</> :
+                 <><Save size={14} /> Speichern</>}
+              </button>
             </div>
           </div>
 
@@ -201,11 +318,11 @@ function StatRow({ icon, label, value }: { icon: React.ReactNode; label: string;
   )
 }
 
-function ProfileField({ label, value, span2 }: { label: string; value: string; span2?: boolean }) {
+function Field({ label, children, span2 }: { label: string; children: React.ReactNode; span2?: boolean }) {
   return (
     <div className={span2 ? 'sm:col-span-2' : ''}>
-      <span className="text-xs text-muted block mb-1">{label}</span>
-      <p className="text-sm text-foreground">{value || '—'}</p>
+      <label className="block text-xs font-medium text-muted mb-1.5">{label}</label>
+      {children}
     </div>
   )
 }

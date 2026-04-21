@@ -1,5 +1,7 @@
 import { createServerClient } from '@supabase/ssr'
 import { NextResponse, type NextRequest } from 'next/server'
+import { computeEffectiveAccess, VIEW_AS_COOKIE } from '@/lib/access'
+import { getFeatureState, requiresUpgrade, type FeatureKey } from '@/lib/permissions'
 
 export async function middleware(request: NextRequest) {
   let supabaseResponse = NextResponse.next({
@@ -83,23 +85,30 @@ export async function middleware(request: NextRequest) {
     }
   }
 
-  // ── Premium-Routen: nur Premium + Admin ────────────────────────────────
-  if (user && (
-    pathname.startsWith('/dashboard/herr-tech-gpt') ||
-    pathname.startsWith('/dashboard/ki-toolbox')
-  )) {
+  // ── Tier-Gating: DB-gesteuert via feature_permissions, respektiert View-As ──
+  const gatedFeature: FeatureKey | null =
+    pathname.startsWith('/dashboard/herr-tech-gpt') ? 'chat' :
+    pathname.startsWith('/dashboard/ki-toolbox')   ? 'toolbox' :
+    pathname.startsWith('/dashboard/classroom')    ? 'classroom' : null
+
+  if (user && gatedFeature) {
     const { data: profile } = await supabase
       .from('profiles')
       .select('role, access_tier')
       .eq('id', user.id)
       .single()
 
-    const isPremium = profile?.access_tier === 'premium' || profile?.role === 'admin'
+    const viewAsRaw = request.cookies.get(VIEW_AS_COOKIE)?.value
+    const access = computeEffectiveAccess(profile, viewAsRaw)
 
-    if (!isPremium) {
-      const url = request.nextUrl.clone()
-      url.pathname = '/dashboard/upgrade'
-      return NextResponse.redirect(url)
+    if (!access.isAdmin) {
+      const state = await getFeatureState(supabase, access.tier, gatedFeature)
+      if (requiresUpgrade(state)) {
+        const url = request.nextUrl.clone()
+        url.pathname = '/dashboard/upgrade'
+        url.searchParams.set('feature', gatedFeature)
+        return NextResponse.redirect(url)
+      }
     }
   }
 

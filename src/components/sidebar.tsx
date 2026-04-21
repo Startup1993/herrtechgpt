@@ -7,6 +7,10 @@ import { agents } from '@/lib/agents'
 import { useTheme } from '@/lib/theme-context'
 import { createClient } from '@/lib/supabase/client'
 import type { Conversation } from '@/lib/types'
+import type { AccessTier, ViewAsMode } from '@/lib/access'
+import { VIEW_AS_OPTIONS } from '@/lib/access'
+import type { FeatureKey, FeatureState } from '@/lib/permissions'
+import { requiresUpgrade } from '@/lib/permissions'
 import {
   LayoutDashboard,
   GraduationCap,
@@ -31,6 +35,10 @@ import {
   Video,
   Search,
   Play,
+  Eye,
+  ChevronDown,
+  KeyRound,
+  SlidersHorizontal,
 } from 'lucide-react'
 
 // ═══════════════════════════════════════════════════════════
@@ -44,7 +52,10 @@ interface SidebarProps {
   userEmail?: string
   userName?: string
   isAdmin?: boolean
-  accessTier?: 'basic' | 'premium'
+  realIsAdmin?: boolean
+  accessTier?: AccessTier
+  viewAs?: ViewAsMode
+  states?: Record<FeatureKey, FeatureState>
 }
 
 // ═══════════════════════════════════════════════════════════
@@ -303,16 +314,29 @@ function SectionHeader({ label }: { label: string }) {
 
 function MainSidebar({
   isAdmin,
-  accessTier,
+  realIsAdmin,
+  states,
   pathname,
   onDrillDown,
 }: {
   isAdmin?: boolean
-  accessTier?: string
+  realIsAdmin?: boolean
+  states?: Record<FeatureKey, FeatureState>
   pathname: string
   onDrillDown: (mode: SidebarMode) => void
 }) {
-  const isPremium = accessTier === 'premium' || isAdmin
+  // Lock-Logik: Middleware blockiert nur 'community' und 'paid'.
+  // 'coming_soon' und 'open' sind in der Nav zug\u00e4nglich (Seite zeigt Coming-Soon-UI selbst).
+  const isLocked = (feature: FeatureKey): boolean => {
+    if (isAdmin) return false
+    const state = states?.[feature]
+    if (!state) return false
+    return requiresUpgrade(state)
+  }
+
+  const classroomLocked = isLocked('classroom')
+  const chatLocked = isLocked('chat')
+  const toolboxLocked = isLocked('toolbox')
 
   return (
     <nav className="flex-1 overflow-y-auto px-3 py-4">
@@ -329,23 +353,25 @@ function MainSidebar({
           icon={GraduationCap}
           label="Classroom"
           isActive={pathname.startsWith('/dashboard/classroom')}
-          onClick={() => onDrillDown('classroom')}
+          locked={classroomLocked}
+          onClick={() => classroomLocked ? undefined : onDrillDown('classroom')}
+          href={classroomLocked ? '/dashboard/upgrade?feature=classroom' : undefined}
         />
         <NavItem
           icon={Bot}
           label="Herr Tech GPT"
           isActive={pathname.startsWith('/dashboard/herr-tech-gpt')}
-          locked={!isPremium}
-          onClick={() => isPremium ? onDrillDown('chat') : undefined}
-          href={isPremium ? undefined : '/dashboard/upgrade'}
+          locked={chatLocked}
+          onClick={() => chatLocked ? undefined : onDrillDown('chat')}
+          href={chatLocked ? '/dashboard/upgrade?feature=chat' : undefined}
         />
         <NavItem
           icon={Wrench}
           label="KI Toolbox"
           isActive={pathname.startsWith('/dashboard/ki-toolbox')}
-          locked={!isPremium}
-          onClick={() => isPremium ? onDrillDown('toolbox') : undefined}
-          href={isPremium ? undefined : '/dashboard/upgrade'}
+          locked={toolboxLocked}
+          onClick={() => toolboxLocked ? undefined : onDrillDown('toolbox')}
+          href={toolboxLocked ? '/dashboard/upgrade?feature=toolbox' : undefined}
         />
         <NavItem
           href="/dashboard/help"
@@ -355,7 +381,7 @@ function MainSidebar({
         />
       </div>
 
-      {isAdmin && (
+      {realIsAdmin && (
         <>
           <SectionHeader label="Administration" />
           <div className="space-y-1">
@@ -369,6 +395,104 @@ function MainSidebar({
         </>
       )}
     </nav>
+  )
+}
+
+// ═══════════════════════════════════════════════════════════
+// VIEW-AS SWITCHER (Admin only)
+// ═══════════════════════════════════════════════════════════
+
+const VIEW_AS_LABELS: Record<ViewAsMode, { label: string; hint: string; dot: string }> = {
+  admin:   { label: 'Admin-Modus',      hint: 'Voller Zugriff',              dot: 'bg-primary' },
+  premium: { label: 'Community',        hint: 'Als Premium-User',            dot: 'bg-green-500' },
+  alumni:  { label: 'Alumni',           hint: 'Ehemaliges Mitglied',         dot: 'bg-amber-500' },
+  basic:   { label: 'Basic',            hint: 'Free-User, alles gesperrt',   dot: 'bg-muted' },
+}
+
+function ViewAsSwitcher({ current }: { current: ViewAsMode }) {
+  const [open, setOpen] = useState(false)
+  const [loading, setLoading] = useState<ViewAsMode | null>(null)
+  const router = useRouter()
+  const menuRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    function handleClickOutside(e: MouseEvent) {
+      if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
+        setOpen(false)
+      }
+    }
+    if (open) document.addEventListener('mousedown', handleClickOutside)
+    return () => document.removeEventListener('mousedown', handleClickOutside)
+  }, [open])
+
+  const select = async (tier: ViewAsMode) => {
+    if (tier === current) { setOpen(false); return }
+    setLoading(tier)
+    await fetch('/api/admin/view-as', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ tier }),
+    })
+    setLoading(null)
+    setOpen(false)
+    router.refresh()
+  }
+
+  const currentMeta = VIEW_AS_LABELS[current]
+  const isImpersonating = current !== 'admin'
+
+  return (
+    <div className="relative" ref={menuRef}>
+      <button
+        type="button"
+        onClick={() => setOpen(!open)}
+        className={`flex items-center gap-2.5 px-3 py-2 rounded-[var(--radius-md)] text-sm w-full text-left transition-all border ${
+          isImpersonating
+            ? 'bg-primary/5 border-primary/30 text-foreground hover:bg-primary/10'
+            : 'border-transparent text-muted hover:bg-surface-hover hover:text-foreground'
+        }`}
+      >
+        <Eye size={15} className={isImpersonating ? 'text-primary shrink-0' : 'text-muted shrink-0'} />
+        <div className="flex-1 min-w-0">
+          <div className="text-[10px] uppercase tracking-wider text-muted font-semibold leading-none mb-0.5">
+            Ansicht als
+          </div>
+          <div className="text-xs font-medium truncate flex items-center gap-1.5">
+            <span className={`inline-block w-1.5 h-1.5 rounded-full ${currentMeta.dot}`} />
+            {currentMeta.label}
+          </div>
+        </div>
+        <ChevronDown size={13} className={`text-muted shrink-0 transition-transform ${open ? 'rotate-180' : ''}`} />
+      </button>
+
+      {open && (
+        <div className="absolute left-0 right-0 bottom-full mb-1 z-50 bg-surface border border-border rounded-[var(--radius-xl)] shadow-[var(--shadow-dropdown)] overflow-hidden py-1">
+          {VIEW_AS_OPTIONS.map((opt) => {
+            const meta = VIEW_AS_LABELS[opt]
+            const isActive = opt === current
+            return (
+              <button
+                key={opt}
+                type="button"
+                onClick={() => select(opt)}
+                disabled={loading !== null}
+                className={`w-full flex items-center gap-2.5 px-3 py-2 text-left text-sm transition-colors ${
+                  isActive ? 'bg-primary/10 text-foreground' : 'text-foreground hover:bg-surface-hover'
+                } disabled:opacity-50`}
+              >
+                <span className={`inline-block w-2 h-2 rounded-full shrink-0 ${meta.dot}`} />
+                <div className="flex-1 min-w-0">
+                  <div className="font-medium truncate text-xs">{meta.label}</div>
+                  <div className="text-[10px] text-muted truncate">{meta.hint}</div>
+                </div>
+                {loading === opt && <span className="text-xs text-muted">…</span>}
+                {isActive && loading === null && <span className="text-xs text-primary">●</span>}
+              </button>
+            )
+          })}
+        </div>
+      )}
+    </div>
   )
 }
 
@@ -510,7 +634,7 @@ function AdminSidebar({
             href="/admin/groups"
             icon={Lock}
             label="Gruppen & Rechte"
-            description="Berechtigungen, Paid/Free"
+            description="Matrix + Upsell-Texte"
             isActive={pathname.startsWith('/admin/groups')}
           />
         </div>
@@ -734,7 +858,7 @@ function ToolboxSidebar({
 // MAIN SIDEBAR EXPORT
 // ═══════════════════════════════════════════════════════════
 
-export function Sidebar({ conversations, userEmail, userName, isAdmin, accessTier }: SidebarProps) {
+export function Sidebar({ conversations, userEmail, userName, isAdmin, realIsAdmin, accessTier, viewAs, states }: SidebarProps) {
   const pathname = usePathname()
   const router = useRouter()
   const { theme, toggleTheme } = useTheme()
@@ -793,7 +917,8 @@ export function Sidebar({ conversations, userEmail, userName, isAdmin, accessTie
         >
           <MainSidebar
             isAdmin={isAdmin}
-            accessTier={accessTier}
+            realIsAdmin={realIsAdmin}
+            states={states}
             pathname={pathname}
             onDrillDown={handleDrillDown}
           />
@@ -811,7 +936,7 @@ export function Sidebar({ conversations, userEmail, userName, isAdmin, accessTie
             conversations={conversations}
             pathname={pathname}
             onBack={handleBack}
-            isAdmin={isAdmin}
+            isAdmin={realIsAdmin}
             onDrillDown={handleDrillDown}
           />
         </div>
@@ -835,7 +960,7 @@ export function Sidebar({ conversations, userEmail, userName, isAdmin, accessTie
             pointerEvents: mode === 'classroom' ? 'auto' : 'none',
           }}
         >
-          <ClassroomSidebar pathname={pathname} onBack={handleBack} isAdmin={isAdmin} onDrillDown={handleDrillDown} />
+          <ClassroomSidebar pathname={pathname} onBack={handleBack} isAdmin={realIsAdmin} onDrillDown={handleDrillDown} />
         </div>
 
         <div
@@ -846,9 +971,16 @@ export function Sidebar({ conversations, userEmail, userName, isAdmin, accessTie
             pointerEvents: mode === 'toolbox' ? 'auto' : 'none',
           }}
         >
-          <ToolboxSidebar pathname={pathname} onBack={handleBack} isAdmin={isAdmin} onDrillDown={handleDrillDown} />
+          <ToolboxSidebar pathname={pathname} onBack={handleBack} isAdmin={realIsAdmin} onDrillDown={handleDrillDown} />
         </div>
       </div>
+
+      {/* View-As Switcher — persistent f\u00fcr Admins (immer sichtbar) */}
+      {realIsAdmin && (
+        <div className="border-t border-border px-3 py-2">
+          <ViewAsSwitcher current={viewAs ?? 'admin'} />
+        </div>
+      )}
 
       {/* Bottom — Theme Toggle + User Menu */}
       <div className="border-t border-border px-3 pb-2 pt-1">

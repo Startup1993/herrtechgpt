@@ -1,14 +1,15 @@
 'use client'
 
-import { Users, MessageSquare, Mail, Bot, Crown, UserCheck, TrendingUp, Activity } from 'lucide-react'
+import { Users, MessageSquare, Mail, Bot, Crown, Clock3, UserCheck, Shield, Activity } from 'lucide-react'
 
 interface KPIs {
   totalUsers: number
   totalConversations: number
   totalMessages: number
   activeAgents: number
-  premiumUsers: number
-  freeUsers: number
+  communityUsers: number
+  alumniUsers: number
+  basicUsers: number
   adminUsers: number
   activeConversations7d: number
 }
@@ -48,14 +49,14 @@ export function AdminDashboardClient({
   const maxSignups = Math.max(...signupsByWeek.map(w => w.count), 1)
 
   const kpiCards = [
-    { label: 'Nutzer gesamt', value: kpis.totalUsers, icon: Users, color: 'text-blue-500 bg-blue-50 dark:bg-blue-950/30' },
-    { label: 'Premium', value: kpis.premiumUsers, icon: Crown, color: 'text-primary bg-primary/10' },
-    { label: 'Free', value: kpis.freeUsers, icon: UserCheck, color: 'text-emerald-500 bg-emerald-50 dark:bg-emerald-950/30' },
-    { label: 'Unterhaltungen', value: kpis.totalConversations, icon: MessageSquare, color: 'text-violet-500 bg-violet-50 dark:bg-violet-950/30' },
-    { label: 'Nachrichten', value: kpis.totalMessages, icon: Mail, color: 'text-amber-500 bg-amber-50 dark:bg-amber-950/30' },
-    { label: 'Aktiv (7 Tage)', value: kpis.activeConversations7d, icon: Activity, color: 'text-rose-500 bg-rose-50 dark:bg-rose-950/30' },
-    { label: 'Assistenten', value: kpis.activeAgents, icon: Bot, color: 'text-cyan-500 bg-cyan-50 dark:bg-cyan-950/30' },
-    { label: 'Admins', value: kpis.adminUsers, icon: TrendingUp, color: 'text-orange-500 bg-orange-50 dark:bg-orange-950/30' },
+    { label: 'Nutzer gesamt',  value: kpis.totalUsers,             icon: Users,         color: 'text-blue-500 bg-blue-50 dark:bg-blue-950/30' },
+    { label: 'Community',      value: kpis.communityUsers,         icon: Crown,         color: 'text-primary bg-primary/10' },
+    { label: 'Alumni',         value: kpis.alumniUsers,            icon: Clock3,        color: 'text-amber-500 bg-amber-50 dark:bg-amber-950/30' },
+    { label: 'Basic',          value: kpis.basicUsers,             icon: UserCheck,     color: 'text-emerald-500 bg-emerald-50 dark:bg-emerald-950/30' },
+    { label: 'Unterhaltungen', value: kpis.totalConversations,     icon: MessageSquare, color: 'text-violet-500 bg-violet-50 dark:bg-violet-950/30' },
+    { label: 'Nachrichten',    value: kpis.totalMessages,          icon: Mail,          color: 'text-cyan-500 bg-cyan-50 dark:bg-cyan-950/30' },
+    { label: 'Aktiv (7 Tage)', value: kpis.activeConversations7d,  icon: Activity,      color: 'text-rose-500 bg-rose-50 dark:bg-rose-950/30' },
+    { label: 'Admins',         value: kpis.adminUsers,             icon: Shield,        color: 'text-orange-500 bg-orange-50 dark:bg-orange-950/30' },
   ]
 
   return (
@@ -99,20 +100,24 @@ export function AdminDashboardClient({
           </div>
         </div>
 
-        {/* User Tier Breakdown */}
+        {/* User Tier Breakdown — 3-Tier System */}
         <div className="card-static p-5">
           <h2 className="font-semibold text-foreground mb-4">Nutzer-Verteilung</h2>
           <div className="space-y-4">
-            <TierBar label="Premium" count={kpis.premiumUsers} total={kpis.totalUsers} color="bg-primary" />
-            <TierBar label="Free" count={kpis.freeUsers} total={kpis.totalUsers} color="bg-emerald-400" />
-            <TierBar label="Admins" count={kpis.adminUsers} total={kpis.totalUsers} color="bg-amber-400" />
+            <TierBar label="Community (Premium)" count={kpis.communityUsers} total={kpis.totalUsers} color="bg-primary" />
+            <TierBar label="Alumni"              count={kpis.alumniUsers}    total={kpis.totalUsers} color="bg-amber-400" />
+            <TierBar label="Basic (Free)"        count={kpis.basicUsers}     total={kpis.totalUsers} color="bg-emerald-400" />
           </div>
-          <div className="mt-4 pt-4 border-t border-border">
+          <div className="mt-4 pt-4 border-t border-border space-y-2">
             <div className="flex items-center justify-between text-sm">
-              <span className="text-muted">Conversion Rate</span>
+              <span className="text-muted">Community-Rate</span>
               <span className="font-semibold text-foreground">
-                {kpis.totalUsers > 0 ? Math.round((kpis.premiumUsers / kpis.totalUsers) * 100) : 0}%
+                {kpis.totalUsers > 0 ? Math.round((kpis.communityUsers / kpis.totalUsers) * 100) : 0}%
               </span>
+            </div>
+            <div className="flex items-center justify-between text-xs">
+              <span className="text-muted">Admin-Accounts</span>
+              <span className="text-foreground">{kpis.adminUsers}</span>
             </div>
           </div>
         </div>
