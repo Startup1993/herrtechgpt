@@ -3,7 +3,7 @@
 import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
 import { useState, useRef, useEffect, useMemo } from 'react'
-import { agents } from '@/lib/agents'
+import { listedAgents as agents } from '@/lib/agents'
 import { useTheme } from '@/lib/theme-context'
 import { createClient } from '@/lib/supabase/client'
 import type { Conversation } from '@/lib/types'
@@ -31,6 +31,7 @@ import {
   Video,
   Search,
   Play,
+  Loader2,
 } from 'lucide-react'
 
 // ═══════════════════════════════════════════════════════════
@@ -389,6 +390,37 @@ function ChatSidebar({
   isAdmin?: boolean
   onDrillDown: (mode: SidebarMode) => void
 }) {
+  const router = useRouter()
+  const [startingAgent, setStartingAgent] = useState<string | null>(null)
+
+  const startAgentChat = async (agentId: string) => {
+    if (startingAgent) return
+    setStartingAgent(agentId)
+    try {
+      const supabase = createClient()
+      const { data: { user } } = await supabase.auth.getUser()
+      if (!user) { router.push('/login'); return }
+
+      const { data: conv } = await supabase
+        .from('conversations')
+        .insert({
+          user_id: user.id,
+          agent_id: agentId,
+          title: 'Neue Unterhaltung',
+        })
+        .select('id')
+        .single()
+
+      if (conv) {
+        router.push(`/dashboard/herr-tech-gpt/${conv.id}`)
+      }
+    } catch (e) {
+      console.error('Chat start error:', e)
+    } finally {
+      setStartingAgent(null)
+    }
+  }
+
   return (
     <div className="flex-1 overflow-y-auto flex flex-col">
       {/* Back button */}
@@ -416,18 +448,21 @@ function ChatSidebar({
         <SectionHeader label="Agenten" />
         <div className="space-y-1">
           {agents.map((agent) => (
-            <Link
+            <button
               key={agent.id}
-              href={`/dashboard/herr-tech-gpt?agent=${agent.id}`}
-              className={`flex items-center gap-3 px-3 py-2 rounded-[var(--radius-md)] text-sm transition-colors ${
-                pathname === `/dashboard/herr-tech-gpt` && false /* TODO: active agent detection */
-                  ? 'bg-primary/10 text-foreground font-medium'
-                  : 'text-muted hover:bg-surface-hover hover:text-foreground'
+              type="button"
+              onClick={() => startAgentChat(agent.id)}
+              disabled={!!startingAgent}
+              className={`w-full flex items-center gap-3 px-3 py-2 rounded-[var(--radius-md)] text-sm transition-colors text-left disabled:opacity-60 ${
+                'text-muted hover:bg-surface-hover hover:text-foreground'
               }`}
             >
               <span className="text-base shrink-0">{agent.emoji}</span>
               <span className="truncate">{agent.name}</span>
-            </Link>
+              {startingAgent === agent.id && (
+                <Loader2 size={12} className="ml-auto animate-spin shrink-0" />
+              )}
+            </button>
           ))}
         </div>
       </div>
@@ -537,6 +572,13 @@ function AdminSidebar({
             label="Wissensbasis"
             description="Video-Chunks, Zuordnung"
             isActive={pathname.startsWith('/admin/content/knowledge')}
+          />
+          <NavItem
+            href="/admin/content/tools"
+            icon={Wrench}
+            label="Tech-Stack"
+            description="Tools pro Assistent"
+            isActive={pathname.startsWith('/admin/content/tools')}
           />
           <NavItem
             href="/admin/content/videos"

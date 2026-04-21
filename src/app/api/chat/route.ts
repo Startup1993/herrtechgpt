@@ -3,6 +3,7 @@ import { createAnthropic } from '@ai-sdk/anthropic'
 import { createClient } from '@/lib/supabase/server'
 import { getAgent } from '@/lib/agents'
 import { deprecationPromptBlock } from '@/lib/deprecations'
+import { buildToolsBlock } from '@/lib/prompts/tools-block'
 
 export const maxDuration = 60
 
@@ -134,7 +135,12 @@ export async function POST(req: Request) {
   }
 
   const deprecationContext = deprecationPromptBlock(agentId)
-  const fullSystemPrompt = agent.systemPrompt + profileContext + knowledgeContext + deprecationContext
+
+  // HerrTech Tech-Stack: injiziere erlaubte Tools pro Agent (via core_tools Tabelle)
+  const toolsContext = await buildToolsBlock(supabase, agentId)
+
+  const fullSystemPrompt =
+    agent.systemPrompt + profileContext + knowledgeContext + toolsContext + deprecationContext
 
   const anthropic = createAnthropic({
     apiKey: process.env.ANTHROPIC_API_KEY,
