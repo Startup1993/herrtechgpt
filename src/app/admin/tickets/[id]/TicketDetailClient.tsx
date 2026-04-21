@@ -132,7 +132,7 @@ export function TicketDetailClient({
   }
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
-    if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
+    if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault()
       sendReply()
     }
@@ -192,7 +192,7 @@ export function TicketDetailClient({
                 value={reply}
                 onChange={(e) => setReply(e.target.value)}
                 onKeyDown={handleKeyDown}
-                placeholder={status === 'resolved' ? 'Ticket ist erledigt — neue Antwort öffnet es wieder' : 'Antwort an den User… (⌘+Enter zum Senden)'}
+                placeholder={status === 'resolved' ? 'Ticket ist erledigt — neue Antwort öffnet es wieder' : 'Antwort an den User… (Enter zum Senden, Shift+Enter für neue Zeile)'}
                 rows={2}
                 className="flex-1 text-sm resize-none max-h-40 overflow-y-auto bg-transparent focus:outline-none placeholder:text-muted/60"
               />
@@ -313,13 +313,13 @@ function Bubble({ msg, userEmail }: { msg: Message; userEmail: string }) {
 
   if (msg.role === 'user') {
     return (
-      <div className="flex gap-2">
-        <div className="w-8 h-8 rounded-full bg-surface-secondary text-muted flex items-center justify-center shrink-0 text-[11px] font-semibold">
+      <div className="flex gap-2 items-start">
+        <div className="w-8 h-8 rounded-full bg-primary/15 text-primary flex items-center justify-center shrink-0 text-[11px] font-semibold">
           {userEmail.slice(0, 2).toUpperCase()}
         </div>
-        <div className="max-w-[80%] flex-1 min-w-0">
+        <div className="max-w-[75%]">
           <div className="text-[11px] font-semibold text-muted mb-1">Nutzer</div>
-          <div className="bg-surface border border-border text-foreground px-4 py-2.5 rounded-2xl rounded-tl-sm">
+          <div className="inline-block bg-primary text-white px-4 py-2.5 rounded-2xl rounded-tl-sm">
             <p className="text-sm whitespace-pre-wrap break-words">{msg.content}</p>
           </div>
         </div>
@@ -329,10 +329,10 @@ function Bubble({ msg, userEmail }: { msg: Message; userEmail: string }) {
 
   if (msg.role === 'admin') {
     return (
-      <div className="flex justify-end gap-2">
-        <div className="max-w-[80%]">
-          <div className="text-[11px] font-semibold text-amber-700 dark:text-amber-400 mb-1 text-right">Du (Support-Team)</div>
-          <div className="bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-900 text-foreground px-4 py-2.5 rounded-2xl rounded-tr-sm">
+      <div className="flex justify-end gap-2 items-start">
+        <div className="max-w-[75%] flex flex-col items-end">
+          <div className="text-[11px] font-semibold text-amber-700 dark:text-amber-400 mb-1">Du (Support-Team)</div>
+          <div className="inline-block bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-900 text-foreground px-4 py-2.5 rounded-2xl rounded-tr-sm">
             <MarkdownContent content={msg.content} />
           </div>
         </div>
