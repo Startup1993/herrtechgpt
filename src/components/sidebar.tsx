@@ -3,6 +3,7 @@
 import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
 import { useState, useRef, useEffect, useMemo } from 'react'
+import { createPortal } from 'react-dom'
 import { listedAgents as agents } from '@/lib/agents'
 import { useTheme } from '@/lib/theme-context'
 import { createClient } from '@/lib/supabase/client'
@@ -821,39 +822,100 @@ function HelpConversationItem({
         <span className="truncate flex-1 min-w-0">{conv.title ?? 'Anfrage'}</span>
       </Link>
 
-      <div className="relative" ref={menuRef}>
-        <button
-          onClick={(e) => { e.preventDefault(); e.stopPropagation(); setMenuOpen(!menuOpen) }}
-          className="opacity-0 group-hover:opacity-100 p-1.5 rounded hover:bg-surface-hover text-muted hover:text-foreground transition-all absolute right-1 top-1/2 -translate-y-1/2"
-          aria-label="Optionen"
-        >
-          <MoreVertical size={14} />
-        </button>
-
-        {menuOpen && (
-          <div className="absolute right-0 top-full mt-1 z-50 bg-surface border border-border rounded-[var(--radius-lg)] shadow-[var(--shadow-dropdown)] py-1 min-w-[150px]">
-            <button
-              onClick={(e) => {
-                e.preventDefault()
-                e.stopPropagation()
-                setIsRenaming(true)
-                setMenuOpen(false)
-              }}
-              className="w-full text-left px-3 py-2 text-sm text-foreground hover:bg-surface-hover transition-colors"
-            >
-              Umbenennen
-            </button>
-            <button
-              onClick={(e) => { e.preventDefault(); e.stopPropagation(); handleDelete() }}
-              disabled={loading !== null}
-              className="w-full text-left px-3 py-2 text-sm text-red-500 hover:bg-red-50 dark:hover:bg-red-950/30 transition-colors disabled:opacity-50"
-            >
-              {loading === 'delete' ? 'Lösche…' : 'Löschen'}
-            </button>
-          </div>
-        )}
+      <div ref={menuRef}>
+        <HelpItemMenuButton
+          open={menuOpen}
+          setOpen={setMenuOpen}
+          onRename={() => { setIsRenaming(true); setMenuOpen(false) }}
+          onDelete={handleDelete}
+          loading={loading}
+        />
       </div>
     </div>
+  )
+}
+
+// Menu-Button + Portal-Dropdown das nicht von overflow-hidden abgeschnitten wird.
+// Dropdown \u00f6ffnet nach unten, klappt nach oben wenn nicht genug Platz.
+function HelpItemMenuButton({
+  open,
+  setOpen,
+  onRename,
+  onDelete,
+  loading,
+}: {
+  open: boolean
+  setOpen: (b: boolean) => void
+  onRename: () => void
+  onDelete: () => void
+  loading: 'rename' | 'delete' | null
+}) {
+  const btnRef = useRef<HTMLButtonElement>(null)
+  const [pos, setPos] = useState<{ top: number; right: number; openUp: boolean } | null>(null)
+  const [mounted, setMounted] = useState(false)
+
+  useEffect(() => { setMounted(true) }, [])
+
+  useEffect(() => {
+    if (!open) return
+    const update = () => {
+      if (!btnRef.current) return
+      const rect = btnRef.current.getBoundingClientRect()
+      const menuHeight = 88 // gr\u00f6\u00dfer als eigentliche H\u00f6he, f\u00fcr Sicherheit
+      const spaceBelow = window.innerHeight - rect.bottom
+      const openUp = spaceBelow < menuHeight + 16
+      setPos({
+        top: openUp ? rect.top - 6 : rect.bottom + 6,
+        right: window.innerWidth - rect.right,
+        openUp,
+      })
+    }
+    update()
+    window.addEventListener('resize', update)
+    window.addEventListener('scroll', update, true)
+    return () => {
+      window.removeEventListener('resize', update)
+      window.removeEventListener('scroll', update, true)
+    }
+  }, [open])
+
+  return (
+    <>
+      <button
+        ref={btnRef}
+        onClick={(e) => { e.preventDefault(); e.stopPropagation(); setOpen(!open) }}
+        className="opacity-0 group-hover:opacity-100 p-1.5 rounded hover:bg-surface-hover text-muted hover:text-foreground transition-all absolute right-1 top-1/2 -translate-y-1/2"
+        aria-label="Optionen"
+      >
+        <MoreVertical size={14} />
+      </button>
+
+      {mounted && open && pos && createPortal(
+        <div
+          className="fixed z-[100] bg-surface border border-border rounded-[var(--radius-lg)] shadow-[var(--shadow-dropdown)] py-1 min-w-[150px]"
+          style={{
+            top: pos.openUp ? undefined : pos.top,
+            bottom: pos.openUp ? window.innerHeight - pos.top : undefined,
+            right: pos.right,
+          }}
+        >
+          <button
+            onClick={(e) => { e.preventDefault(); e.stopPropagation(); onRename() }}
+            className="w-full text-left px-3 py-2 text-sm text-foreground hover:bg-surface-hover transition-colors"
+          >
+            Umbenennen
+          </button>
+          <button
+            onClick={(e) => { e.preventDefault(); e.stopPropagation(); onDelete() }}
+            disabled={loading !== null}
+            className="w-full text-left px-3 py-2 text-sm text-red-500 hover:bg-red-50 dark:hover:bg-red-950/30 transition-colors disabled:opacity-50"
+          >
+            {loading === 'delete' ? 'Lösche…' : 'Löschen'}
+          </button>
+        </div>,
+        document.body
+      )}
+    </>
   )
 }
 
