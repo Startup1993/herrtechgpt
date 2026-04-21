@@ -57,6 +57,50 @@ export async function POST(req: Request) {
     return new Response('No messages', { status: 400 })
   }
 
+  // Human-Mode Check: wenn die Conversation im human-mode ist (Support-Chat mit Admin),
+  // nur die User-Message speichern und Status auf 'new' setzen — KI-Call \u00fcberspringen.
+  if (conversationId) {
+    const { data: conv } = await supabase
+      .from('conversations')
+      .select('mode')
+      .eq('id', conversationId)
+      .single()
+
+    if (conv?.mode === 'human') {
+      const lastUserMessage = messages[messages.length - 1]
+      if (lastUserMessage?.role === 'user') {
+        await supabase.from('messages').insert({
+          conversation_id: conversationId,
+          role: 'user',
+          content: lastUserMessage.content,
+        })
+      }
+
+      // Bei der ersten Nachricht: Titel aus User-Text ableiten
+      const { count: msgCount } = await supabase
+        .from('messages')
+        .select('*', { count: 'exact', head: true })
+        .eq('conversation_id', conversationId)
+
+      const updates: Record<string, string> = {
+        status: 'new',
+        updated_at: new Date().toISOString(),
+      }
+      if (msgCount && msgCount <= 1 && lastUserMessage?.content) {
+        const trimmed = lastUserMessage.content.trim().replace(/\s+/g, ' ')
+        updates.title = trimmed.length > 40 ? trimmed.slice(0, 37) + '…' : trimmed
+      }
+
+      await supabase
+        .from('conversations')
+        .update(updates)
+        .eq('id', conversationId)
+
+      // Leerer Stream zur\u00fcck — kein KI-Text
+      return new Response('', { status: 200, headers: { 'Content-Type': 'text/plain' } })
+    }
+  }
+
   // Load user profile for context injection
   const { data: profile } = await supabase
     .from('profiles')
@@ -148,20 +192,23 @@ export async function POST(req: Request) {
 
   const lastUserMessage = messages[messages.length - 1]
 
+  // User-Message SOFORT persistieren (nicht erst in onFinish) — sonst gibt es
+  // ein Race-Window in dem der Client pollt bevor onFinish gelaufen ist und
+  // die Liste gelbst wird.
+  if (conversationId && lastUserMessage?.role === 'user') {
+    await supabase.from('messages').insert({
+      conversation_id: conversationId,
+      role: 'user',
+      content: lastUserMessage.content,
+    })
+  }
+
   const result = streamText({
-    model: anthropic('claude-sonnet-4-20250514'),
+    model: anthropic('claude-sonnet-4-5-20250929'),
     system: fullSystemPrompt,
     messages,
     onFinish: async ({ text }) => {
-      // Persist messages
-      if (lastUserMessage?.role === 'user') {
-        await supabase.from('messages').insert({
-          conversation_id: conversationId,
-          role: 'user',
-          content: lastUserMessage.content,
-        })
-      }
-
+      // User wurde bereits oben gespeichert — hier nur noch Assistant.
       await supabase.from('messages').insert({
         conversation_id: conversationId,
         role: 'assistant',
@@ -181,20 +228,26 @@ export async function POST(req: Request) {
         .eq('conversation_id', conversationId)
 
       if (count && count <= 2) {
+        // Erster Austausch → Titel generieren (oder auf Fallback zur\u00fcckfallen)
+        let newTitle: string | null = null
         try {
           const { text: title } = await generateText({
-            model: anthropic('claude-sonnet-4-20250514'),
+            model: anthropic('claude-sonnet-4-5-20250929'),
             system:
-              'Generiere einen sehr kurzen Titel (3-5 Wörter, auf Deutsch) für diese Unterhaltung basierend auf der ersten Nachricht des Nutzers. Antworte nur mit dem Titel, ohne Anführungszeichen.',
+              'Generiere einen sehr kurzen Titel (3-5 Wörter, auf Deutsch) für diese Unterhaltung basierend auf der ersten Nachricht des Nutzers. Antworte nur mit dem Titel, ohne Anführungszeichen, ohne Satzzeichen am Ende.',
             prompt: lastUserMessage.content,
           })
-
+          newTitle = title.trim().replace(/["'.!?]+$/, '')
+        } catch {
+          // Fallback: erste ~40 Zeichen der User-Message
+          const trimmed = lastUserMessage.content.trim().replace(/\s+/g, ' ')
+          newTitle = trimmed.length > 40 ? trimmed.slice(0, 37) + '…' : trimmed
+        }
+        if (newTitle) {
           await supabase
             .from('conversations')
-            .update({ title: title.trim() })
+            .update({ title: newTitle })
             .eq('id', conversationId)
-        } catch {
-          // Title generation is optional
         }
       }
     },

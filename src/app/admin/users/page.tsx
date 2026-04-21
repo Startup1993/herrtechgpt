@@ -34,7 +34,7 @@ export default async function AdminUsersPage() {
     id: p.id,
     email: emailMap[p.id] ?? '—',
     role: p.role as 'user' | 'admin',
-    access_tier: (p.access_tier ?? 'basic') as 'basic' | 'premium',
+    access_tier: (p.access_tier ?? 'basic') as 'basic' | 'alumni' | 'premium',
     created_at: p.created_at,
     last_active: lastActiveMap[p.id] ?? lastLoginMap[p.id] ?? null,
     conversation_count: convCountMap[p.id] ?? 0,

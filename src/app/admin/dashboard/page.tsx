@@ -45,9 +45,10 @@ export default async function AdminDashboardPage() {
       count,
     }))
 
-  // User tier breakdown
-  const premiumUsers = profiles?.filter(p => p.access_tier === 'premium').length ?? 0
-  const freeUsers = profiles?.filter(p => p.access_tier === 'basic' || !p.access_tier).length ?? 0
+  // User tier breakdown (3-Tier: Community/Alumni/Basic)
+  const communityUsers = profiles?.filter(p => p.access_tier === 'premium').length ?? 0
+  const alumniUsers = profiles?.filter(p => p.access_tier === 'alumni').length ?? 0
+  const basicUsers = profiles?.filter(p => p.access_tier === 'basic' || !p.access_tier).length ?? 0
   const adminUsers = profiles?.filter(p => p.role === 'admin').length ?? 0
 
   // Signups per week (last 12 weeks)
@@ -80,8 +81,9 @@ export default async function AdminDashboardPage() {
     totalConversations: totalConversations ?? 0,
     totalMessages: totalMessages ?? 0,
     activeAgents: agents.length,
-    premiumUsers,
-    freeUsers,
+    communityUsers,
+    alumniUsers,
+    basicUsers,
     adminUsers,
     activeConversations7d,
   }

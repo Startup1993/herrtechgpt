@@ -7,6 +7,10 @@ import { listedAgents as agents } from '@/lib/agents'
 import { useTheme } from '@/lib/theme-context'
 import { createClient } from '@/lib/supabase/client'
 import type { Conversation } from '@/lib/types'
+import type { AccessTier, ViewAsMode } from '@/lib/access'
+import { VIEW_AS_OPTIONS } from '@/lib/access'
+import type { FeatureKey, FeatureState } from '@/lib/permissions'
+import { requiresUpgrade } from '@/lib/permissions'
 import {
   LayoutDashboard,
   GraduationCap,
@@ -31,6 +35,8 @@ import {
   Video,
   Search,
   Play,
+  Eye,
+  ChevronDown,
   Loader2,
 } from 'lucide-react'
 
@@ -38,14 +44,19 @@ import {
 // TYPES
 // ═══════════════════════════════════════════════════════════
 
-type SidebarMode = 'main' | 'chat' | 'admin' | 'classroom' | 'toolbox'
+type SidebarMode = 'main' | 'chat' | 'admin' | 'classroom' | 'toolbox' | 'help'
 
 interface SidebarProps {
   conversations: Conversation[]
   userEmail?: string
   userName?: string
   isAdmin?: boolean
-  accessTier?: 'basic' | 'premium'
+  realIsAdmin?: boolean
+  accessTier?: AccessTier
+  viewAs?: ViewAsMode
+  states?: Record<FeatureKey, FeatureState>
+  newTicketCount?: number
+  helpUnreadCount?: number
 }
 
 // ═══════════════════════════════════════════════════════════
@@ -240,6 +251,7 @@ function NavItem({
   locked,
   onClick,
   description,
+  badge,
 }: {
   href?: string
   icon: React.ElementType
@@ -248,6 +260,7 @@ function NavItem({
   locked?: boolean
   onClick?: () => void
   description?: string
+  badge?: number
 }) {
   const baseClass = `flex items-center gap-3 px-3 py-2.5 rounded-[var(--radius-lg)] text-sm transition-all w-full text-left ${
     isActive
@@ -264,6 +277,11 @@ function NavItem({
           <span className="text-xs text-muted truncate block mt-0.5">{description}</span>
         )}
       </div>
+      {badge !== undefined && badge > 0 && (
+        <span className="inline-flex items-center justify-center min-w-[20px] h-5 px-1.5 rounded-full bg-red-500 text-white text-[10px] font-bold shrink-0">
+          {badge > 99 ? '99+' : badge}
+        </span>
+      )}
       {locked && <Lock size={14} className="text-muted shrink-0" />}
     </>
   )
@@ -304,16 +322,33 @@ function SectionHeader({ label }: { label: string }) {
 
 function MainSidebar({
   isAdmin,
-  accessTier,
+  realIsAdmin,
+  states,
+  newTicketCount,
+  helpUnreadCount,
   pathname,
   onDrillDown,
 }: {
   isAdmin?: boolean
-  accessTier?: string
+  realIsAdmin?: boolean
+  states?: Record<FeatureKey, FeatureState>
+  newTicketCount?: number
+  helpUnreadCount?: number
   pathname: string
   onDrillDown: (mode: SidebarMode) => void
 }) {
-  const isPremium = accessTier === 'premium' || isAdmin
+  // Lock-Logik: Middleware blockiert nur 'community' und 'paid'.
+  // 'coming_soon' und 'open' sind in der Nav zug\u00e4nglich (Seite zeigt Coming-Soon-UI selbst).
+  const isLocked = (feature: FeatureKey): boolean => {
+    if (isAdmin) return false
+    const state = states?.[feature]
+    if (!state) return false
+    return requiresUpgrade(state)
+  }
+
+  const classroomLocked = isLocked('classroom')
+  const chatLocked = isLocked('chat')
+  const toolboxLocked = isLocked('toolbox')
 
   return (
     <nav className="flex-1 overflow-y-auto px-3 py-4">
@@ -330,33 +365,36 @@ function MainSidebar({
           icon={GraduationCap}
           label="Classroom"
           isActive={pathname.startsWith('/dashboard/classroom')}
-          onClick={() => onDrillDown('classroom')}
+          locked={classroomLocked}
+          onClick={() => classroomLocked ? undefined : onDrillDown('classroom')}
+          href={classroomLocked ? '/dashboard/upgrade?feature=classroom' : undefined}
         />
         <NavItem
           icon={Bot}
           label="Herr Tech GPT"
           isActive={pathname.startsWith('/dashboard/herr-tech-gpt')}
-          locked={!isPremium}
-          onClick={() => isPremium ? onDrillDown('chat') : undefined}
-          href={isPremium ? undefined : '/dashboard/upgrade'}
+          locked={chatLocked}
+          onClick={() => chatLocked ? undefined : onDrillDown('chat')}
+          href={chatLocked ? '/dashboard/upgrade?feature=chat' : undefined}
         />
         <NavItem
           icon={Wrench}
           label="KI Toolbox"
           isActive={pathname.startsWith('/dashboard/ki-toolbox')}
-          locked={!isPremium}
-          onClick={() => isPremium ? onDrillDown('toolbox') : undefined}
-          href={isPremium ? undefined : '/dashboard/upgrade'}
+          locked={toolboxLocked}
+          onClick={() => toolboxLocked ? undefined : onDrillDown('toolbox')}
+          href={toolboxLocked ? '/dashboard/upgrade?feature=toolbox' : undefined}
         />
         <NavItem
-          href="/dashboard/help"
           icon={MessageCircleQuestion}
           label="Hilfe & Kontakt"
           isActive={pathname.startsWith('/dashboard/help')}
+          onClick={() => onDrillDown('help')}
+          badge={helpUnreadCount}
         />
       </div>
 
-      {isAdmin && (
+      {realIsAdmin && (
         <>
           <SectionHeader label="Administration" />
           <div className="space-y-1">
@@ -365,11 +403,110 @@ function MainSidebar({
               label="Admin-Bereich"
               isActive={pathname.startsWith('/admin')}
               onClick={() => onDrillDown('admin')}
+              badge={newTicketCount}
             />
           </div>
         </>
       )}
     </nav>
+  )
+}
+
+// ═══════════════════════════════════════════════════════════
+// VIEW-AS SWITCHER (Admin only)
+// ═══════════════════════════════════════════════════════════
+
+const VIEW_AS_LABELS: Record<ViewAsMode, { label: string; hint: string; dot: string }> = {
+  admin:   { label: 'Admin-Modus',      hint: 'Voller Zugriff',              dot: 'bg-primary' },
+  premium: { label: 'Community',        hint: 'Als Premium-User',            dot: 'bg-green-500' },
+  alumni:  { label: 'Alumni',           hint: 'Ehemaliges Mitglied',         dot: 'bg-amber-500' },
+  basic:   { label: 'Basic',            hint: 'Free-User, alles gesperrt',   dot: 'bg-muted' },
+}
+
+function ViewAsSwitcher({ current }: { current: ViewAsMode }) {
+  const [open, setOpen] = useState(false)
+  const [loading, setLoading] = useState<ViewAsMode | null>(null)
+  const router = useRouter()
+  const menuRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    function handleClickOutside(e: MouseEvent) {
+      if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
+        setOpen(false)
+      }
+    }
+    if (open) document.addEventListener('mousedown', handleClickOutside)
+    return () => document.removeEventListener('mousedown', handleClickOutside)
+  }, [open])
+
+  const select = async (tier: ViewAsMode) => {
+    if (tier === current) { setOpen(false); return }
+    setLoading(tier)
+    await fetch('/api/admin/view-as', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ tier }),
+    })
+    setLoading(null)
+    setOpen(false)
+    router.refresh()
+  }
+
+  const currentMeta = VIEW_AS_LABELS[current]
+  const isImpersonating = current !== 'admin'
+
+  return (
+    <div className="relative" ref={menuRef}>
+      <button
+        type="button"
+        onClick={() => setOpen(!open)}
+        className={`flex items-center gap-2.5 px-3 py-2 rounded-[var(--radius-md)] text-sm w-full text-left transition-all border ${
+          isImpersonating
+            ? 'bg-primary/5 border-primary/30 text-foreground hover:bg-primary/10'
+            : 'border-transparent text-muted hover:bg-surface-hover hover:text-foreground'
+        }`}
+      >
+        <Eye size={15} className={isImpersonating ? 'text-primary shrink-0' : 'text-muted shrink-0'} />
+        <div className="flex-1 min-w-0">
+          <div className="text-[10px] uppercase tracking-wider text-muted font-semibold leading-none mb-0.5">
+            Ansicht als
+          </div>
+          <div className="text-xs font-medium truncate flex items-center gap-1.5">
+            <span className={`inline-block w-1.5 h-1.5 rounded-full ${currentMeta.dot}`} />
+            {currentMeta.label}
+          </div>
+        </div>
+        <ChevronDown size={13} className={`text-muted shrink-0 transition-transform ${open ? 'rotate-180' : ''}`} />
+      </button>
+
+      {open && (
+        <div className="absolute left-0 right-0 bottom-full mb-1 z-50 bg-surface border border-border rounded-[var(--radius-xl)] shadow-[var(--shadow-dropdown)] overflow-hidden py-1">
+          {VIEW_AS_OPTIONS.map((opt) => {
+            const meta = VIEW_AS_LABELS[opt]
+            const isActive = opt === current
+            return (
+              <button
+                key={opt}
+                type="button"
+                onClick={() => select(opt)}
+                disabled={loading !== null}
+                className={`w-full flex items-center gap-2.5 px-3 py-2 text-left text-sm transition-colors ${
+                  isActive ? 'bg-primary/10 text-foreground' : 'text-foreground hover:bg-surface-hover'
+                } disabled:opacity-50`}
+              >
+                <span className={`inline-block w-2 h-2 rounded-full shrink-0 ${meta.dot}`} />
+                <div className="flex-1 min-w-0">
+                  <div className="font-medium truncate text-xs">{meta.label}</div>
+                  <div className="text-[10px] text-muted truncate">{meta.hint}</div>
+                </div>
+                {loading === opt && <span className="text-xs text-muted">…</span>}
+                {isActive && loading === null && <span className="text-xs text-primary">●</span>}
+              </button>
+            )
+          })}
+        </div>
+      )}
+    </div>
   )
 }
 
@@ -499,15 +636,239 @@ function ChatSidebar({
 }
 
 // ═══════════════════════════════════════════════════════════
+// HELP SIDEBAR (Drill-Down: Hilfe & Kontakt)
+// ═══════════════════════════════════════════════════════════
+
+function HelpSidebar({
+  helpConversations,
+  onBack,
+  onNewChat,
+}: {
+  helpConversations: Conversation[]
+  pathname: string
+  onBack: () => void
+  onNewChat: () => void
+}) {
+  const [activeId, setActiveId] = useState<string | null>(null)
+
+  useEffect(() => {
+    const update = () => {
+      setActiveId(new URLSearchParams(window.location.search).get('chat'))
+    }
+    update()
+    window.addEventListener('popstate', update)
+    return () => window.removeEventListener('popstate', update)
+  }, [])
+
+  useEffect(() => {
+    const interval = setInterval(() => {
+      const current = new URLSearchParams(window.location.search).get('chat')
+      if (current !== activeId) setActiveId(current)
+    }, 200)
+    return () => clearInterval(interval)
+  }, [activeId])
+
+  return (
+    <div className="flex-1 overflow-y-auto flex flex-col">
+      {/* Back */}
+      <button
+        onClick={onBack}
+        className="flex items-center gap-2 px-4 py-3 text-sm text-muted hover:text-foreground hover:bg-surface-hover transition-colors border-b border-border"
+      >
+        <ChevronLeft size={16} />
+        <span>Zurück zur Übersicht</span>
+      </button>
+
+      {/* Neuer Chat — oben prominent */}
+      <div className="px-3 pt-4 pb-2">
+        <button
+          type="button"
+          onClick={onNewChat}
+          className="btn-primary w-full justify-center"
+        >
+          <Plus size={16} />
+          Neue Anfrage
+        </button>
+      </div>
+
+      {helpConversations.length > 0 && (
+        <div className="px-3 py-2 border-t border-border">
+          <SectionHeader label="Letzte Anfragen" />
+          <div className="space-y-0.5">
+            {helpConversations.map((conv) => (
+              <HelpConversationItem
+                key={conv.id}
+                conv={conv}
+                isActive={activeId === conv.id}
+              />
+            ))}
+          </div>
+        </div>
+      )}
+
+      {helpConversations.length === 0 && (
+        <div className="px-4 py-6 text-center">
+          <p className="text-xs text-muted leading-relaxed">
+            Deine Anfragen erscheinen hier, sobald du den ersten Chat startest.
+          </p>
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ─── Eine einzelne Anfrage mit Rename + Delete ─────────────────────────────
+
+function HelpConversationItem({
+  conv,
+  isActive,
+}: {
+  conv: Conversation
+  isActive: boolean
+}) {
+  const router = useRouter()
+  const [menuOpen, setMenuOpen] = useState(false)
+  const [isRenaming, setIsRenaming] = useState(false)
+  const [title, setTitle] = useState(conv.title ?? 'Anfrage')
+  const [loading, setLoading] = useState<'rename' | 'delete' | null>(null)
+  const menuRef = useRef<HTMLDivElement>(null)
+  const inputRef = useRef<HTMLInputElement>(null)
+
+  useEffect(() => {
+    function handleClickOutside(e: MouseEvent) {
+      if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
+        setMenuOpen(false)
+      }
+    }
+    if (menuOpen) document.addEventListener('mousedown', handleClickOutside)
+    return () => document.removeEventListener('mousedown', handleClickOutside)
+  }, [menuOpen])
+
+  useEffect(() => {
+    if (isRenaming && inputRef.current) {
+      inputRef.current.focus()
+      inputRef.current.select()
+    }
+  }, [isRenaming])
+
+  useEffect(() => {
+    setTitle(conv.title ?? 'Anfrage')
+  }, [conv.title])
+
+  const handleRename = async () => {
+    const trimmed = title.trim()
+    if (!trimmed || trimmed === conv.title) {
+      setIsRenaming(false)
+      return
+    }
+    setLoading('rename')
+    const supabase = createClient()
+    await supabase.from('conversations').update({ title: trimmed }).eq('id', conv.id)
+    setLoading(null)
+    setIsRenaming(false)
+    router.refresh()
+  }
+
+  const handleDelete = async () => {
+    if (!confirm('Diese Anfrage wirklich löschen?')) return
+    setLoading('delete')
+    const supabase = createClient()
+    await supabase.from('conversations').delete().eq('id', conv.id)
+    setLoading(null)
+    setMenuOpen(false)
+    const activeId = new URLSearchParams(window.location.search).get('chat')
+    if (activeId === conv.id) router.push('/dashboard/help')
+    router.refresh()
+  }
+
+  if (isRenaming) {
+    return (
+      <div className="flex items-center gap-2 px-3 py-2">
+        <span className="text-base shrink-0">💬</span>
+        <input
+          ref={inputRef}
+          value={title}
+          onChange={(e) => setTitle(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') handleRename()
+            if (e.key === 'Escape') { setIsRenaming(false); setTitle(conv.title ?? 'Anfrage') }
+          }}
+          onBlur={handleRename}
+          className="flex-1 text-sm px-2 py-1 border border-primary/40 rounded-[var(--radius-sm)] bg-surface focus:outline-none focus:ring-1 focus:ring-primary"
+        />
+      </div>
+    )
+  }
+
+  const hasUnread = !!conv.user_has_unread
+
+  return (
+    <div className={`group relative flex items-center rounded-[var(--radius-md)] transition-colors ${
+      isActive ? 'bg-primary/10' : 'hover:bg-surface-hover'
+    }`}>
+      <Link
+        href={`/dashboard/help?chat=${conv.id}`}
+        className={`flex-1 min-w-0 flex items-center gap-3 px-3 py-2 text-sm pr-8 ${
+          isActive ? 'text-foreground font-medium' : hasUnread ? 'text-foreground font-medium' : 'text-muted group-hover:text-foreground'
+        }`}
+      >
+        <span className="text-base shrink-0 relative">
+          💬
+          {hasUnread && (
+            <span className="absolute -top-0.5 -right-0.5 w-2 h-2 rounded-full bg-red-500 ring-2 ring-surface" />
+          )}
+        </span>
+        <span className="truncate flex-1 min-w-0">{conv.title ?? 'Anfrage'}</span>
+      </Link>
+
+      <div className="relative" ref={menuRef}>
+        <button
+          onClick={(e) => { e.preventDefault(); e.stopPropagation(); setMenuOpen(!menuOpen) }}
+          className="opacity-0 group-hover:opacity-100 p-1.5 rounded hover:bg-surface-hover text-muted hover:text-foreground transition-all absolute right-1 top-1/2 -translate-y-1/2"
+          aria-label="Optionen"
+        >
+          <MoreVertical size={14} />
+        </button>
+
+        {menuOpen && (
+          <div className="absolute right-0 top-full mt-1 z-50 bg-surface border border-border rounded-[var(--radius-lg)] shadow-[var(--shadow-dropdown)] py-1 min-w-[150px]">
+            <button
+              onClick={(e) => {
+                e.preventDefault()
+                e.stopPropagation()
+                setIsRenaming(true)
+                setMenuOpen(false)
+              }}
+              className="w-full text-left px-3 py-2 text-sm text-foreground hover:bg-surface-hover transition-colors"
+            >
+              Umbenennen
+            </button>
+            <button
+              onClick={(e) => { e.preventDefault(); e.stopPropagation(); handleDelete() }}
+              disabled={loading !== null}
+              className="w-full text-left px-3 py-2 text-sm text-red-500 hover:bg-red-50 dark:hover:bg-red-950/30 transition-colors disabled:opacity-50"
+            >
+              {loading === 'delete' ? 'Lösche…' : 'Löschen'}
+            </button>
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
+
+// ═══════════════════════════════════════════════════════════
 // ADMIN SIDEBAR (Drill-Down Modus 3)
 // ═══════════════════════════════════════════════════════════
 
 function AdminSidebar({
   pathname,
   onBack,
+  newTicketCount,
 }: {
   pathname: string
   onBack: () => void
+  newTicketCount?: number
 }) {
   return (
     <div className="flex-1 overflow-y-auto">
@@ -545,7 +906,7 @@ function AdminSidebar({
             href="/admin/groups"
             icon={Lock}
             label="Gruppen & Rechte"
-            description="Berechtigungen, Paid/Free"
+            description="Matrix + Upsell-Texte"
             isActive={pathname.startsWith('/admin/groups')}
           />
         </div>
@@ -597,6 +958,7 @@ function AdminSidebar({
             label="Support-Tickets"
             description="Anfragen, Verlauf, Antworten"
             isActive={pathname.startsWith('/admin/tickets')}
+            badge={newTicketCount}
           />
         </div>
       </nav>
@@ -776,7 +1138,7 @@ function ToolboxSidebar({
 // MAIN SIDEBAR EXPORT
 // ═══════════════════════════════════════════════════════════
 
-export function Sidebar({ conversations, userEmail, userName, isAdmin, accessTier }: SidebarProps) {
+export function Sidebar({ conversations, userEmail, userName, isAdmin, realIsAdmin, accessTier, viewAs, states, newTicketCount, helpUnreadCount }: SidebarProps) {
   const pathname = usePathname()
   const router = useRouter()
   const { theme, toggleTheme } = useTheme()
@@ -787,6 +1149,7 @@ export function Sidebar({ conversations, userEmail, userName, isAdmin, accessTie
     if (pathname.startsWith('/dashboard/herr-tech-gpt')) return 'chat'
     if (pathname.startsWith('/dashboard/classroom')) return 'classroom'
     if (pathname.startsWith('/dashboard/ki-toolbox')) return 'toolbox'
+    if (pathname.startsWith('/dashboard/help')) return 'help'
     return 'main'
   }, [pathname])
 
@@ -803,6 +1166,23 @@ export function Sidebar({ conversations, userEmail, userName, isAdmin, accessTie
     if (newMode === 'admin') router.push('/admin')
     if (newMode === 'classroom') router.push('/dashboard/classroom')
     if (newMode === 'toolbox') router.push('/dashboard/ki-toolbox')
+    if (newMode === 'help') router.push('/dashboard/help')
+  }
+
+  const handleNewHelpChat = async () => {
+    // Neuen Help-Chat anlegen via API, dann dorthin navigieren
+    const supabase = createClient()
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user) return
+    const { data: newConv } = await supabase
+      .from('conversations')
+      .insert({ user_id: user.id, agent_id: 'help', title: 'Neue Anfrage' })
+      .select('id')
+      .single()
+    if (newConv?.id) {
+      router.push(`/dashboard/help?chat=${newConv.id}`)
+      router.refresh()
+    }
   }
 
   const handleBack = () => {
@@ -835,7 +1215,10 @@ export function Sidebar({ conversations, userEmail, userName, isAdmin, accessTie
         >
           <MainSidebar
             isAdmin={isAdmin}
-            accessTier={accessTier}
+            realIsAdmin={realIsAdmin}
+            states={states}
+            newTicketCount={newTicketCount}
+            helpUnreadCount={helpUnreadCount}
             pathname={pathname}
             onDrillDown={handleDrillDown}
           />
@@ -853,7 +1236,7 @@ export function Sidebar({ conversations, userEmail, userName, isAdmin, accessTie
             conversations={conversations}
             pathname={pathname}
             onBack={handleBack}
-            isAdmin={isAdmin}
+            isAdmin={realIsAdmin}
             onDrillDown={handleDrillDown}
           />
         </div>
@@ -866,7 +1249,7 @@ export function Sidebar({ conversations, userEmail, userName, isAdmin, accessTie
             pointerEvents: mode === 'admin' ? 'auto' : 'none',
           }}
         >
-          <AdminSidebar pathname={pathname} onBack={handleBack} />
+          <AdminSidebar pathname={pathname} onBack={handleBack} newTicketCount={newTicketCount} />
         </div>
 
         <div
@@ -877,7 +1260,7 @@ export function Sidebar({ conversations, userEmail, userName, isAdmin, accessTie
             pointerEvents: mode === 'classroom' ? 'auto' : 'none',
           }}
         >
-          <ClassroomSidebar pathname={pathname} onBack={handleBack} isAdmin={isAdmin} onDrillDown={handleDrillDown} />
+          <ClassroomSidebar pathname={pathname} onBack={handleBack} isAdmin={realIsAdmin} onDrillDown={handleDrillDown} />
         </div>
 
         <div
@@ -888,9 +1271,32 @@ export function Sidebar({ conversations, userEmail, userName, isAdmin, accessTie
             pointerEvents: mode === 'toolbox' ? 'auto' : 'none',
           }}
         >
-          <ToolboxSidebar pathname={pathname} onBack={handleBack} isAdmin={isAdmin} onDrillDown={handleDrillDown} />
+          <ToolboxSidebar pathname={pathname} onBack={handleBack} isAdmin={realIsAdmin} onDrillDown={handleDrillDown} />
+        </div>
+
+        <div
+          className="absolute inset-0 overflow-y-auto transition-transform duration-200 ease-in-out"
+          style={{
+            transform: mode === 'help' ? 'translateX(0)' : 'translateX(100%)',
+            visibility: mode === 'help' ? 'visible' : 'hidden',
+            pointerEvents: mode === 'help' ? 'auto' : 'none',
+          }}
+        >
+          <HelpSidebar
+            helpConversations={conversations.filter((c) => c.agent_id === 'help')}
+            pathname={pathname}
+            onBack={handleBack}
+            onNewChat={handleNewHelpChat}
+          />
         </div>
       </div>
+
+      {/* View-As Switcher — persistent f\u00fcr Admins (immer sichtbar) */}
+      {realIsAdmin && (
+        <div className="border-t border-border px-3 py-2">
+          <ViewAsSwitcher current={viewAs ?? 'admin'} />
+        </div>
+      )}
 
       {/* Bottom — Theme Toggle + User Menu */}
       <div className="border-t border-border px-3 pb-2 pt-1">

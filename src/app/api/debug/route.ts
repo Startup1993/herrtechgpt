@@ -8,11 +8,11 @@ export async function GET() {
     const anthropic = createAnthropic({ apiKey: key })
 
     const { text } = await generateText({
-      model: anthropic('claude-sonnet-4-20250514'),
+      model: anthropic('claude-sonnet-4-5-20250929'),
       prompt: 'Say "Hello"',
     })
 
-    return Response.json({ success: true, model: 'claude-sonnet-4-20250514', text })
+    return Response.json({ success: true, model: 'claude-sonnet-4-5-20250929', text })
   } catch {
     // Try claude-3-5-sonnet
     try {

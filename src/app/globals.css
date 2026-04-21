@@ -1,5 +1,10 @@
 @import "tailwindcss";
 
+/* Tailwind v4 Dark-Mode: nutze die .dark-Klasse am html-Element statt
+   prefers-color-scheme. Ohne diesen Custom-Variant greifen "dark:"-Klassen
+   im Projekt nicht, obwohl das Theme per :root / html.dark funktioniert. */
+@custom-variant dark (&:where(.dark, .dark *));
+
 /* ═══════════════════════════════════════════════════════════
    HERR TECH DESIGN SYSTEM
 

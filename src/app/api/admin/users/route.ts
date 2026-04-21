@@ -2,6 +2,18 @@ import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { NextResponse } from 'next/server'
 
+const VALID_ROLES = ['user', 'admin'] as const
+const VALID_TIERS = ['basic', 'alumni', 'premium'] as const
+
+const PROFILE_TEXT_FIELDS = [
+  'background',
+  'market',
+  'target_audience',
+  'offer',
+  'experience_level',
+  'primary_goal',
+] as const
+
 async function requireAdmin() {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
@@ -17,21 +29,59 @@ export async function PATCH(request: Request) {
   const user = await requireAdmin()
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 403 })
 
-  const { userId, role, access_tier } = await request.json()
+  const body = await request.json()
+  const { userId, role, access_tier, email } = body as {
+    userId?: string
+    role?: string
+    access_tier?: string
+    email?: string
+  }
   if (!userId) return NextResponse.json({ error: 'userId required' }, { status: 400 })
 
   const updates: Record<string, string> = { updated_at: new Date().toISOString() }
-  if (role) {
-    if (!['user', 'admin'].includes(role)) return NextResponse.json({ error: 'Invalid role' }, { status: 400 })
+
+  if (role !== undefined) {
+    if (!VALID_ROLES.includes(role as typeof VALID_ROLES[number])) {
+      return NextResponse.json({ error: 'Invalid role' }, { status: 400 })
+    }
     updates.role = role
   }
-  if (access_tier) {
-    if (!['basic', 'premium'].includes(access_tier)) return NextResponse.json({ error: 'Invalid access_tier' }, { status: 400 })
+  if (access_tier !== undefined) {
+    if (!VALID_TIERS.includes(access_tier as typeof VALID_TIERS[number])) {
+      return NextResponse.json({ error: 'Invalid access_tier' }, { status: 400 })
+    }
     updates.access_tier = access_tier
   }
-  if (!role && !access_tier) return NextResponse.json({ error: 'role or access_tier required' }, { status: 400 })
+  for (const field of PROFILE_TEXT_FIELDS) {
+    const value = body[field]
+    if (value !== undefined) {
+      if (typeof value !== 'string') {
+        return NextResponse.json({ error: `Invalid ${field}` }, { status: 400 })
+      }
+      updates[field] = value
+    }
+  }
 
   const admin = createAdminClient()
+
+  if (email !== undefined) {
+    if (typeof email !== 'string' || !email.includes('@')) {
+      return NextResponse.json({ error: 'Invalid email' }, { status: 400 })
+    }
+    const { error: authError } = await admin.auth.admin.updateUserById(userId, {
+      email,
+      email_confirm: true,
+    })
+    if (authError) return NextResponse.json({ error: authError.message }, { status: 500 })
+  }
+
+  if (Object.keys(updates).length === 1) {
+    if (email === undefined) {
+      return NextResponse.json({ error: 'Nothing to update' }, { status: 400 })
+    }
+    return NextResponse.json({ success: true })
+  }
+
   const { data, error } = await admin
     .from('profiles')
     .update(updates)

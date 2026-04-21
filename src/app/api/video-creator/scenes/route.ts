@@ -19,7 +19,7 @@ export async function POST(req: NextRequest) {
     const count = sceneCount ?? 6
 
     const response = await anthropic.messages.create({
-      model: 'claude-sonnet-4-20250514',
+      model: 'claude-sonnet-4-5-20250929',
       max_tokens: 4096,
       messages: [
         {
