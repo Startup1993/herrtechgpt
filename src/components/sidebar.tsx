@@ -539,6 +539,13 @@ function AdminSidebar({
             isActive={pathname.startsWith('/admin/content/knowledge')}
           />
           <NavItem
+            href="/admin/content/tools"
+            icon={Wrench}
+            label="Tech-Stack"
+            description="Tools pro Assistent"
+            isActive={pathname.startsWith('/admin/content/tools')}
+          />
+          <NavItem
             href="/admin/content/videos"
             icon={Film}
             label="Video-Sync"

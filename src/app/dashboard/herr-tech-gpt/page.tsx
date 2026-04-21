@@ -1,17 +1,19 @@
 'use client'
 
-import { useState } from 'react'
-import { useRouter } from 'next/navigation'
+import { useCallback, useEffect, useRef, useState } from 'react'
+import { useRouter, useSearchParams } from 'next/navigation'
 import { listedAgents as agents } from '@/lib/agents'
 import { createClient } from '@/lib/supabase/client'
 import { ArrowRight, Loader2, MessageSquare, Send } from 'lucide-react'
 
 export default function HerrTechGptPage() {
   const router = useRouter()
+  const searchParams = useSearchParams()
   const [loading, setLoading] = useState<string | null>(null)
   const [inputText, setInputText] = useState('')
+  const autoStarted = useRef(false)
 
-  const startChat = async (agentId: string, initMessage?: string) => {
+  const startChat = useCallback(async (agentId: string, initMessage?: string) => {
     setLoading(agentId)
     try {
       const supabase = createClient()
@@ -40,7 +42,17 @@ export default function HerrTechGptPage() {
     } finally {
       setLoading(null)
     }
-  }
+  }, [router])
+
+  // Auto-start chat when sidebar links with ?agent=<id>
+  useEffect(() => {
+    const agentId = searchParams.get('agent')
+    if (!agentId || autoStarted.current) return
+    const exists = agents.find((a) => a.id === agentId)
+    if (!exists) return
+    autoStarted.current = true
+    startChat(agentId)
+  }, [searchParams, startChat])
 
   // Smart routing: determine best agent from user input
   const handleSmartStart = () => {
