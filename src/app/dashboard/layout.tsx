@@ -34,6 +34,18 @@ export default async function DashboardLayout({
   const access = computeEffectiveAccess(profile, viewAsRaw)
   const states = matrix[access.tier]
 
+  // Neue Tickets z\u00e4hlen — nur f\u00fcr echte Admins (nicht impersonating)
+  let newTicketCount = 0
+  if (access.realIsAdmin) {
+    const { count } = await supabase
+      .from('conversations')
+      .select('*', { count: 'exact', head: true })
+      .eq('agent_id', 'help')
+      .eq('status', 'new')
+      .eq('mode', 'human')
+    newTicketCount = count ?? 0
+  }
+
   const userEmail = user.email ?? ''
   const userName =
     (user.user_metadata?.full_name as string) ??
@@ -50,6 +62,7 @@ export default async function DashboardLayout({
       accessTier={access.tier}
       viewAs={access.viewAs}
       states={states}
+      newTicketCount={newTicketCount}
     >
       {children}
     </AppShell>

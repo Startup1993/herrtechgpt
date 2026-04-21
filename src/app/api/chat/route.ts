@@ -56,6 +56,35 @@ export async function POST(req: Request) {
     return new Response('No messages', { status: 400 })
   }
 
+  // Human-Mode Check: wenn die Conversation im human-mode ist (Support-Chat mit Admin),
+  // nur die User-Message speichern und Status auf 'new' setzen — KI-Call \u00fcberspringen.
+  if (conversationId) {
+    const { data: conv } = await supabase
+      .from('conversations')
+      .select('mode')
+      .eq('id', conversationId)
+      .single()
+
+    if (conv?.mode === 'human') {
+      const lastUserMessage = messages[messages.length - 1]
+      if (lastUserMessage?.role === 'user') {
+        await supabase.from('messages').insert({
+          conversation_id: conversationId,
+          role: 'user',
+          content: lastUserMessage.content,
+        })
+      }
+      // Status zur\u00fcck auf 'new' — Admin sieht wieder "ungelesen"
+      await supabase
+        .from('conversations')
+        .update({ status: 'new', updated_at: new Date().toISOString() })
+        .eq('id', conversationId)
+
+      // Leerer Stream zur\u00fcck — kein KI-Text
+      return new Response('', { status: 200, headers: { 'Content-Type': 'text/plain' } })
+    }
+  }
+
   // Load user profile for context injection
   const { data: profile } = await supabase
     .from('profiles')

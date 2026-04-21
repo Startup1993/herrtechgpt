@@ -1,6 +1,9 @@
 import { createClient } from '@/lib/supabase/server'
 import { redirect } from 'next/navigation'
+import { cookies } from 'next/headers'
 import { AppShell } from '@/components/app-shell'
+import { computeEffectiveAccess, VIEW_AS_COOKIE } from '@/lib/access'
+import { getPermissionMatrix } from '@/lib/permissions'
 
 export default async function AdminLayout({
   children,
@@ -11,7 +14,7 @@ export default async function AdminLayout({
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) redirect('/login')
 
-  const [{ data: profile }, { data: conversations }] = await Promise.all([
+  const [{ data: profile }, { data: conversations }, cookieStore, matrix, { count: ticketCount }] = await Promise.all([
     supabase
       .from('profiles')
       .select('role, access_tier')
@@ -23,12 +26,23 @@ export default async function AdminLayout({
       .eq('user_id', user.id)
       .order('updated_at', { ascending: false })
       .limit(15),
+    cookies(),
+    getPermissionMatrix(supabase),
+    supabase
+      .from('conversations')
+      .select('*', { count: 'exact', head: true })
+      .eq('agent_id', 'help')
+      .eq('status', 'new')
+      .eq('mode', 'human'),
   ])
 
-  // Only admins can access /admin
   if (!profile || profile.role !== 'admin') {
     redirect('/dashboard')
   }
+
+  const viewAsRaw = cookieStore.get(VIEW_AS_COOKIE)?.value
+  const access = computeEffectiveAccess(profile, viewAsRaw)
+  const states = matrix[access.tier]
 
   const userEmail = user.email ?? ''
   const userName =
@@ -41,8 +55,12 @@ export default async function AdminLayout({
       conversations={conversations ?? []}
       userEmail={userEmail}
       userName={userName}
-      isAdmin={true}
-      accessTier={(profile.access_tier ?? 'premium') as 'basic' | 'premium'}
+      isAdmin={access.isAdmin}
+      realIsAdmin={true}
+      accessTier={access.tier}
+      viewAs={access.viewAs}
+      states={states}
+      newTicketCount={ticketCount ?? 0}
     >
       {children}
     </AppShell>

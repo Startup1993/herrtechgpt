@@ -56,6 +56,7 @@ interface SidebarProps {
   accessTier?: AccessTier
   viewAs?: ViewAsMode
   states?: Record<FeatureKey, FeatureState>
+  newTicketCount?: number
 }
 
 // ═══════════════════════════════════════════════════════════
@@ -250,6 +251,7 @@ function NavItem({
   locked,
   onClick,
   description,
+  badge,
 }: {
   href?: string
   icon: React.ElementType
@@ -258,6 +260,7 @@ function NavItem({
   locked?: boolean
   onClick?: () => void
   description?: string
+  badge?: number
 }) {
   const baseClass = `flex items-center gap-3 px-3 py-2.5 rounded-[var(--radius-lg)] text-sm transition-all w-full text-left ${
     isActive
@@ -274,6 +277,11 @@ function NavItem({
           <span className="text-xs text-muted truncate block mt-0.5">{description}</span>
         )}
       </div>
+      {badge !== undefined && badge > 0 && (
+        <span className="inline-flex items-center justify-center min-w-[20px] h-5 px-1.5 rounded-full bg-red-500 text-white text-[10px] font-bold shrink-0">
+          {badge > 99 ? '99+' : badge}
+        </span>
+      )}
       {locked && <Lock size={14} className="text-muted shrink-0" />}
     </>
   )
@@ -316,12 +324,14 @@ function MainSidebar({
   isAdmin,
   realIsAdmin,
   states,
+  newTicketCount,
   pathname,
   onDrillDown,
 }: {
   isAdmin?: boolean
   realIsAdmin?: boolean
   states?: Record<FeatureKey, FeatureState>
+  newTicketCount?: number
   pathname: string
   onDrillDown: (mode: SidebarMode) => void
 }) {
@@ -390,6 +400,7 @@ function MainSidebar({
               label="Admin-Bereich"
               isActive={pathname.startsWith('/admin')}
               onClick={() => onDrillDown('admin')}
+              badge={newTicketCount}
             />
           </div>
         </>
@@ -594,9 +605,11 @@ function ChatSidebar({
 function AdminSidebar({
   pathname,
   onBack,
+  newTicketCount,
 }: {
   pathname: string
   onBack: () => void
+  newTicketCount?: number
 }) {
   return (
     <div className="flex-1 overflow-y-auto">
@@ -679,6 +692,7 @@ function AdminSidebar({
             label="Support-Tickets"
             description="Anfragen, Verlauf, Antworten"
             isActive={pathname.startsWith('/admin/tickets')}
+            badge={newTicketCount}
           />
         </div>
       </nav>
@@ -858,7 +872,7 @@ function ToolboxSidebar({
 // MAIN SIDEBAR EXPORT
 // ═══════════════════════════════════════════════════════════
 
-export function Sidebar({ conversations, userEmail, userName, isAdmin, realIsAdmin, accessTier, viewAs, states }: SidebarProps) {
+export function Sidebar({ conversations, userEmail, userName, isAdmin, realIsAdmin, accessTier, viewAs, states, newTicketCount }: SidebarProps) {
   const pathname = usePathname()
   const router = useRouter()
   const { theme, toggleTheme } = useTheme()
@@ -919,6 +933,7 @@ export function Sidebar({ conversations, userEmail, userName, isAdmin, realIsAdm
             isAdmin={isAdmin}
             realIsAdmin={realIsAdmin}
             states={states}
+            newTicketCount={newTicketCount}
             pathname={pathname}
             onDrillDown={handleDrillDown}
           />
@@ -949,7 +964,7 @@ export function Sidebar({ conversations, userEmail, userName, isAdmin, realIsAdm
             pointerEvents: mode === 'admin' ? 'auto' : 'none',
           }}
         >
-          <AdminSidebar pathname={pathname} onBack={handleBack} />
+          <AdminSidebar pathname={pathname} onBack={handleBack} newTicketCount={newTicketCount} />
         </div>
 
         <div

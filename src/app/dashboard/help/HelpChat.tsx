@@ -1,0 +1,331 @@
+'use client'
+
+import { useCallback, useEffect, useRef, useState } from 'react'
+import { useRouter } from 'next/navigation'
+import { Send, Loader2, Users, Bot, Shield, CheckCircle2, Info } from 'lucide-react'
+import { createClient } from '@/lib/supabase/client'
+
+type Role = 'user' | 'assistant' | 'admin' | 'system'
+type Mode = 'ai' | 'human'
+type Status = 'new' | 'answered' | 'resolved'
+
+interface Message {
+  id: string
+  role: Role
+  content: string
+  created_at: string
+}
+
+interface Props {
+  conversationId: string
+  initialMessages: Message[]
+  initialMode: Mode
+  initialStatus: Status
+  userInitials: string
+}
+
+export function HelpChat({
+  conversationId,
+  initialMessages,
+  initialMode,
+  initialStatus,
+  userInitials,
+}: Props) {
+  const router = useRouter()
+  const [messages, setMessages] = useState<Message[]>(initialMessages)
+  const [mode, setMode] = useState<Mode>(initialMode)
+  const [status, setStatus] = useState<Status>(initialStatus)
+  const [input, setInput] = useState('')
+  const [sending, setSending] = useState(false)
+  const [switching, setSwitching] = useState(false)
+  const scrollRef = useRef<HTMLDivElement>(null)
+  const textareaRef = useRef<HTMLTextAreaElement>(null)
+
+  // Polling: alle 8s nach neuen Admin-Antworten suchen (nur im Human-Mode oder wenn Status answered)
+  const pollMessages = useCallback(async () => {
+    const supabase = createClient()
+    const [{ data: msgs }, { data: conv }] = await Promise.all([
+      supabase
+        .from('messages')
+        .select('id, role, content, created_at')
+        .eq('conversation_id', conversationId)
+        .order('created_at', { ascending: true }),
+      supabase
+        .from('conversations')
+        .select('mode, status')
+        .eq('id', conversationId)
+        .single(),
+    ])
+    if (msgs) setMessages(msgs as Message[])
+    if (conv) {
+      setMode(conv.mode as Mode)
+      setStatus(conv.status as Status)
+    }
+  }, [conversationId])
+
+  useEffect(() => {
+    // Nur pollen wenn relevant (Human-Mode aktiv oder wartend auf Admin-Antwort)
+    if (mode !== 'human' && status === 'resolved') return
+    const interval = setInterval(pollMessages, 8000)
+    return () => clearInterval(interval)
+  }, [mode, status, pollMessages])
+
+  useEffect(() => {
+    if (scrollRef.current) {
+      scrollRef.current.scrollTop = scrollRef.current.scrollHeight
+    }
+  }, [messages])
+
+  const requestAdmin = async () => {
+    setSwitching(true)
+    const res = await fetch('/api/help/request-admin', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ conversationId }),
+    })
+    setSwitching(false)
+    if (res.ok) {
+      await pollMessages()
+      router.refresh()
+    }
+  }
+
+  const send = async () => {
+    const text = input.trim()
+    if (!text || sending) return
+    setSending(true)
+
+    // Optimistic
+    const optimistic: Message = {
+      id: 'temp-' + Date.now(),
+      role: 'user',
+      content: text,
+      created_at: new Date().toISOString(),
+    }
+    setMessages((m) => [...m, optimistic])
+    setInput('')
+
+    try {
+      const res = await fetch('/api/chat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          agentId: 'help',
+          conversationId,
+          messages: [
+            ...messages.map((m) => ({ id: m.id, role: m.role, parts: [{ type: 'text', text: m.content }] })),
+            { id: optimistic.id, role: 'user', parts: [{ type: 'text', text }] },
+          ],
+        }),
+      })
+
+      if (mode === 'ai' && res.ok) {
+        // Stream AI response
+        const reader = res.body?.getReader()
+        const decoder = new TextDecoder()
+        let aiText = ''
+        const aiId = 'ai-' + Date.now()
+        setMessages((m) => [...m, { id: aiId, role: 'assistant', content: '', created_at: new Date().toISOString() }])
+        if (reader) {
+          while (true) {
+            const { done, value } = await reader.read()
+            if (done) break
+            aiText += decoder.decode(value)
+            setMessages((m) => m.map((msg) => msg.id === aiId ? { ...msg, content: aiText } : msg))
+          }
+        }
+      }
+      // Re-fetch to get real IDs
+      await pollMessages()
+    } catch {
+      // bei Fehler: erneuter Poll
+      await pollMessages()
+    } finally {
+      setSending(false)
+    }
+  }
+
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault()
+      send()
+    }
+  }
+
+  const isHuman = mode === 'human'
+  const isResolved = status === 'resolved'
+
+  return (
+    <div className="flex flex-col h-full">
+      {/* Banner: Human-Mode aktiv */}
+      {isHuman && !isResolved && (
+        <div className="shrink-0 bg-primary/5 border-b border-primary/20 px-4 py-2.5 flex items-center gap-3">
+          <Users size={16} className="text-primary shrink-0" />
+          <div className="flex-1 min-w-0">
+            <p className="text-xs font-medium text-foreground">Du schreibst gerade mit dem Support-Team</p>
+            <p className="text-[11px] text-muted">Antwortzeit meist innerhalb von 24h — die KI ist in diesem Chat aus.</p>
+          </div>
+        </div>
+      )}
+
+      {/* Banner: Resolved */}
+      {isResolved && (
+        <div className="shrink-0 bg-green-50 dark:bg-green-950/30 border-b border-green-200 dark:border-green-900 px-4 py-2.5 flex items-center gap-3">
+          <CheckCircle2 size={16} className="text-green-600 dark:text-green-400 shrink-0" />
+          <div className="flex-1 min-w-0">
+            <p className="text-xs font-medium text-foreground">Dieser Fall ist als gelöst markiert</p>
+            <p className="text-[11px] text-muted">Schreib einfach eine neue Nachricht, wenn du weitere Hilfe brauchst — die KI hilft dann direkt.</p>
+          </div>
+        </div>
+      )}
+
+      {/* Messages */}
+      <div ref={scrollRef} className="flex-1 overflow-y-auto px-4 py-6 md:px-8 bg-background">
+        {messages.length === 0 ? (
+          <div className="flex flex-col items-center justify-center h-full text-center">
+            <div className="text-4xl mb-4">💬</div>
+            <h2 className="text-lg font-semibold text-foreground mb-1">Hilfe & Kontakt</h2>
+            <p className="text-sm text-muted max-w-md">
+              Frag mich alles — bei Bedarf kannst du direkt mit unserem Team sprechen.
+            </p>
+          </div>
+        ) : (
+          <div className="max-w-3xl mx-auto space-y-4">
+            {messages.map((msg) => (
+              <MessageBubble key={msg.id} msg={msg} userInitials={userInitials} />
+            ))}
+            {sending && mode === 'ai' && (
+              <div className="flex items-center gap-2 text-xs text-muted ml-10">
+                <Loader2 size={12} className="animate-spin" />
+                KI schreibt…
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+
+      {/* Call-to-action: Mit Team sprechen (nur im AI-Mode + nicht resolved) */}
+      {!isHuman && !isResolved && (
+        <div className="shrink-0 px-4 py-2 border-t border-border bg-surface/50">
+          <div className="max-w-3xl mx-auto flex items-center justify-between gap-3">
+            <p className="text-xs text-muted">
+              Keine passende Antwort? Schreib direkt mit unserem Team.
+            </p>
+            <button
+              onClick={requestAdmin}
+              disabled={switching}
+              className="inline-flex items-center gap-2 px-3 py-1.5 text-xs font-medium text-primary border border-primary/30 rounded-full hover:bg-primary/10 transition-colors disabled:opacity-50"
+            >
+              {switching ? <Loader2 size={12} className="animate-spin" /> : <Users size={12} />}
+              Mit dem Team sprechen
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Call-to-action: User hat resolved ticket und will wieder Admin */}
+      {isResolved && (
+        <div className="shrink-0 px-4 py-2 border-t border-border bg-surface/50">
+          <div className="max-w-3xl mx-auto flex items-center justify-between gap-3">
+            <p className="text-xs text-muted">Doch noch nicht gelöst?</p>
+            <button
+              onClick={requestAdmin}
+              disabled={switching}
+              className="inline-flex items-center gap-2 px-3 py-1.5 text-xs font-medium text-primary border border-primary/30 rounded-full hover:bg-primary/10 transition-colors disabled:opacity-50"
+            >
+              {switching ? <Loader2 size={12} className="animate-spin" /> : <Users size={12} />}
+              Nochmal Team kontaktieren
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Input */}
+      <div className="shrink-0 px-4 py-3 border-t border-border bg-surface">
+        <div className="max-w-3xl mx-auto">
+          <div className="flex gap-2 items-end bg-surface border border-border rounded-2xl px-4 py-2 shadow-sm focus-within:ring-2 focus-within:ring-primary focus-within:border-transparent transition-shadow">
+            <textarea
+              ref={textareaRef}
+              value={input}
+              onChange={(e) => setInput(e.target.value)}
+              onKeyDown={handleKeyDown}
+              placeholder={isHuman ? 'Nachricht an das Team…' : 'Frag mich etwas…'}
+              rows={1}
+              className="flex-1 py-2 text-sm resize-none max-h-32 overflow-y-auto bg-transparent focus:outline-none placeholder:text-muted/60"
+              style={{ minHeight: '36px' }}
+              onInput={(e) => {
+                const target = e.target as HTMLTextAreaElement
+                target.style.height = 'auto'
+                target.style.height = Math.min(target.scrollHeight, 128) + 'px'
+              }}
+            />
+            <button
+              onClick={send}
+              disabled={!input.trim() || sending}
+              className="p-2 bg-primary hover:bg-primary-hover disabled:bg-border disabled:text-white/50 text-white rounded-lg transition-colors"
+            >
+              {sending ? <Loader2 size={18} className="animate-spin" /> : <Send size={18} />}
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function MessageBubble({ msg, userInitials }: { msg: Message; userInitials: string }) {
+  if (msg.role === 'system') {
+    return (
+      <div className="flex items-center justify-center py-1">
+        <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-surface-secondary text-[11px] text-muted">
+          <Info size={11} />
+          <span>— {msg.content} —</span>
+        </div>
+      </div>
+    )
+  }
+
+  if (msg.role === 'user') {
+    return (
+      <div className="flex justify-end gap-2">
+        <div className="max-w-[75%] bg-primary text-white px-4 py-2.5 rounded-2xl rounded-tr-sm">
+          <p className="text-sm whitespace-pre-wrap break-words">{msg.content}</p>
+        </div>
+        <div className="w-8 h-8 rounded-full bg-primary/15 text-primary flex items-center justify-center text-[11px] font-semibold shrink-0">
+          {userInitials}
+        </div>
+      </div>
+    )
+  }
+
+  if (msg.role === 'admin') {
+    return (
+      <div className="flex gap-2">
+        <div className="w-8 h-8 rounded-full bg-amber-100 dark:bg-amber-950/40 text-amber-700 dark:text-amber-400 flex items-center justify-center shrink-0">
+          <Shield size={14} />
+        </div>
+        <div className="max-w-[75%]">
+          <div className="text-[11px] font-semibold text-amber-700 dark:text-amber-400 mb-1 ml-1">Support-Team</div>
+          <div className="bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-900 text-foreground px-4 py-2.5 rounded-2xl rounded-tl-sm">
+            <p className="text-sm whitespace-pre-wrap break-words">{msg.content}</p>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
+  // assistant
+  return (
+    <div className="flex gap-2">
+      <div className="w-8 h-8 rounded-full bg-surface-secondary text-muted flex items-center justify-center shrink-0">
+        <Bot size={14} />
+      </div>
+      <div className="max-w-[75%]">
+        <div className="text-[11px] font-semibold text-muted mb-1 ml-1">Herr Tech KI</div>
+        <div className="bg-surface border border-border text-foreground px-4 py-2.5 rounded-2xl rounded-tl-sm">
+          <p className="text-sm whitespace-pre-wrap break-words">{msg.content}</p>
+        </div>
+      </div>
+    </div>
+  )
+}
