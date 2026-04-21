@@ -295,7 +295,7 @@ export function HelpChat({ userId, userInitials }: Props) {
       )}
 
       {isResolved && (
-        <div className="shrink-0 bg-green-50 dark:bg-green-950/30 border-b border-green-200 dark:border-green-900 px-4 py-2.5 flex items-center gap-3">
+        <div className="shrink-0 bg-green-500/10 border-b border-green-500/30 px-4 py-2.5 flex items-center gap-3">
           <CheckCircle2 size={16} className="text-green-600 dark:text-green-400 shrink-0" />
           <div className="flex-1 min-w-0">
             <p className="text-xs font-medium text-foreground">Dieser Fall ist als gelöst markiert</p>
