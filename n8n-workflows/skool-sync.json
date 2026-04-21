@@ -16,7 +16,10 @@
       "name": "Sonntag 23:00",
       "type": "n8n-nodes-base.scheduleTrigger",
       "typeVersion": 1.2,
-      "position": [240, 400]
+      "position": [
+        240,
+        400
+      ]
     },
     {
       "parameters": {},
@@ -24,7 +27,10 @@
       "name": "Manuell testen",
       "type": "n8n-nodes-base.manualTrigger",
       "typeVersion": 1,
-      "position": [240, 560]
+      "position": [
+        240,
+        560
+      ]
     },
     {
       "parameters": {
@@ -53,7 +59,10 @@
       "name": "Skool HTML laden (für buildId)",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [480, 480],
+      "position": [
+        480,
+        480
+      ],
       "credentials": {
         "httpHeaderAuth": {
           "id": "4iWrjh7Q6fuWlUeb",
@@ -69,7 +78,10 @@
       "name": "BuildId extrahieren",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [720, 480]
+      "position": [
+        720,
+        480
+      ]
     },
     {
       "parameters": {
@@ -92,7 +104,10 @@
       "name": "Classroom-Liste laden",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [960, 480],
+      "position": [
+        960,
+        480
+      ],
       "credentials": {
         "httpHeaderAuth": {
           "id": "4iWrjh7Q6fuWlUeb",
@@ -108,7 +123,10 @@
       "name": "Courses splitten",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [1200, 480]
+      "position": [
+        1200,
+        480
+      ]
     },
     {
       "parameters": {
@@ -138,7 +156,10 @@
       "name": "Course Redirect holen",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [1360, 480],
+      "position": [
+        1360,
+        480
+      ],
       "notes": "Skool-Quirk: Call ohne md liefert __N_REDIRECT mit Ziel-URL inkl. md-Parameter.",
       "credentials": {
         "httpHeaderAuth": {
@@ -155,7 +176,10 @@
       "name": "Md-Parameter extrahieren",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [1520, 480]
+      "position": [
+        1520,
+        480
+      ]
     },
     {
       "parameters": {
@@ -185,7 +209,10 @@
       "name": "Course-Baum laden",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [1680, 480],
+      "position": [
+        1680,
+        480
+      ],
       "notes": "Mit md-Parameter → liefert course.children mit allen Modulen/Sets.",
       "credentials": {
         "httpHeaderAuth": {
@@ -202,7 +229,10 @@
       "name": "Lessons aggregieren",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [1680, 480],
+      "position": [
+        1680,
+        480
+      ],
       "notes": "TODO: Course-Detail-Response noch einmal recon-en — Feldnamen für Lessons/Module bestätigen."
     },
     {
@@ -217,7 +247,10 @@
       "name": "Existierende Lessons (DB)",
       "type": "n8n-nodes-base.supabase",
       "typeVersion": 1,
-      "position": [1680, 680],
+      "position": [
+        1680,
+        680
+      ],
       "executeOnce": true,
       "credentials": {
         "supabaseApi": {
@@ -237,7 +270,10 @@
       "name": "Existierende Chapters (DB)",
       "type": "n8n-nodes-base.supabase",
       "typeVersion": 1,
-      "position": [1920, 680],
+      "position": [
+        1920,
+        680
+      ],
       "executeOnce": true,
       "credentials": {
         "supabaseApi": {
@@ -257,7 +293,10 @@
       "name": "Module-Mapping laden",
       "type": "n8n-nodes-base.supabase",
       "typeVersion": 1,
-      "position": [2160, 680],
+      "position": [
+        2160,
+        680
+      ],
       "executeOnce": true,
       "credentials": {
         "supabaseApi": {
@@ -273,7 +312,10 @@
       "name": "Diff Skool ↔ DB",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [1920, 680]
+      "position": [
+        1920,
+        680
+      ]
     },
     {
       "parameters": {
@@ -283,7 +325,10 @@
       "name": "Neue Lessons splitten",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [2400, 500]
+      "position": [
+        2400,
+        500
+      ]
     },
     {
       "parameters": {
@@ -313,7 +358,10 @@
       "name": "Lesson-Details laden",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [2640, 500],
+      "position": [
+        2640,
+        500
+      ],
       "notes": "Pro neuer Lektion: Skool-Detail mit md-Parameter. Liefert desc, videoLink, resources.",
       "credentials": {
         "httpHeaderAuth": {
@@ -330,7 +378,10 @@
       "name": "Lesson-Detail parsen",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [2880, 500]
+      "position": [
+        2880,
+        500
+      ]
     },
     {
       "parameters": {
@@ -340,7 +391,10 @@
       "name": "Neue Chapters splitten",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [2160, 680]
+      "position": [
+        2160,
+        680
+      ]
     },
     {
       "parameters": {
@@ -348,12 +402,30 @@
         "tableId": "module_chapters",
         "fieldsUi": {
           "fieldValues": [
-            { "fieldId": "module_id", "fieldValue": "={{ $json.module_id }}" },
-            { "fieldId": "skool_chapter_id", "fieldValue": "={{ $json.skool_chapter_id }}" },
-            { "fieldId": "title", "fieldValue": "={{ $json.title }}" },
-            { "fieldId": "description", "fieldValue": "={{ $json.description }}" },
-            { "fieldId": "sort_order", "fieldValue": "={{ $json.sort_order }}" },
-            { "fieldId": "is_published", "fieldValue": "=true" }
+            {
+              "fieldId": "module_id",
+              "fieldValue": "={{ $json.module_id }}"
+            },
+            {
+              "fieldId": "skool_chapter_id",
+              "fieldValue": "={{ $json.skool_chapter_id }}"
+            },
+            {
+              "fieldId": "title",
+              "fieldValue": "={{ $json.title }}"
+            },
+            {
+              "fieldId": "description",
+              "fieldValue": "={{ $json.description }}"
+            },
+            {
+              "fieldId": "sort_order",
+              "fieldValue": "={{ $json.sort_order }}"
+            },
+            {
+              "fieldId": "is_published",
+              "fieldValue": "=true"
+            }
           ]
         }
       },
@@ -361,7 +433,10 @@
       "name": "Draft-Chapter anlegen",
       "type": "n8n-nodes-base.supabase",
       "typeVersion": 1,
-      "position": [2400, 680],
+      "position": [
+        2400,
+        680
+      ],
       "credentials": {
         "supabaseApi": {
           "name": "Supabase herrtechGPT"
@@ -374,17 +449,50 @@
         "tableId": "module_videos",
         "fieldsUi": {
           "fieldValues": [
-            { "fieldId": "module_id", "fieldValue": "={{ $json.module_id }}" },
-            { "fieldId": "chapter_id", "fieldValue": "={{ $json.chapter_id }}" },
-            { "fieldId": "skool_lesson_id", "fieldValue": "={{ $json.skool_lesson_id }}" },
-            { "fieldId": "skool_chapter_id", "fieldValue": "={{ $json.skool_chapter_id }}" },
-            { "fieldId": "title", "fieldValue": "={{ $json.title }}" },
-            { "fieldId": "description", "fieldValue": "={{ $json.description_md }}" },
-            { "fieldId": "sort_order", "fieldValue": "={{ $json.sort_order }}" },
-            { "fieldId": "duration_seconds", "fieldValue": "={{ $json.duration_seconds }}" },
-            { "fieldId": "is_published", "fieldValue": "=false" },
-            { "fieldId": "wistia_hashed_id", "fieldValue": "={{ $json.wistia_hashed_id }}" },
-            { "fieldId": "skool_video_id", "fieldValue": "={{ $json.skool_video_id }}" }
+            {
+              "fieldId": "module_id",
+              "fieldValue": "={{ $json.module_id }}"
+            },
+            {
+              "fieldId": "chapter_id",
+              "fieldValue": "={{ $json.chapter_id }}"
+            },
+            {
+              "fieldId": "skool_lesson_id",
+              "fieldValue": "={{ $json.skool_lesson_id }}"
+            },
+            {
+              "fieldId": "skool_chapter_id",
+              "fieldValue": "={{ $json.skool_chapter_id }}"
+            },
+            {
+              "fieldId": "title",
+              "fieldValue": "={{ $json.title }}"
+            },
+            {
+              "fieldId": "description",
+              "fieldValue": "={{ $json.description_md }}"
+            },
+            {
+              "fieldId": "sort_order",
+              "fieldValue": "={{ $json.sort_order }}"
+            },
+            {
+              "fieldId": "duration_seconds",
+              "fieldValue": "={{ $json.duration_seconds }}"
+            },
+            {
+              "fieldId": "is_published",
+              "fieldValue": "=false"
+            },
+            {
+              "fieldId": "wistia_hashed_id",
+              "fieldValue": "={{ $json.wistia_hashed_id }}"
+            },
+            {
+              "fieldId": "skool_video_id",
+              "fieldValue": "={{ $json.skool_video_id }}"
+            }
           ]
         }
       },
@@ -392,7 +500,10 @@
       "name": "Draft-Lesson anlegen",
       "type": "n8n-nodes-base.supabase",
       "typeVersion": 1,
-      "position": [3120, 500],
+      "position": [
+        3120,
+        500
+      ],
       "notes": "Jetzt mit echtem Wistia-ID, Markdown-Description und Duration aus Skool-Detail-Endpoint.",
       "credentials": {
         "supabaseApi": {
@@ -408,7 +519,10 @@
       "name": "Resources splitten",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [3360, 500]
+      "position": [
+        3360,
+        500
+      ]
     },
     {
       "parameters": {
@@ -416,12 +530,30 @@
         "tableId": "module_video_resources",
         "fieldsUi": {
           "fieldValues": [
-            { "fieldId": "video_id", "fieldValue": "={{ $json.video_id }}" },
-            { "fieldId": "title", "fieldValue": "={{ $json.title }}" },
-            { "fieldId": "url", "fieldValue": "={{ $json.url }}" },
-            { "fieldId": "resource_type", "fieldValue": "={{ $json.resource_type }}" },
-            { "fieldId": "sort_order", "fieldValue": "={{ $json.sort_order }}" },
-            { "fieldId": "skool_resource_id", "fieldValue": "={{ $json.skool_resource_id }}" }
+            {
+              "fieldId": "video_id",
+              "fieldValue": "={{ $json.video_id }}"
+            },
+            {
+              "fieldId": "title",
+              "fieldValue": "={{ $json.title }}"
+            },
+            {
+              "fieldId": "url",
+              "fieldValue": "={{ $json.url }}"
+            },
+            {
+              "fieldId": "resource_type",
+              "fieldValue": "={{ $json.resource_type }}"
+            },
+            {
+              "fieldId": "sort_order",
+              "fieldValue": "={{ $json.sort_order }}"
+            },
+            {
+              "fieldId": "skool_resource_id",
+              "fieldValue": "={{ $json.skool_resource_id }}"
+            }
           ]
         }
       },
@@ -429,7 +561,10 @@
       "name": "Resource anlegen",
       "type": "n8n-nodes-base.supabase",
       "typeVersion": 1,
-      "position": [3600, 500],
+      "position": [
+        3600,
+        500
+      ],
       "credentials": {
         "supabaseApi": {
           "name": "Supabase herrtechGPT"
@@ -444,7 +579,10 @@
       "name": "Geänderte Lessons splitten",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [2400, 900]
+      "position": [
+        2400,
+        900
+      ]
     },
     {
       "parameters": {
@@ -455,20 +593,34 @@
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [
-            { "name": "User-Agent", "value": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/147.0.0.0 Safari/537.36" }
+            {
+              "name": "User-Agent",
+              "value": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/147.0.0.0 Safari/537.36"
+            }
           ]
         },
         "options": {
-          "batching": { "batch": { "batchSize": 3, "batchInterval": 1500 } }
+          "batching": {
+            "batch": {
+              "batchSize": 3,
+              "batchInterval": 1500
+            }
+          }
         }
       },
       "id": "fetch-changed-detail",
       "name": "Changed-Details laden",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [2640, 900],
+      "position": [
+        2640,
+        900
+      ],
       "credentials": {
-        "httpHeaderAuth": { "id": "4iWrjh7Q6fuWlUeb", "name": "Skool Session Cookie" }
+        "httpHeaderAuth": {
+          "id": "4iWrjh7Q6fuWlUeb",
+          "name": "Skool Session Cookie"
+        }
       }
     },
     {
@@ -479,7 +631,10 @@
       "name": "Changed parsen",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [2880, 900]
+      "position": [
+        2880,
+        900
+      ]
     },
     {
       "parameters": {
@@ -489,12 +644,30 @@
         "filterString": "=id=eq.{{ $json._existing_id }}",
         "fieldsUi": {
           "fieldValues": [
-            { "fieldId": "title", "fieldValue": "={{ $json.title }}" },
-            { "fieldId": "description", "fieldValue": "={{ $json.description_md }}" },
-            { "fieldId": "duration_seconds", "fieldValue": "={{ $json.duration_seconds }}" },
-            { "fieldId": "sort_order", "fieldValue": "={{ $json.sort_order }}" },
-            { "fieldId": "skool_video_id", "fieldValue": "={{ $json.skool_video_id }}" },
-            { "fieldId": "wistia_hashed_id", "fieldValue": "={{ $json.wistia_hashed_id }}" }
+            {
+              "fieldId": "title",
+              "fieldValue": "={{ $json.title }}"
+            },
+            {
+              "fieldId": "description",
+              "fieldValue": "={{ $json.description_md }}"
+            },
+            {
+              "fieldId": "duration_seconds",
+              "fieldValue": "={{ $json.duration_seconds }}"
+            },
+            {
+              "fieldId": "sort_order",
+              "fieldValue": "={{ $json.sort_order }}"
+            },
+            {
+              "fieldId": "skool_video_id",
+              "fieldValue": "={{ $json.skool_video_id }}"
+            },
+            {
+              "fieldId": "wistia_hashed_id",
+              "fieldValue": "={{ $json.wistia_hashed_id }}"
+            }
           ]
         }
       },
@@ -502,10 +675,15 @@
       "name": "Lesson updaten",
       "type": "n8n-nodes-base.supabase",
       "typeVersion": 1,
-      "position": [3120, 900],
+      "position": [
+        3120,
+        900
+      ],
       "notes": "Updates title/description/duration/sort_order + skool_video_id + wistia_hashed_id (Backfill für MISSING___ Altfälle). is_published bleibt unberührt (Admin-Control). Re-fetch passiert nur wenn title geändert oder wistia noch MISSING___.",
       "credentials": {
-        "supabaseApi": { "name": "Supabase herrtechGPT" }
+        "supabaseApi": {
+          "name": "Supabase herrtechGPT"
+        }
       }
     },
     {
@@ -516,7 +694,10 @@
       "name": "Slack-Report formatieren",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [2160, 860]
+      "position": [
+        2160,
+        860
+      ]
     },
     {
       "parameters": {
@@ -533,91 +714,297 @@
       "name": "Slack: n8n-ki-support",
       "type": "n8n-nodes-base.slack",
       "typeVersion": 2.3,
-      "position": [2400, 860],
+      "position": [
+        2400,
+        860
+      ],
       "credentials": {
         "slackOAuth2Api": {
-          "name": "Slack KI Support – SC – GER/IND"
+          "id": "MEIuge86VySB8zmf",
+          "name": "Slack KI Support"
         }
       }
     }
   ],
   "connections": {
     "Sonntag 23:00": {
-      "main": [[{ "node": "Skool HTML laden (für buildId)", "type": "main", "index": 0 }]]
+      "main": [
+        [
+          {
+            "node": "Skool HTML laden (für buildId)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     },
     "Manuell testen": {
-      "main": [[{ "node": "Skool HTML laden (für buildId)", "type": "main", "index": 0 }]]
+      "main": [
+        [
+          {
+            "node": "Skool HTML laden (für buildId)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     },
     "Skool HTML laden (für buildId)": {
-      "main": [[{ "node": "BuildId extrahieren", "type": "main", "index": 0 }]]
+      "main": [
+        [
+          {
+            "node": "BuildId extrahieren",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     },
     "BuildId extrahieren": {
-      "main": [[{ "node": "Classroom-Liste laden", "type": "main", "index": 0 }]]
+      "main": [
+        [
+          {
+            "node": "Classroom-Liste laden",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     },
     "Classroom-Liste laden": {
-      "main": [[{ "node": "Courses splitten", "type": "main", "index": 0 }]]
+      "main": [
+        [
+          {
+            "node": "Courses splitten",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     },
     "Courses splitten": {
-      "main": [[{ "node": "Course Redirect holen", "type": "main", "index": 0 }]]
+      "main": [
+        [
+          {
+            "node": "Course Redirect holen",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     },
     "Course Redirect holen": {
-      "main": [[{ "node": "Md-Parameter extrahieren", "type": "main", "index": 0 }]]
+      "main": [
+        [
+          {
+            "node": "Md-Parameter extrahieren",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     },
     "Md-Parameter extrahieren": {
-      "main": [[{ "node": "Course-Baum laden", "type": "main", "index": 0 }]]
+      "main": [
+        [
+          {
+            "node": "Course-Baum laden",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     },
     "Course-Baum laden": {
-      "main": [[{ "node": "Lessons aggregieren", "type": "main", "index": 0 }]]
+      "main": [
+        [
+          {
+            "node": "Lessons aggregieren",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     },
     "Lessons aggregieren": {
-      "main": [[{ "node": "Existierende Lessons (DB)", "type": "main", "index": 0 }]]
+      "main": [
+        [
+          {
+            "node": "Existierende Lessons (DB)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     },
     "Existierende Lessons (DB)": {
-      "main": [[{ "node": "Existierende Chapters (DB)", "type": "main", "index": 0 }]]
+      "main": [
+        [
+          {
+            "node": "Existierende Chapters (DB)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     },
     "Existierende Chapters (DB)": {
-      "main": [[{ "node": "Module-Mapping laden", "type": "main", "index": 0 }]]
+      "main": [
+        [
+          {
+            "node": "Module-Mapping laden",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     },
     "Module-Mapping laden": {
-      "main": [[{ "node": "Diff Skool ↔ DB", "type": "main", "index": 0 }]]
+      "main": [
+        [
+          {
+            "node": "Diff Skool ↔ DB",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     },
     "Diff Skool ↔ DB": {
-      "main": [[
-        { "node": "Neue Chapters splitten", "type": "main", "index": 0 },
-        { "node": "Neue Lessons splitten", "type": "main", "index": 0 },
-        { "node": "Geänderte Lessons splitten", "type": "main", "index": 0 },
-        { "node": "Slack-Report formatieren", "type": "main", "index": 0 }
-      ]]
+      "main": [
+        [
+          {
+            "node": "Neue Chapters splitten",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Neue Lessons splitten",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Geänderte Lessons splitten",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Slack-Report formatieren",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     },
     "Geänderte Lessons splitten": {
-      "main": [[{ "node": "Changed-Details laden", "type": "main", "index": 0 }]]
+      "main": [
+        [
+          {
+            "node": "Changed-Details laden",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     },
     "Changed-Details laden": {
-      "main": [[{ "node": "Changed parsen", "type": "main", "index": 0 }]]
+      "main": [
+        [
+          {
+            "node": "Changed parsen",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     },
     "Changed parsen": {
-      "main": [[{ "node": "Lesson updaten", "type": "main", "index": 0 }]]
+      "main": [
+        [
+          {
+            "node": "Lesson updaten",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     },
     "Neue Chapters splitten": {
-      "main": [[{ "node": "Draft-Chapter anlegen", "type": "main", "index": 0 }]]
+      "main": [
+        [
+          {
+            "node": "Draft-Chapter anlegen",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     },
     "Neue Lessons splitten": {
-      "main": [[{ "node": "Lesson-Details laden", "type": "main", "index": 0 }]]
+      "main": [
+        [
+          {
+            "node": "Lesson-Details laden",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     },
     "Lesson-Details laden": {
-      "main": [[{ "node": "Lesson-Detail parsen", "type": "main", "index": 0 }]]
+      "main": [
+        [
+          {
+            "node": "Lesson-Detail parsen",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     },
     "Lesson-Detail parsen": {
-      "main": [[{ "node": "Draft-Lesson anlegen", "type": "main", "index": 0 }]]
+      "main": [
+        [
+          {
+            "node": "Draft-Lesson anlegen",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     },
     "Draft-Lesson anlegen": {
-      "main": [[{ "node": "Resources splitten", "type": "main", "index": 0 }]]
+      "main": [
+        [
+          {
+            "node": "Resources splitten",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     },
     "Resources splitten": {
-      "main": [[{ "node": "Resource anlegen", "type": "main", "index": 0 }]]
+      "main": [
+        [
+          {
+            "node": "Resource anlegen",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     },
     "Slack-Report formatieren": {
-      "main": [[{ "node": "Slack: n8n-ki-support", "type": "main", "index": 0 }]]
+      "main": [
+        [
+          {
+            "node": "Slack: n8n-ki-support",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     }
   },
   "settings": {
