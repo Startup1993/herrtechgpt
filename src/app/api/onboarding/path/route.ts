@@ -87,7 +87,7 @@ Antworte NUR mit valid JSON in diesem Format:
 }`
 
   const { text } = await generateText({
-    model: anthropic('claude-sonnet-4-20250514'),
+    model: anthropic('claude-sonnet-4-5-20250929'),
     messages: [{ role: 'user', content: prompt }],
   })
 

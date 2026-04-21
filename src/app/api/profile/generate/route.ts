@@ -28,7 +28,7 @@ export async function POST(req: Request) {
   })
 
   const { text } = await generateText({
-    model: anthropic('claude-sonnet-4-20250514'),
+    model: anthropic('claude-sonnet-4-5-20250929'),
     system:
       'Du bist ein Experte für Positionierung und Personal Branding für Creator und Online-Unternehmer im deutschsprachigen Raum. Generiere einen professionellen, konkreten Vorschlag für das angegebene Profilfeld. Der Text soll spezifisch und praxisnah sein, nicht generisch. Antworte nur mit dem generierten Text, ohne Erklärungen oder Anführungszeichen.',
     prompt: `Generiere einen Vorschlag für das Feld "${fieldLabel}" eines Creator- und Online-Business-Profils.

@@ -52,7 +52,7 @@ export async function POST(req: NextRequest) {
   // Let Claude pick the best brand colors from the extracted list
   const anthropic = createAnthropic({ apiKey: process.env.ANTHROPIC_API_KEY! })
   const { text } = await generateText({
-    model: anthropic('claude-sonnet-4-20250514'),
+    model: anthropic('claude-sonnet-4-5-20250929'),
     messages: [{
       role: 'user',
       content: `Du bist ein Branding-Experte. Ich habe diese Farben von der Website "${url}" extrahiert:

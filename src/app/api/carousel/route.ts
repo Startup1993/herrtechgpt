@@ -17,7 +17,7 @@ export async function POST(req: NextRequest) {
   // ── Refine mode: modify existing slides and/or CI based on a prompt ────────
   if (refinePrompt && currentSlides) {
     const { text } = await generateText({
-      model: anthropic('claude-sonnet-4-20250514'),
+      model: anthropic('claude-sonnet-4-5-20250929'),
       messages: [{
         role: 'user',
         content: `Du bist ein Social-Media-Experte. Hier sind die aktuellen Karussell-Slides und CI-Einstellungen:
@@ -56,7 +56,7 @@ Lasse "ci" weg wenn keine Farben geändert werden.`,
 
   // ── Generate mode: create slides from blog post ────────────────────────────
   const { text } = await generateText({
-    model: anthropic('claude-sonnet-4-20250514'),
+    model: anthropic('claude-sonnet-4-5-20250929'),
     messages: [{
       role: 'user',
       content: `Du bist ein Social-Media-Experte. Strukturiere diesen Text in genau ${slideCount} Instagram-Karussell-Slides.

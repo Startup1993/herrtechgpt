@@ -45,7 +45,7 @@ import {
 // TYPES
 // ═══════════════════════════════════════════════════════════
 
-type SidebarMode = 'main' | 'chat' | 'admin' | 'classroom' | 'toolbox'
+type SidebarMode = 'main' | 'chat' | 'admin' | 'classroom' | 'toolbox' | 'help'
 
 interface SidebarProps {
   conversations: Conversation[]
@@ -384,10 +384,10 @@ function MainSidebar({
           href={toolboxLocked ? '/dashboard/upgrade?feature=toolbox' : undefined}
         />
         <NavItem
-          href="/dashboard/help"
           icon={MessageCircleQuestion}
           label="Hilfe & Kontakt"
           isActive={pathname.startsWith('/dashboard/help')}
+          onClick={() => onDrillDown('help')}
         />
       </div>
 
@@ -592,6 +592,84 @@ function ChatSidebar({
             isActive={false}
             onClick={() => onDrillDown('admin')}
           />
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ═══════════════════════════════════════════════════════════
+// HELP SIDEBAR (Drill-Down: Hilfe & Kontakt)
+// ═══════════════════════════════════════════════════════════
+
+function HelpSidebar({
+  helpConversations,
+  pathname,
+  onBack,
+  onNewChat,
+}: {
+  helpConversations: Conversation[]
+  pathname: string
+  onBack: () => void
+  onNewChat: () => void
+}) {
+  // Extract active conversation id from ?chat= query param (pathname doesn't carry it,
+  // but useSearchParams isn't ideal for SSR; we just highlight by URL search)
+  const activeId = typeof window !== 'undefined'
+    ? new URLSearchParams(window.location.search).get('chat')
+    : null
+
+  return (
+    <div className="flex-1 overflow-y-auto flex flex-col">
+      {/* Back */}
+      <button
+        onClick={onBack}
+        className="flex items-center gap-2 px-4 py-3 text-sm text-muted hover:text-foreground hover:bg-surface-hover transition-colors border-b border-border"
+      >
+        <ChevronLeft size={16} />
+        <span>Zurück zur Übersicht</span>
+      </button>
+
+      {/* Neuer Chat — oben prominent */}
+      <div className="px-3 pt-4 pb-2">
+        <button
+          type="button"
+          onClick={onNewChat}
+          className="btn-primary w-full justify-center"
+        >
+          <Plus size={16} />
+          Neue Anfrage
+        </button>
+      </div>
+
+      {/* Letzte Anfragen — nur anzeigen wenn welche da */}
+      {helpConversations.length > 0 && (
+        <div className="px-3 py-2 border-t border-border">
+          <SectionHeader label="Letzte Anfragen" />
+          <div className="space-y-0.5">
+            {helpConversations.map((conv) => (
+              <Link
+                key={conv.id}
+                href={`/dashboard/help?chat=${conv.id}`}
+                className={`flex items-center gap-3 px-3 py-2 rounded-[var(--radius-md)] text-sm transition-colors ${
+                  activeId === conv.id || (!activeId && helpConversations[0]?.id === conv.id)
+                    ? 'bg-primary/10 text-foreground font-medium'
+                    : 'text-muted hover:bg-surface-hover hover:text-foreground'
+                }`}
+              >
+                <span className="text-base shrink-0">💬</span>
+                <span className="truncate flex-1 min-w-0">{conv.title ?? 'Anfrage'}</span>
+              </Link>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {helpConversations.length === 0 && (
+        <div className="px-4 py-6 text-center">
+          <p className="text-xs text-muted leading-relaxed">
+            Deine Anfragen erscheinen hier, sobald du den ersten Chat startest.
+          </p>
         </div>
       )}
     </div>
@@ -883,6 +961,7 @@ export function Sidebar({ conversations, userEmail, userName, isAdmin, realIsAdm
     if (pathname.startsWith('/dashboard/herr-tech-gpt')) return 'chat'
     if (pathname.startsWith('/dashboard/classroom')) return 'classroom'
     if (pathname.startsWith('/dashboard/ki-toolbox')) return 'toolbox'
+    if (pathname.startsWith('/dashboard/help')) return 'help'
     return 'main'
   }, [pathname])
 
@@ -899,6 +978,23 @@ export function Sidebar({ conversations, userEmail, userName, isAdmin, realIsAdm
     if (newMode === 'admin') router.push('/admin')
     if (newMode === 'classroom') router.push('/dashboard/classroom')
     if (newMode === 'toolbox') router.push('/dashboard/ki-toolbox')
+    if (newMode === 'help') router.push('/dashboard/help')
+  }
+
+  const handleNewHelpChat = async () => {
+    // Neuen Help-Chat anlegen via API, dann dorthin navigieren
+    const supabase = createClient()
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user) return
+    const { data: newConv } = await supabase
+      .from('conversations')
+      .insert({ user_id: user.id, agent_id: 'help', title: 'Neue Anfrage' })
+      .select('id')
+      .single()
+    if (newConv?.id) {
+      router.push(`/dashboard/help?chat=${newConv.id}`)
+      router.refresh()
+    }
   }
 
   const handleBack = () => {
@@ -987,6 +1083,22 @@ export function Sidebar({ conversations, userEmail, userName, isAdmin, realIsAdm
           }}
         >
           <ToolboxSidebar pathname={pathname} onBack={handleBack} isAdmin={realIsAdmin} onDrillDown={handleDrillDown} />
+        </div>
+
+        <div
+          className="absolute inset-0 overflow-y-auto transition-transform duration-200 ease-in-out"
+          style={{
+            transform: mode === 'help' ? 'translateX(0)' : 'translateX(100%)',
+            visibility: mode === 'help' ? 'visible' : 'hidden',
+            pointerEvents: mode === 'help' ? 'auto' : 'none',
+          }}
+        >
+          <HelpSidebar
+            helpConversations={conversations.filter((c) => c.agent_id === 'help')}
+            pathname={pathname}
+            onBack={handleBack}
+            onNewChat={handleNewHelpChat}
+          />
         </div>
       </div>
 

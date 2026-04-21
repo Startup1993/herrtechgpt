@@ -41,7 +41,7 @@ export function HelpChat({
   const scrollRef = useRef<HTMLDivElement>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
 
-  // Polling: alle 8s nach neuen Admin-Antworten suchen (nur im Human-Mode oder wenn Status answered)
+  // Polling: alle 8s nach neuen Admin-Antworten suchen
   const pollMessages = useCallback(async () => {
     const supabase = createClient()
     const [{ data: msgs }, { data: conv }] = await Promise.all([
@@ -56,7 +56,24 @@ export function HelpChat({
         .eq('id', conversationId)
         .single(),
     ])
-    if (msgs) setMessages(msgs as Message[])
+    if (msgs) {
+      setMessages((prev) => {
+        const dbMsgs = msgs as Message[]
+        // Behalte nur optimistische (temp-*/ai-*) Nachrichten, deren Inhalt NOCH NICHT
+        // in der DB gelandet ist. Sobald DB den gleichen role+content hat \u2192 optimistisch droppen
+        // (sonst erscheinen Messages doppelt).
+        const pendingOptimistic = prev.filter((m) => {
+          if (!m.id.startsWith('temp-') && !m.id.startsWith('ai-')) return false
+          const alreadyInDb = dbMsgs.some(
+            (d) => d.role === m.role && d.content.trim() === m.content.trim()
+          )
+          return !alreadyInDb
+        })
+        return [...dbMsgs, ...pendingOptimistic].sort(
+          (a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
+        )
+      })
+    }
     if (conv) {
       setMode(conv.mode as Mode)
       setStatus(conv.status as Status)

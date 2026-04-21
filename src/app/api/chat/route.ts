@@ -171,20 +171,23 @@ export async function POST(req: Request) {
 
   const lastUserMessage = messages[messages.length - 1]
 
+  // User-Message SOFORT persistieren (nicht erst in onFinish) — sonst gibt es
+  // ein Race-Window in dem der Client pollt bevor onFinish gelaufen ist und
+  // die Liste gelbst wird.
+  if (conversationId && lastUserMessage?.role === 'user') {
+    await supabase.from('messages').insert({
+      conversation_id: conversationId,
+      role: 'user',
+      content: lastUserMessage.content,
+    })
+  }
+
   const result = streamText({
-    model: anthropic('claude-sonnet-4-20250514'),
+    model: anthropic('claude-sonnet-4-5-20250929'),
     system: fullSystemPrompt,
     messages,
     onFinish: async ({ text }) => {
-      // Persist messages
-      if (lastUserMessage?.role === 'user') {
-        await supabase.from('messages').insert({
-          conversation_id: conversationId,
-          role: 'user',
-          content: lastUserMessage.content,
-        })
-      }
-
+      // User wurde bereits oben gespeichert — hier nur noch Assistant.
       await supabase.from('messages').insert({
         conversation_id: conversationId,
         role: 'assistant',
@@ -206,7 +209,7 @@ export async function POST(req: Request) {
       if (count && count <= 2) {
         try {
           const { text: title } = await generateText({
-            model: anthropic('claude-sonnet-4-20250514'),
+            model: anthropic('claude-sonnet-4-5-20250929'),
             system:
               'Generiere einen sehr kurzen Titel (3-5 Wörter, auf Deutsch) für diese Unterhaltung basierend auf der ersten Nachricht des Nutzers. Antworte nur mit dem Titel, ohne Anführungszeichen.',
             prompt: lastUserMessage.content,

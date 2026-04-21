@@ -12,7 +12,7 @@ export async function POST(req: NextRequest) {
   const anthropic = createAnthropic({ apiKey: process.env.ANTHROPIC_API_KEY! })
 
   const { text } = await generateText({
-    model: anthropic('claude-sonnet-4-20250514'),
+    model: anthropic('claude-sonnet-4-5-20250929'),
     messages: [{
       role: 'user',
       content: `Du bist ein Branding-Experte. Analysiere diese CI-Beschreibung und extrahiere alle relevanten Design-Werte für Instagram-Karussell-Slides.

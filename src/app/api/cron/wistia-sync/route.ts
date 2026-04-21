@@ -127,7 +127,7 @@ function chunkText(text: string, videoId: string, videoName: string, durationMin
 async function categorizeVideo(videoName: string, previewText: string): Promise<string[]> {
   const anthropic = createAnthropic({ apiKey: process.env.ANTHROPIC_API_KEY! })
   const { text } = await generateText({
-    model: anthropic('claude-sonnet-4-20250514'),
+    model: anthropic('claude-sonnet-4-5-20250929'),
     messages: [{
       role: 'user',
       content: `Ordne dieses Video den passenden Agenten zu.
@@ -299,7 +299,7 @@ export async function GET(req: NextRequest) {
       try {
         const anthropic = createAnthropic({ apiKey: process.env.ANTHROPIC_API_KEY! })
         const { text } = await generateText({
-          model: anthropic('claude-sonnet-4-20250514'),
+          model: anthropic('claude-sonnet-4-5-20250929'),
           messages: [{
             role: 'user',
             content: `Du bist ein Content-Kurator. Neue Videos wurden hinzugefügt. Prüfe, ob sie ältere Videos inhaltlich überholen.

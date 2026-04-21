@@ -31,7 +31,7 @@ ${transcript}
 Antworte auf Deutsch, strukturiert und praxisnah.`
 
   const { text } = await generateText({
-    model: anthropic('claude-sonnet-4-20250514'),
+    model: anthropic('claude-sonnet-4-5-20250929'),
     system: systemPrompt,
     prompt: userPrompt,
   })
