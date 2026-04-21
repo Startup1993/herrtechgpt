@@ -163,6 +163,8 @@ export function HelpChat({ userId, userInitials }: Props) {
     if (!text || sending || !conversationId) return
     setSending(true)
 
+    const isFirstMessage = messages.length === 0
+
     const optimisticUserId = 'temp-' + Date.now()
     const optimistic: Message = {
       id: optimisticUserId,
@@ -200,8 +202,12 @@ export function HelpChat({ userId, userInitials }: Props) {
           setMessages((m) => m.map((msg) => msg.id === aiId ? { ...msg, content: aiText } : msg))
         }
       }
-      // Delay polling to give onFinish time to save
+      // Delay polling to give onFinish time to save message + generate title
       setTimeout(() => pollMessages(), 500)
+      // Nach erster Nachricht: Title wurde generiert \u2192 Sidebar refreshen (Layout re-render)
+      if (isFirstMessage) {
+        setTimeout(() => router.refresh(), 1500)
+      }
     } catch {
       await pollMessages()
     } finally {

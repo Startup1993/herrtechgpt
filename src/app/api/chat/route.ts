@@ -74,10 +74,25 @@ export async function POST(req: Request) {
           content: lastUserMessage.content,
         })
       }
-      // Status zur\u00fcck auf 'new' — Admin sieht wieder "ungelesen"
+
+      // Bei der ersten Nachricht: Titel aus User-Text ableiten
+      const { count: msgCount } = await supabase
+        .from('messages')
+        .select('*', { count: 'exact', head: true })
+        .eq('conversation_id', conversationId)
+
+      const updates: Record<string, string> = {
+        status: 'new',
+        updated_at: new Date().toISOString(),
+      }
+      if (msgCount && msgCount <= 1 && lastUserMessage?.content) {
+        const trimmed = lastUserMessage.content.trim().replace(/\s+/g, ' ')
+        updates.title = trimmed.length > 40 ? trimmed.slice(0, 37) + '…' : trimmed
+      }
+
       await supabase
         .from('conversations')
-        .update({ status: 'new', updated_at: new Date().toISOString() })
+        .update(updates)
         .eq('id', conversationId)
 
       // Leerer Stream zur\u00fcck — kein KI-Text
@@ -207,20 +222,26 @@ export async function POST(req: Request) {
         .eq('conversation_id', conversationId)
 
       if (count && count <= 2) {
+        // Erster Austausch → Titel generieren (oder auf Fallback zur\u00fcckfallen)
+        let newTitle: string | null = null
         try {
           const { text: title } = await generateText({
             model: anthropic('claude-sonnet-4-5-20250929'),
             system:
-              'Generiere einen sehr kurzen Titel (3-5 Wörter, auf Deutsch) für diese Unterhaltung basierend auf der ersten Nachricht des Nutzers. Antworte nur mit dem Titel, ohne Anführungszeichen.',
+              'Generiere einen sehr kurzen Titel (3-5 Wörter, auf Deutsch) für diese Unterhaltung basierend auf der ersten Nachricht des Nutzers. Antworte nur mit dem Titel, ohne Anführungszeichen, ohne Satzzeichen am Ende.',
             prompt: lastUserMessage.content,
           })
-
+          newTitle = title.trim().replace(/["'.!?]+$/, '')
+        } catch {
+          // Fallback: erste ~40 Zeichen der User-Message
+          const trimmed = lastUserMessage.content.trim().replace(/\s+/g, ' ')
+          newTitle = trimmed.length > 40 ? trimmed.slice(0, 37) + '…' : trimmed
+        }
+        if (newTitle) {
           await supabase
             .from('conversations')
-            .update({ title: title.trim() })
+            .update({ title: newTitle })
             .eq('id', conversationId)
-        } catch {
-          // Title generation is optional
         }
       }
     },
