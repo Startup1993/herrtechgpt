@@ -1,7 +1,8 @@
 'use client'
 
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { useRouter } from 'next/navigation'
+import { useRouter, useSearchParams } from 'next/navigation'
+import ReactMarkdown from 'react-markdown'
 import { Send, Loader2, Users, Bot, Shield, CheckCircle2, Info } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
 
@@ -17,32 +18,87 @@ interface Message {
 }
 
 interface Props {
-  conversationId: string
-  initialMessages: Message[]
-  initialMode: Mode
-  initialStatus: Status
+  userId: string
   userInitials: string
 }
 
-export function HelpChat({
-  conversationId,
-  initialMessages,
-  initialMode,
-  initialStatus,
-  userInitials,
-}: Props) {
+export function HelpChat({ userId, userInitials }: Props) {
   const router = useRouter()
-  const [messages, setMessages] = useState<Message[]>(initialMessages)
-  const [mode, setMode] = useState<Mode>(initialMode)
-  const [status, setStatus] = useState<Status>(initialStatus)
+  const searchParams = useSearchParams()
+  const urlChatId = searchParams.get('chat')
+
+  const [conversationId, setConversationId] = useState<string | null>(null)
+  const [messages, setMessages] = useState<Message[]>([])
+  const [mode, setMode] = useState<Mode>('ai')
+  const [status, setStatus] = useState<Status>('new')
+  const [loading, setLoading] = useState(true)
   const [input, setInput] = useState('')
   const [sending, setSending] = useState(false)
   const [switching, setSwitching] = useState(false)
   const scrollRef = useRef<HTMLDivElement>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
 
-  // Polling: alle 8s nach neuen Admin-Antworten suchen
+  // ─── Laden der aktiven Conversation (reagiert auf URL-\u00c4nderungen) ──────────
+  useEffect(() => {
+    let cancelled = false
+    const load = async () => {
+      setLoading(true)
+      const supabase = createClient()
+      let activeId = urlChatId
+
+      // Falls keine aktive Konversation in URL → neueste User-Konversation nehmen
+      if (!activeId) {
+        const { data: latest } = await supabase
+          .from('conversations')
+          .select('id')
+          .eq('user_id', userId)
+          .eq('agent_id', 'help')
+          .order('updated_at', { ascending: false })
+          .limit(1)
+          .maybeSingle()
+
+        if (latest?.id) {
+          activeId = latest.id
+        } else {
+          // Keine Konversation vorhanden → neue erstellen
+          const { data: newConv } = await supabase
+            .from('conversations')
+            .insert({ user_id: userId, agent_id: 'help', title: 'Hilfe & Support' })
+            .select('id')
+            .single()
+          activeId = newConv?.id ?? null
+        }
+      }
+
+      if (cancelled || !activeId) return
+
+      const [{ data: msgs }, { data: conv }] = await Promise.all([
+        supabase
+          .from('messages')
+          .select('id, role, content, created_at')
+          .eq('conversation_id', activeId)
+          .order('created_at', { ascending: true }),
+        supabase
+          .from('conversations')
+          .select('mode, status')
+          .eq('id', activeId)
+          .single(),
+      ])
+
+      if (cancelled) return
+      setConversationId(activeId)
+      setMessages((msgs as Message[]) ?? [])
+      setMode((conv?.mode as Mode) ?? 'ai')
+      setStatus((conv?.status as Status) ?? 'new')
+      setLoading(false)
+    }
+    load()
+    return () => { cancelled = true }
+  }, [urlChatId, userId])
+
+  // ─── Polling f\u00fcr Admin-Antworten (nur wenn Human-Mode / wartend) ──────────
   const pollMessages = useCallback(async () => {
+    if (!conversationId) return
     const supabase = createClient()
     const [{ data: msgs }, { data: conv }] = await Promise.all([
       supabase
@@ -59,17 +115,13 @@ export function HelpChat({
     if (msgs) {
       setMessages((prev) => {
         const dbMsgs = msgs as Message[]
-        // Behalte nur optimistische (temp-*/ai-*) Nachrichten, deren Inhalt NOCH NICHT
-        // in der DB gelandet ist. Sobald DB den gleichen role+content hat \u2192 optimistisch droppen
-        // (sonst erscheinen Messages doppelt).
-        const pendingOptimistic = prev.filter((m) => {
+        const pending = prev.filter((m) => {
           if (!m.id.startsWith('temp-') && !m.id.startsWith('ai-')) return false
-          const alreadyInDb = dbMsgs.some(
+          return !dbMsgs.some(
             (d) => d.role === m.role && d.content.trim() === m.content.trim()
           )
-          return !alreadyInDb
         })
-        return [...dbMsgs, ...pendingOptimistic].sort(
+        return [...dbMsgs, ...pending].sort(
           (a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
         )
       })
@@ -81,19 +133,18 @@ export function HelpChat({
   }, [conversationId])
 
   useEffect(() => {
-    // Nur pollen wenn relevant (Human-Mode aktiv oder wartend auf Admin-Antwort)
     if (mode !== 'human' && status === 'resolved') return
-    const interval = setInterval(pollMessages, 8000)
+    if (mode !== 'human' && status !== 'new') return
+    const interval = setInterval(pollMessages, 10000)
     return () => clearInterval(interval)
   }, [mode, status, pollMessages])
 
   useEffect(() => {
-    if (scrollRef.current) {
-      scrollRef.current.scrollTop = scrollRef.current.scrollHeight
-    }
+    if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight
   }, [messages])
 
   const requestAdmin = async () => {
+    if (!conversationId) return
     setSwitching(true)
     const res = await fetch('/api/help/request-admin', {
       method: 'POST',
@@ -109,17 +160,18 @@ export function HelpChat({
 
   const send = async () => {
     const text = input.trim()
-    if (!text || sending) return
+    if (!text || sending || !conversationId) return
     setSending(true)
 
-    // Optimistic
+    const optimisticUserId = 'temp-' + Date.now()
     const optimistic: Message = {
-      id: 'temp-' + Date.now(),
+      id: optimisticUserId,
       role: 'user',
       content: text,
       created_at: new Date().toISOString(),
     }
-    setMessages((m) => [...m, optimistic])
+    const currentMessages = [...messages, optimistic]
+    setMessages(currentMessages)
     setInput('')
 
     try {
@@ -129,33 +181,28 @@ export function HelpChat({
         body: JSON.stringify({
           agentId: 'help',
           conversationId,
-          messages: [
-            ...messages.map((m) => ({ id: m.id, role: m.role, parts: [{ type: 'text', text: m.content }] })),
-            { id: optimistic.id, role: 'user', parts: [{ type: 'text', text }] },
-          ],
+          messages: currentMessages
+            .filter((m) => m.role === 'user' || m.role === 'assistant')
+            .map((m) => ({ id: m.id, role: m.role, parts: [{ type: 'text', text: m.content }] })),
         }),
       })
 
-      if (mode === 'ai' && res.ok) {
-        // Stream AI response
-        const reader = res.body?.getReader()
-        const decoder = new TextDecoder()
-        let aiText = ''
+      if (mode === 'ai' && res.ok && res.body) {
         const aiId = 'ai-' + Date.now()
         setMessages((m) => [...m, { id: aiId, role: 'assistant', content: '', created_at: new Date().toISOString() }])
-        if (reader) {
-          while (true) {
-            const { done, value } = await reader.read()
-            if (done) break
-            aiText += decoder.decode(value)
-            setMessages((m) => m.map((msg) => msg.id === aiId ? { ...msg, content: aiText } : msg))
-          }
+        const reader = res.body.getReader()
+        const decoder = new TextDecoder()
+        let aiText = ''
+        while (true) {
+          const { done, value } = await reader.read()
+          if (done) break
+          aiText += decoder.decode(value, { stream: true })
+          setMessages((m) => m.map((msg) => msg.id === aiId ? { ...msg, content: aiText } : msg))
         }
       }
-      // Re-fetch to get real IDs
-      await pollMessages()
+      // Delay polling to give onFinish time to save
+      setTimeout(() => pollMessages(), 500)
     } catch {
-      // bei Fehler: erneuter Poll
       await pollMessages()
     } finally {
       setSending(false)
@@ -172,6 +219,15 @@ export function HelpChat({
   const isHuman = mode === 'human'
   const isResolved = status === 'resolved'
 
+  if (loading) {
+    return (
+      <div className="flex flex-col h-full items-center justify-center text-muted text-sm gap-2">
+        <Loader2 size={18} className="animate-spin" />
+        Lade Chat…
+      </div>
+    )
+  }
+
   return (
     <div className="flex flex-col h-full">
       {/* Banner: Human-Mode aktiv */}
@@ -185,13 +241,12 @@ export function HelpChat({
         </div>
       )}
 
-      {/* Banner: Resolved */}
       {isResolved && (
         <div className="shrink-0 bg-green-50 dark:bg-green-950/30 border-b border-green-200 dark:border-green-900 px-4 py-2.5 flex items-center gap-3">
           <CheckCircle2 size={16} className="text-green-600 dark:text-green-400 shrink-0" />
           <div className="flex-1 min-w-0">
             <p className="text-xs font-medium text-foreground">Dieser Fall ist als gelöst markiert</p>
-            <p className="text-[11px] text-muted">Schreib einfach eine neue Nachricht, wenn du weitere Hilfe brauchst — die KI hilft dann direkt.</p>
+            <p className="text-[11px] text-muted">Schreib einfach eine neue Nachricht wenn du weitere Hilfe brauchst.</p>
           </div>
         </div>
       )}
@@ -221,7 +276,7 @@ export function HelpChat({
         )}
       </div>
 
-      {/* Call-to-action: Mit Team sprechen (nur im AI-Mode + nicht resolved) */}
+      {/* CTA: Mit Team sprechen */}
       {!isHuman && !isResolved && (
         <div className="shrink-0 px-4 py-2 border-t border-border bg-surface/50">
           <div className="max-w-3xl mx-auto flex items-center justify-between gap-3">
@@ -240,7 +295,6 @@ export function HelpChat({
         </div>
       )}
 
-      {/* Call-to-action: User hat resolved ticket und will wieder Admin */}
       {isResolved && (
         <div className="shrink-0 px-4 py-2 border-t border-border bg-surface/50">
           <div className="max-w-3xl mx-auto flex items-center justify-between gap-3">
@@ -290,6 +344,24 @@ export function HelpChat({
   )
 }
 
+// ─── Message-Bubbles mit Markdown ────────────────────────────────────────────
+
+function MarkdownContent({ content }: { content: string }) {
+  return (
+    <div className="prose prose-sm dark:prose-invert max-w-none
+      prose-p:my-1.5 prose-p:leading-relaxed
+      prose-headings:font-semibold prose-headings:my-2
+      prose-h1:text-base prose-h2:text-sm prose-h3:text-sm
+      prose-strong:font-semibold prose-strong:text-foreground
+      prose-ul:my-1.5 prose-ol:my-1.5 prose-li:my-0.5
+      prose-code:text-xs prose-code:bg-surface-secondary prose-code:px-1 prose-code:py-0.5 prose-code:rounded prose-code:before:content-none prose-code:after:content-none
+      prose-a:text-primary prose-a:no-underline hover:prose-a:underline
+    ">
+      <ReactMarkdown>{content}</ReactMarkdown>
+    </div>
+  )
+}
+
 function MessageBubble({ msg, userInitials }: { msg: Message; userInitials: string }) {
   if (msg.role === 'system') {
     return (
@@ -324,14 +396,14 @@ function MessageBubble({ msg, userInitials }: { msg: Message; userInitials: stri
         <div className="max-w-[75%]">
           <div className="text-[11px] font-semibold text-amber-700 dark:text-amber-400 mb-1 ml-1">Support-Team</div>
           <div className="bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-900 text-foreground px-4 py-2.5 rounded-2xl rounded-tl-sm">
-            <p className="text-sm whitespace-pre-wrap break-words">{msg.content}</p>
+            <MarkdownContent content={msg.content} />
           </div>
         </div>
       </div>
     )
   }
 
-  // assistant
+  // assistant (KI)
   return (
     <div className="flex gap-2">
       <div className="w-8 h-8 rounded-full bg-surface-secondary text-muted flex items-center justify-center shrink-0">
@@ -340,7 +412,15 @@ function MessageBubble({ msg, userInitials }: { msg: Message; userInitials: stri
       <div className="max-w-[75%]">
         <div className="text-[11px] font-semibold text-muted mb-1 ml-1">Herr Tech KI</div>
         <div className="bg-surface border border-border text-foreground px-4 py-2.5 rounded-2xl rounded-tl-sm">
-          <p className="text-sm whitespace-pre-wrap break-words">{msg.content}</p>
+          {msg.content ? (
+            <MarkdownContent content={msg.content} />
+          ) : (
+            <div className="flex gap-1 py-1" aria-label="Schreibt">
+              <span className="w-1.5 h-1.5 rounded-full bg-muted animate-bounce" style={{ animationDelay: '0ms' }} />
+              <span className="w-1.5 h-1.5 rounded-full bg-muted animate-bounce" style={{ animationDelay: '150ms' }} />
+              <span className="w-1.5 h-1.5 rounded-full bg-muted animate-bounce" style={{ animationDelay: '300ms' }} />
+            </div>
+          )}
         </div>
       </div>
     </div>
