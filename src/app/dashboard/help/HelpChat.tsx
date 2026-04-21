@@ -296,16 +296,10 @@ export function HelpChat({ userId, userInitials }: Props) {
             </p>
           </div>
         ) : (
-          <div className="max-w-3xl mx-auto space-y-4">
+          <div className="max-w-3xl mx-auto space-y-6">
             {messages.map((msg) => (
               <MessageBubble key={msg.id} msg={msg} userInitials={userInitials} />
             ))}
-            {sending && mode === 'ai' && (
-              <div className="flex items-center gap-2 text-xs text-muted ml-10">
-                <Loader2 size={12} className="animate-spin" />
-                KI schreibt…
-              </div>
-            )}
           </div>
         )}
       </div>
@@ -382,17 +376,30 @@ export function HelpChat({ userId, userInitials }: Props) {
 
 function MarkdownContent({ content }: { content: string }) {
   return (
-    <div className="prose prose-sm dark:prose-invert max-w-none
-      prose-p:my-3 prose-p:leading-relaxed
-      prose-headings:font-semibold prose-headings:mt-5 prose-headings:mb-2 first:prose-headings:mt-0
-      prose-h1:text-base prose-h2:text-[15px] prose-h3:text-sm
-      prose-strong:font-semibold prose-strong:text-foreground
-      prose-ul:my-3 prose-ol:my-3 prose-li:my-1 prose-li:leading-relaxed
-      prose-code:text-xs prose-code:bg-surface-secondary prose-code:px-1 prose-code:py-0.5 prose-code:rounded prose-code:before:content-none prose-code:after:content-none
-      prose-a:text-primary prose-a:no-underline hover:prose-a:underline
-      [&>*:first-child]:mt-0 [&>*:last-child]:mb-0
-    ">
-      <ReactMarkdown remarkPlugins={[remarkBreaks, remarkGfm]}>{content}</ReactMarkdown>
+    <div className="text-sm leading-relaxed text-foreground">
+      <ReactMarkdown
+        remarkPlugins={[remarkBreaks, remarkGfm]}
+        components={{
+          p: ({ children }) => <p className="mb-3 last:mb-0">{children}</p>,
+          strong: ({ children }) => <strong className="font-semibold">{children}</strong>,
+          em: ({ children }) => <em className="italic">{children}</em>,
+          ul: ({ children }) => <ul className="list-disc pl-5 mb-3 space-y-1">{children}</ul>,
+          ol: ({ children }) => <ol className="list-decimal pl-5 mb-3 space-y-1">{children}</ol>,
+          li: ({ children }) => <li className="leading-relaxed">{children}</li>,
+          h1: ({ children }) => <h1 className="font-bold text-base mb-2 mt-4 first:mt-0">{children}</h1>,
+          h2: ({ children }) => <h2 className="font-semibold mb-2 mt-3 first:mt-0">{children}</h2>,
+          h3: ({ children }) => <h3 className="font-semibold mb-1 mt-2 first:mt-0">{children}</h3>,
+          code: ({ children }) => {
+            const isBlock = String(children).includes('\n')
+            return isBlock
+              ? <code className="font-mono text-xs">{children}</code>
+              : <code className="bg-surface-secondary rounded px-1.5 py-0.5 font-mono text-xs">{children}</code>
+          },
+          hr: () => <hr className="border-border my-4" />,
+        }}
+      >
+        {content}
+      </ReactMarkdown>
     </div>
   )
 }
@@ -411,12 +418,9 @@ function MessageBubble({ msg, userInitials }: { msg: Message; userInitials: stri
 
   if (msg.role === 'user') {
     return (
-      <div className="flex justify-end gap-2">
-        <div className="max-w-[75%] bg-primary text-white px-4 py-2.5 rounded-2xl rounded-tr-sm">
-          <p className="text-sm whitespace-pre-wrap break-words">{msg.content}</p>
-        </div>
-        <div className="w-8 h-8 rounded-full bg-primary/15 text-primary flex items-center justify-center text-[11px] font-semibold shrink-0">
-          {userInitials}
+      <div className="flex justify-end">
+        <div className="max-w-[75%] px-4 py-2.5 rounded-2xl rounded-br-sm bg-primary text-white text-sm leading-relaxed whitespace-pre-wrap">
+          {msg.content}
         </div>
       </div>
     )
@@ -438,25 +442,19 @@ function MessageBubble({ msg, userInitials }: { msg: Message; userInitials: stri
     )
   }
 
-  // assistant (KI)
+  // assistant (KI) — styled wie Herr Tech GPT: kein Box, flie\u00dfender Text
   return (
-    <div className="flex gap-2">
-      <div className="w-8 h-8 rounded-full bg-surface-secondary text-muted flex items-center justify-center shrink-0">
-        <Bot size={14} />
-      </div>
-      <div className="max-w-[75%]">
-        <div className="text-[11px] font-semibold text-muted mb-1 ml-1">Herr Tech KI</div>
-        <div className="bg-surface border border-border text-foreground px-4 py-2.5 rounded-2xl rounded-tl-sm">
-          {msg.content ? (
-            <MarkdownContent content={msg.content} />
-          ) : (
-            <div className="flex gap-1 py-1" aria-label="Schreibt">
-              <span className="w-1.5 h-1.5 rounded-full bg-muted animate-bounce" style={{ animationDelay: '0ms' }} />
-              <span className="w-1.5 h-1.5 rounded-full bg-muted animate-bounce" style={{ animationDelay: '150ms' }} />
-              <span className="w-1.5 h-1.5 rounded-full bg-muted animate-bounce" style={{ animationDelay: '300ms' }} />
-            </div>
-          )}
-        </div>
+    <div className="flex justify-start">
+      <div className="w-full py-1">
+        {msg.content ? (
+          <MarkdownContent content={msg.content} />
+        ) : (
+          <div className="flex gap-1 py-2" aria-label="Schreibt">
+            <span className="w-1.5 h-1.5 rounded-full bg-muted/60 animate-bounce" style={{ animationDelay: '0ms' }} />
+            <span className="w-1.5 h-1.5 rounded-full bg-muted/60 animate-bounce" style={{ animationDelay: '150ms' }} />
+            <span className="w-1.5 h-1.5 rounded-full bg-muted/60 animate-bounce" style={{ animationDelay: '300ms' }} />
+          </div>
+        )}
       </div>
     </div>
   )
