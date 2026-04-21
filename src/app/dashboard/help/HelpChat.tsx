@@ -3,6 +3,8 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import ReactMarkdown from 'react-markdown'
+import remarkBreaks from 'remark-breaks'
+import remarkGfm from 'remark-gfm'
 import { Send, Loader2, Users, Bot, Shield, CheckCircle2, Info } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
 
@@ -390,7 +392,7 @@ function MarkdownContent({ content }: { content: string }) {
       prose-a:text-primary prose-a:no-underline hover:prose-a:underline
       [&>*:first-child]:mt-0 [&>*:last-child]:mb-0
     ">
-      <ReactMarkdown>{content}</ReactMarkdown>
+      <ReactMarkdown remarkPlugins={[remarkBreaks, remarkGfm]}>{content}</ReactMarkdown>
     </div>
   )
 }

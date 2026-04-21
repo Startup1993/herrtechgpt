@@ -1,13 +1,55 @@
 'use client'
 
-import { useState, useCallback } from 'react'
+import { useEffect, useRef, useState, useCallback } from 'react'
 import ReactMarkdown from 'react-markdown'
+import remarkBreaks from 'remark-breaks'
+import remarkGfm from 'remark-gfm'
 
 interface ChatMessageProps {
   role: 'user' | 'assistant'
   content: string
   agentId?: string
   agentName?: string
+}
+
+// Typewriter-Effekt f\u00fcr Assistant-Text.
+// Erste Render-Instanz: snap auf Content (History).
+// Nachfolgende Content-Updates (Streaming): holt gleichm\u00e4\u00dfig auf (~120 chars/sec).
+function useTypewriter(content: string): string {
+  const [displayed, setDisplayed] = useState(content)
+  const mountedRef = useRef(false)
+  const targetRef = useRef(content)
+
+  useEffect(() => {
+    targetRef.current = content
+    if (!mountedRef.current) {
+      mountedRef.current = true
+      setDisplayed(content)
+      return
+    }
+    // Content k\u00fcrzer als Displayed (z.B. neue Nachricht) \u2192 reset
+    if (content.length < displayed.length) {
+      setDisplayed(content)
+      return
+    }
+    if (displayed.length >= content.length) return
+
+    const interval = setInterval(() => {
+      setDisplayed((prev) => {
+        const target = targetRef.current
+        if (prev.length >= target.length) {
+          clearInterval(interval)
+          return target
+        }
+        const ahead = target.length - prev.length
+        const step = Math.min(Math.max(2, Math.floor(ahead / 25)), 10)
+        return target.slice(0, prev.length + step)
+      })
+    }, 16)
+    return () => clearInterval(interval)
+  }, [content]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  return displayed
 }
 
 function CopyableCodeBlock({ children }: { children: React.ReactNode }) {
@@ -64,6 +106,8 @@ export function ChatMessage({ role, content, agentId, agentName }: ChatMessagePr
   const isUser = role === 'user'
   const [saved, setSaved] = useState(false)
   const [saving, setSaving] = useState(false)
+  // Typewriter nur f\u00fcr Assistant-Text (User-Input snappt direkt)
+  const assistantContent = useTypewriter(content)
 
   const handleSave = async () => {
     if (saved || saving) return
@@ -96,6 +140,7 @@ export function ChatMessage({ role, content, agentId, agentName }: ChatMessagePr
       <div className="relative w-full">
         <div className="text-sm leading-relaxed text-foreground py-1">
           <ReactMarkdown
+            remarkPlugins={[remarkBreaks, remarkGfm]}
             components={{
               p: ({ children }) => <p className="mb-3 last:mb-0">{children}</p>,
               strong: ({ children }) => <strong className="font-semibold">{children}</strong>,
@@ -116,7 +161,7 @@ export function ChatMessage({ role, content, agentId, agentName }: ChatMessagePr
               hr: () => <hr className="border-border my-4" />,
             }}
           >
-            {content}
+            {assistantContent}
           </ReactMarkdown>
         </div>
 
