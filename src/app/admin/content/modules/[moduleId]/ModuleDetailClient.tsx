@@ -6,7 +6,7 @@ import Link from 'next/link'
 import {
   ChevronLeft, Plus, Edit, Trash2, Eye, EyeOff, Search, Loader2, X,
   Video as VideoIcon, Save, GripVertical, FileText, Link as LinkIcon,
-  Image as ImageIcon, Film,
+  Image as ImageIcon, Film, FolderOpen, AlertTriangle,
 } from 'lucide-react'
 import {
   DndContext, closestCenter, PointerSensor, useSensor, useSensors,
@@ -27,12 +27,25 @@ interface Module {
 interface ModuleVideo {
   id: string
   module_id: string
+  chapter_id: string | null
   wistia_hashed_id: string
   title: string
   description: string
   sort_order: number
   duration_seconds: number | null
   is_published: boolean
+  skool_lesson_id?: string | null
+  skool_video_id?: string | null
+}
+
+interface ModuleChapter {
+  id: string
+  module_id: string
+  title: string
+  description: string
+  sort_order: number
+  is_published: boolean
+  skool_chapter_id?: string | null
 }
 
 interface VideoResource {
@@ -54,21 +67,79 @@ interface WistiaVideo {
 export function ModuleDetailClient({
   module,
   initialVideos,
+  initialChapters,
   allModules,
 }: {
   module: Module & { description: string }
   initialVideos: ModuleVideo[]
+  initialChapters: ModuleChapter[]
   allModules: Module[]
 }) {
   const router = useRouter()
   const [videos, setVideos] = useState(initialVideos)
+  const [chapters, setChapters] = useState(initialChapters)
   const [editing, setEditing] = useState<ModuleVideo | null>(null)
+  const [editingChapter, setEditingChapter] = useState<ModuleChapter | null>(null)
   const [showAdd, setShowAdd] = useState(false)
+  const [showAddChapter, setShowAddChapter] = useState(false)
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null)
   const [loading, setLoading] = useState<string | null>(null)
   const [savedFlash, setSavedFlash] = useState(false)
+  const [mounted, setMounted] = useState(false)
 
   useEffect(() => setVideos(initialVideos), [initialVideos])
+  useEffect(() => setChapters(initialChapters), [initialChapters])
+  useEffect(() => setMounted(true), [])
+
+  // ─────── Chapter handlers ───────
+  const handleSaveChapter = async (chapter: Partial<ModuleChapter>) => {
+    setLoading('save-chapter')
+    const isNew = !chapter.id
+    const res = await fetch('/api/admin/chapters', {
+      method: isNew ? 'POST' : 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(isNew ? { ...chapter, module_id: module.id } : chapter),
+    })
+    setLoading(null)
+    if (res.ok) {
+      router.refresh()
+      setEditingChapter(null)
+      setShowAddChapter(false)
+      setSavedFlash(true)
+      setTimeout(() => setSavedFlash(false), 1500)
+    }
+  }
+
+  const handleDeleteChapter = async (id: string) => {
+    setLoading(id)
+    try {
+      const res = await fetch(`/api/admin/chapters?id=${id}`, { method: 'DELETE' })
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}))
+        alert(`Löschen fehlgeschlagen: ${body.error || res.statusText}`)
+        setLoading(null)
+        return
+      }
+      setConfirmDelete(null)
+      setChapters(chapters.filter(c => c.id !== id))
+      router.refresh()
+    } catch (e) {
+      alert(`Netzwerk-Fehler: ${String(e)}`)
+    } finally {
+      setLoading(null)
+    }
+  }
+
+  const handleToggleChapterPublish = async (c: ModuleChapter) => {
+    setLoading(c.id)
+    await fetch('/api/admin/chapters', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id: c.id, is_published: !c.is_published }),
+    })
+    setLoading(null)
+    router.refresh()
+  }
 
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 6 } }))
 
@@ -92,11 +163,22 @@ export function ModuleDetailClient({
 
   const handleDelete = async (id: string) => {
     setLoading(id)
-    await fetch(`/api/admin/module-videos?id=${id}`, { method: 'DELETE' })
-    setLoading(null)
-    setConfirmDelete(null)
-    setVideos(videos.filter(v => v.id !== id))
-    router.refresh()
+    try {
+      const res = await fetch(`/api/admin/module-videos?id=${id}`, { method: 'DELETE' })
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}))
+        alert(`Löschen fehlgeschlagen: ${body.error || res.statusText}`)
+        setLoading(null)
+        return
+      }
+      setConfirmDelete(null)
+      setVideos(videos.filter(v => v.id !== id))
+      router.refresh()
+    } catch (e) {
+      alert(`Netzwerk-Fehler: ${String(e)}`)
+    } finally {
+      setLoading(null)
+    }
   }
 
   const handleTogglePublish = async (v: ModuleVideo) => {
@@ -113,19 +195,50 @@ export function ModuleDetailClient({
   const handleDragEnd = async (e: DragEndEvent) => {
     const { active, over } = e
     if (!over || active.id === over.id) return
-    const oldIndex = videos.findIndex(v => v.id === active.id)
-    const newIndex = videos.findIndex(v => v.id === over.id)
+
+    // Is it a chapter being dragged?
+    const isChapter = chapters.some(c => c.id === active.id)
+    if (isChapter) {
+      const oldIndex = chapters.findIndex(c => c.id === active.id)
+      const newIndex = chapters.findIndex(c => c.id === over.id)
+      if (oldIndex < 0 || newIndex < 0) return
+      const next = arrayMove(chapters, oldIndex, newIndex)
+      const renumbered = next.map((c, i) => ({ ...c, sort_order: i + 1 }))
+      setChapters(renumbered)
+      await fetch('/api/admin/reorder', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          table: 'module_chapters',
+          items: renumbered.map(c => ({ id: c.id, sort_order: c.sort_order })),
+        }),
+      })
+      router.refresh()
+      return
+    }
+
+    // Otherwise it's a video — reorder within its current chapter scope
+    const activeVideo = videos.find(v => v.id === active.id)
+    const overVideo = videos.find(v => v.id === over.id)
+    if (!activeVideo || !overVideo) return
+    if (activeVideo.chapter_id !== overVideo.chapter_id) return  // No cross-chapter drag
+
+    const scope = videos.filter(v => v.chapter_id === activeVideo.chapter_id)
+    const oldIndex = scope.findIndex(v => v.id === active.id)
+    const newIndex = scope.findIndex(v => v.id === over.id)
     if (oldIndex < 0 || newIndex < 0) return
-    const next = arrayMove(videos, oldIndex, newIndex)
-    // Assign new sort_order values (1-indexed)
-    const renumbered = next.map((v, i) => ({ ...v, sort_order: i + 1 }))
-    setVideos(renumbered)
+    const reorderedScope = arrayMove(scope, oldIndex, newIndex)
+    // Renumber within scope, keep other videos' sort_order
+    const baseOrder = Math.min(...scope.map(v => v.sort_order))
+    const renumberedScope = reorderedScope.map((v, i) => ({ ...v, sort_order: baseOrder + i }))
+    const renumberedAll = videos.map(v => renumberedScope.find(r => r.id === v.id) || v)
+    setVideos(renumberedAll)
     await fetch('/api/admin/reorder', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         table: 'module_videos',
-        items: renumbered.map(v => ({ id: v.id, sort_order: v.sort_order })),
+        items: renumberedScope.map(v => ({ id: v.id, sort_order: v.sort_order })),
       }),
     })
     router.refresh()
@@ -153,15 +266,21 @@ export function ModuleDetailClient({
               {savedFlash && <span className="ml-2 text-primary">· Gespeichert ✓</span>}
             </p>
           </div>
-          <button onClick={() => setShowAdd(true)} className="btn-primary">
-            <Plus size={16} />
-            Video hinzufügen
-          </button>
+          <div className="flex items-center gap-2">
+            <button onClick={() => setShowAddChapter(true)} className="btn-ghost border border-border">
+              <FolderOpen size={14} />
+              Kapitel
+            </button>
+            <button onClick={() => setShowAdd(true)} className="btn-primary">
+              <Plus size={16} />
+              Video
+            </button>
+          </div>
         </div>
       </div>
 
-      {/* Videos */}
-      {videos.length === 0 ? (
+      {/* Grouped Videos: top-level first, then per-chapter groups */}
+      {videos.length === 0 && chapters.length === 0 ? (
         <div className="card-static p-8 text-center">
           <VideoIcon size={32} className="text-muted mx-auto mb-3" />
           <p className="text-sm text-muted">Noch keine Videos in diesem Modul.</p>
@@ -170,27 +289,96 @@ export function ModuleDetailClient({
           </button>
         </div>
       ) : (
-        <div className="card-static overflow-hidden">
-          <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
-            <SortableContext items={videos.map(v => v.id)} strategy={verticalListSortingStrategy}>
-              <ul className="divide-y divide-border">
-                {videos.map((v, i) => (
-                  <SortableVideoRow
-                    key={v.id}
-                    video={v}
-                    index={i}
-                    onEdit={() => setEditing(v)}
-                    onTogglePublish={() => handleTogglePublish(v)}
-                    onDelete={() => handleDelete(v.id)}
-                    confirmingDelete={confirmDelete === v.id}
-                    setConfirmingDelete={(c) => setConfirmDelete(c ? v.id : null)}
-                    loading={loading === v.id}
-                    formatDuration={formatDuration}
-                  />
-                ))}
-              </ul>
-            </SortableContext>
-          </DndContext>
+        <div suppressHydrationWarning>
+          {mounted && (
+            <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
+              {(() => {
+                const topLevel = videos.filter(v => !v.chapter_id)
+                const byChapter: Record<string, ModuleVideo[]> = {}
+                for (const v of videos) if (v.chapter_id) (byChapter[v.chapter_id] ||= []).push(v)
+                let runningIndex = 0
+                return (
+                  <div className="space-y-5">
+                    {topLevel.length > 0 && (
+                      <SortableContext items={topLevel.map(v => v.id)} strategy={verticalListSortingStrategy}>
+                        <div className="card-static overflow-hidden">
+                          <ul className="divide-y divide-border">
+                            {topLevel.map((v) => {
+                              const idx = runningIndex++
+                              return (
+                                <SortableVideoRow
+                                  key={v.id}
+                                  video={v}
+                                  index={idx}
+                                  onEdit={() => setEditing(v)}
+                                  onTogglePublish={() => handleTogglePublish(v)}
+                                  onDelete={() => handleDelete(v.id)}
+                                  confirmingDelete={confirmDelete === v.id}
+                                  setConfirmingDelete={(c) => setConfirmDelete(c ? v.id : null)}
+                                  loading={loading === v.id}
+                                  formatDuration={formatDuration}
+                                />
+                              )
+                            })}
+                          </ul>
+                        </div>
+                      </SortableContext>
+                    )}
+                    <SortableContext items={chapters.map(c => c.id)} strategy={verticalListSortingStrategy}>
+                      {chapters.map(chapter => {
+                        const chVideos = byChapter[chapter.id] || []
+                        const missingWistia = chVideos.filter(v => v.skool_video_id && v.wistia_hashed_id === 'MISSING___').length
+                        return (
+                          <div key={chapter.id}>
+                            <SortableChapterHeader
+                              chapter={chapter}
+                              videoCount={chVideos.length}
+                              missingWistia={missingWistia}
+                              onEdit={() => setEditingChapter(chapter)}
+                              onTogglePublish={() => handleToggleChapterPublish(chapter)}
+                              onDelete={() => handleDeleteChapter(chapter.id)}
+                              confirmingDelete={confirmDelete === chapter.id}
+                              setConfirmingDelete={(c) => setConfirmDelete(c ? chapter.id : null)}
+                              loading={loading === chapter.id}
+                            />
+                            {chVideos.length > 0 ? (
+                              <SortableContext items={chVideos.map(v => v.id)} strategy={verticalListSortingStrategy}>
+                                <div className="card-static overflow-hidden rounded-t-none border-t-0">
+                                  <ul className="divide-y divide-border">
+                                    {chVideos.map((v) => {
+                                      const idx = runningIndex++
+                                      return (
+                                        <SortableVideoRow
+                                          key={v.id}
+                                          video={v}
+                                          index={idx}
+                                          onEdit={() => setEditing(v)}
+                                          onTogglePublish={() => handleTogglePublish(v)}
+                                          onDelete={() => handleDelete(v.id)}
+                                          confirmingDelete={confirmDelete === v.id}
+                                          setConfirmingDelete={(c) => setConfirmDelete(c ? v.id : null)}
+                                          loading={loading === v.id}
+                                          formatDuration={formatDuration}
+                                        />
+                                      )
+                                    })}
+                                  </ul>
+                                </div>
+                              </SortableContext>
+                            ) : (
+                              <div className="card-static rounded-t-none border-t-0 px-5 py-3 text-xs text-muted italic">
+                                Keine Lektionen in diesem Kapitel.
+                              </div>
+                            )}
+                          </div>
+                        )
+                      })}
+                    </SortableContext>
+                  </div>
+                )
+              })()}
+            </DndContext>
+          )}
         </div>
       )}
 
@@ -215,6 +403,221 @@ export function ModuleDetailClient({
           saving={loading === 'save'}
         />
       )}
+
+      {/* Chapter Modal (create or edit) */}
+      {(showAddChapter || editingChapter) && (
+        <ChapterEditModal
+          chapter={editingChapter}
+          existingCount={chapters.length}
+          onSave={handleSaveChapter}
+          onClose={() => { setShowAddChapter(false); setEditingChapter(null) }}
+          saving={loading === 'save-chapter'}
+        />
+      )}
+    </div>
+  )
+}
+
+// ═══════════════════════════════════════════════════════════
+// CHAPTER EDIT MODAL
+// ═══════════════════════════════════════════════════════════
+
+// ═══════════════════════════════════════════════════════════
+// SORTABLE CHAPTER HEADER (inline group header, draggable)
+// ═══════════════════════════════════════════════════════════
+
+function SortableChapterHeader({
+  chapter,
+  videoCount,
+  missingWistia,
+  onEdit,
+  onTogglePublish,
+  onDelete,
+  confirmingDelete,
+  setConfirmingDelete,
+  loading,
+}: {
+  chapter: ModuleChapter
+  videoCount: number
+  missingWistia: number
+  onEdit: () => void
+  onTogglePublish: () => void
+  onDelete: () => void
+  confirmingDelete: boolean
+  setConfirmingDelete: (c: boolean) => void
+  loading: boolean
+}) {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: chapter.id })
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    opacity: isDragging ? 0.5 : 1,
+  }
+
+  return (
+    <div
+      ref={setNodeRef}
+      style={style}
+      className={`card-static rounded-b-none border-b-0 px-5 py-3 flex items-center gap-3 border-l-2 ${
+        !chapter.is_published
+          ? 'bg-amber-50/60 dark:bg-amber-950/15 border-l-amber-400'
+          : 'bg-surface-secondary/30 border-l-primary/40'
+      } ${isDragging ? 'z-10 shadow-lg' : ''}`}
+    >
+      <button
+        {...attributes}
+        {...listeners}
+        className="text-muted hover:text-foreground touch-none cursor-grab active:cursor-grabbing p-0.5"
+        aria-label="Kapitel verschieben"
+      >
+        <GripVertical size={16} />
+      </button>
+      <FolderOpen size={16} className="text-muted shrink-0" />
+      <div className="flex-1 min-w-0">
+        <div className="flex items-center gap-2 flex-wrap">
+          <h3 className="text-sm font-semibold text-foreground">{chapter.title}</h3>
+          <span className="text-xs text-muted">{videoCount} {videoCount === 1 ? 'Lektion' : 'Lektionen'}</span>
+          {!chapter.is_published && (
+            <span className="text-xs px-1.5 py-0.5 bg-muted/10 text-muted rounded">Entwurf</span>
+          )}
+          {chapter.skool_chapter_id && (
+            <span className="text-xs px-1.5 py-0.5 bg-primary/10 text-primary rounded">Skool</span>
+          )}
+          {missingWistia > 0 && (
+            <span className="text-xs px-1.5 py-0.5 bg-amber-100 text-amber-700 dark:bg-amber-950/40 dark:text-amber-400 rounded inline-flex items-center gap-1">
+              <AlertTriangle size={11} />
+              {missingWistia} Skool→Wistia
+            </span>
+          )}
+        </div>
+        {chapter.description && (
+          <p className="text-xs text-muted line-clamp-1 mt-0.5">{chapter.description}</p>
+        )}
+      </div>
+      <div className="flex items-center gap-1 shrink-0">
+        <button onClick={onTogglePublish} className="p-1.5 text-muted hover:text-foreground hover:bg-surface-hover rounded-[var(--radius-sm)]">
+          {chapter.is_published ? <Eye size={14} /> : <EyeOff size={14} />}
+        </button>
+        <button onClick={onEdit} className="p-1.5 text-muted hover:text-foreground hover:bg-surface-hover rounded-[var(--radius-sm)]">
+          <Edit size={14} />
+        </button>
+        {confirmingDelete ? (
+          <>
+            <button onClick={onDelete} disabled={loading} className="text-xs bg-danger text-white px-2 py-1 rounded-[var(--radius-sm)]">
+              {loading ? '...' : 'OK'}
+            </button>
+            <button onClick={() => setConfirmingDelete(false)} className="text-xs text-muted px-1">×</button>
+          </>
+        ) : (
+          <button onClick={() => setConfirmingDelete(true)} className="p-1.5 text-danger hover:bg-danger/10 rounded-[var(--radius-sm)]">
+            <Trash2 size={14} />
+          </button>
+        )}
+      </div>
+    </div>
+  )
+}
+
+function ChapterEditModal({
+  chapter,
+  existingCount,
+  onSave,
+  onClose,
+  saving,
+}: {
+  chapter: ModuleChapter | null
+  existingCount: number
+  onSave: (c: Partial<ModuleChapter>) => void
+  onClose: () => void
+  saving: boolean
+}) {
+  const [title, setTitle] = useState(chapter?.title ?? '')
+  const [description, setDescription] = useState(chapter?.description ?? '')
+  const [sortOrder, setSortOrder] = useState(chapter?.sort_order ?? existingCount + 1)
+  const [isPublished, setIsPublished] = useState(chapter?.is_published ?? true)
+
+  const handleSubmit = () => {
+    if (!title.trim()) return
+    onSave({
+      ...(chapter ? { id: chapter.id } : {}),
+      title: title.trim(),
+      description,
+      sort_order: sortOrder,
+      is_published: isPublished,
+    })
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-4" onClick={onClose}>
+      <div className="card-static p-6 w-full max-w-lg" onClick={(e) => e.stopPropagation()}>
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="text-lg font-semibold text-foreground">
+            {chapter ? 'Kapitel bearbeiten' : 'Neues Kapitel'}
+          </h2>
+          <button onClick={onClose} className="p-1 text-muted hover:text-foreground">
+            <X size={18} />
+          </button>
+        </div>
+
+        <div className="space-y-4">
+          <div>
+            <label className="block text-xs font-medium text-muted mb-1.5">Titel</label>
+            <input
+              type="text"
+              value={title}
+              onChange={(e) => setTitle(e.target.value)}
+              autoFocus
+              className="w-full px-3 py-2 border border-border rounded-[var(--radius-md)] bg-background text-sm focus:outline-none focus:ring-2 focus:ring-primary/30"
+            />
+          </div>
+
+          <div>
+            <label className="block text-xs font-medium text-muted mb-1.5">Beschreibung (optional)</label>
+            <textarea
+              value={description}
+              onChange={(e) => setDescription(e.target.value)}
+              rows={3}
+              className="w-full px-3 py-2 border border-border rounded-[var(--radius-md)] bg-background text-sm resize-none focus:outline-none focus:ring-2 focus:ring-primary/30"
+            />
+          </div>
+
+          <div className="flex gap-3">
+            <div className="flex-1">
+              <label className="block text-xs font-medium text-muted mb-1.5">Reihenfolge</label>
+              <input
+                type="number"
+                value={sortOrder}
+                onChange={(e) => setSortOrder(parseInt(e.target.value) || 999)}
+                className="w-full px-3 py-2 border border-border rounded-[var(--radius-md)] bg-background text-sm focus:outline-none focus:ring-2 focus:ring-primary/30"
+              />
+            </div>
+            <div className="flex-1">
+              <label className="block text-xs font-medium text-muted mb-1.5">Status</label>
+              <button
+                onClick={() => setIsPublished(!isPublished)}
+                className={`w-full px-3 py-2 rounded-[var(--radius-md)] text-sm font-medium transition-colors ${
+                  isPublished ? 'bg-green-100 text-green-700 dark:bg-green-950/30 dark:text-green-400' : 'bg-surface-secondary text-muted'
+                }`}
+              >
+                {isPublished ? '✓ Veröffentlicht' : '○ Entwurf'}
+              </button>
+            </div>
+          </div>
+
+          <div className="flex gap-2 pt-3 border-t border-border">
+            <button onClick={onClose} className="btn-ghost border border-border flex-1 justify-center">
+              Abbrechen
+            </button>
+            <button
+              onClick={handleSubmit}
+              disabled={saving || !title.trim()}
+              className="btn-primary flex-1 justify-center disabled:opacity-50"
+            >
+              {saving ? <><Loader2 size={14} className="animate-spin" /> Speichere...</> : <><Save size={14} /> Speichern</>}
+            </button>
+          </div>
+        </div>
+      </div>
     </div>
   )
 }
@@ -255,7 +658,11 @@ function SortableVideoRow({
     <li
       ref={setNodeRef}
       style={style}
-      className={`px-5 py-4 flex items-start gap-3 bg-background ${isDragging ? 'z-10 shadow-lg' : ''}`}
+      className={`px-5 py-4 flex items-start gap-3 border-l-2 ${
+        !video.is_published
+          ? 'bg-amber-50/60 dark:bg-amber-950/15 border-l-amber-400'
+          : 'bg-background border-l-transparent'
+      } ${isDragging ? 'z-10 shadow-lg' : ''}`}
     >
       <button
         {...attributes}
@@ -271,6 +678,17 @@ function SortableVideoRow({
           <h3 className="text-sm font-medium text-foreground">{video.title}</h3>
           {!video.is_published && (
             <span className="text-xs px-1.5 py-0.5 bg-muted/10 text-muted rounded">Entwurf</span>
+          )}
+          {video.skool_lesson_id && (
+            <span className="text-xs px-1.5 py-0.5 bg-primary/10 text-primary rounded inline-flex items-center gap-1">
+              Skool
+            </span>
+          )}
+          {video.skool_video_id && video.wistia_hashed_id === 'MISSING___' && (
+            <span className="text-xs px-1.5 py-0.5 bg-amber-100 text-amber-700 dark:bg-amber-950/40 dark:text-amber-400 rounded inline-flex items-center gap-1" title="In Skool ist ein nativ gehostetes Video — muss manuell zu Wistia hochgeladen werden">
+              <AlertTriangle size={11} />
+              Skool-Video → Wistia
+            </span>
           )}
           {(video.duration_seconds ?? 0) > 0 && (
             <span className="text-xs text-muted">{formatDuration(video.duration_seconds)}</span>

@@ -1,0 +1,626 @@
+{
+  "name": "Skool → HerrTechGPT Classroom Sync (Wöchentlich)",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "0 23 * * 0"
+            }
+          ]
+        }
+      },
+      "id": "trigger-schedule",
+      "name": "Sonntag 23:00",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [240, 400]
+    },
+    {
+      "parameters": {},
+      "id": "trigger-manual",
+      "name": "Manuell testen",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [240, 560]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "https://www.skool.com/ki-marketing-club",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "User-Agent",
+              "value": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/147.0.0.0 Safari/537.36"
+            }
+          ]
+        },
+        "options": {
+          "response": {
+            "response": {
+              "responseFormat": "text"
+            }
+          }
+        }
+      },
+      "id": "fetch-html",
+      "name": "Skool HTML laden (für buildId)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [480, 480],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "4iWrjh7Q6fuWlUeb",
+          "name": "Skool Session Cookie"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Extrahiert den Next.js buildId aus der HTML-Response\nconst html = $input.first().json.data || $input.first().json;\nconst htmlStr = typeof html === 'string' ? html : JSON.stringify(html);\n\nconst match = htmlStr.match(/\"buildId\":\"([^\"]+)\"/);\nif (!match) {\n  throw new Error('buildId konnte nicht aus HTML extrahiert werden — ist das SKOOL_COOKIE noch gültig?');\n}\n\nreturn [{ json: { buildId: match[1] } }];"
+      },
+      "id": "extract-buildid",
+      "name": "BuildId extrahieren",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [720, 480]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "=https://www.skool.com/_next/data/{{ $json.buildId }}/ki-marketing-club/classroom.json?group=ki-marketing-club",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "User-Agent",
+              "value": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/147.0.0.0 Safari/537.36"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "fetch-classroom",
+      "name": "Classroom-Liste laden",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [960, 480],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "4iWrjh7Q6fuWlUeb",
+          "name": "Skool Session Cookie"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Extrahiert die 19 Courses und splittet sie in einzelne Items\nconst data = $input.first().json;\nconst courses = data.pageProps?.allCourses || [];\nconst buildId = $('BuildId extrahieren').first().json.buildId;\n\nreturn courses.map(c => ({\n  json: {\n    buildId,\n    courseId: c.id,\n    courseSlug: c.name,\n    courseTitle: c.metadata?.title,\n    courseDesc: c.metadata?.desc || '',\n    numModules: c.metadata?.numModules || 0,\n    coverImage: c.metadata?.coverImage\n  }\n}));"
+      },
+      "id": "split-courses",
+      "name": "Courses splitten",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1200, 480]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "=https://www.skool.com/_next/data/{{ $json.buildId }}/ki-marketing-club/classroom/{{ $json.courseSlug }}.json?group=ki-marketing-club",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "User-Agent",
+              "value": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/147.0.0.0 Safari/537.36"
+            }
+          ]
+        },
+        "options": {
+          "batching": {
+            "batch": {
+              "batchSize": 3,
+              "batchInterval": 1500
+            }
+          }
+        }
+      },
+      "id": "fetch-course-redirect",
+      "name": "Course Redirect holen",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1360, 480],
+      "notes": "Skool-Quirk: Call ohne md liefert __N_REDIRECT mit Ziel-URL inkl. md-Parameter.",
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "4iWrjh7Q6fuWlUeb",
+          "name": "Skool Session Cookie"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Extrahiert md aus __N_REDIRECT und bereitet nächsten Fetch vor.\n// Input: Response vom Redirect-Fetch. Wir müssen courseSlug/buildId aus dem vorherigen Split-Node holen.\n\nconst items = $input.all();\nconst coursesFromSplit = $('Courses splitten').all();\nconst out = [];\n\nfor (let i = 0; i < items.length; i++) {\n  const resp = items[i].json;\n  const ctx = coursesFromSplit[i]?.json || {};\n  const redirect = resp.pageProps?.__N_REDIRECT || '';\n  const mdMatch = redirect.match(/md=([a-f0-9]+)/);\n  \n  if (!mdMatch) {\n    // Course hat keinen Redirect → wahrscheinlich keine Module. Skip.\n    continue;\n  }\n  \n  out.push({\n    json: {\n      ...ctx,\n      md: mdMatch[1]\n    }\n  });\n}\n\nreturn out;"
+      },
+      "id": "extract-md",
+      "name": "Md-Parameter extrahieren",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1520, 480]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "=https://www.skool.com/_next/data/{{ $json.buildId }}/ki-marketing-club/classroom/{{ $json.courseSlug }}.json?group=ki-marketing-club&md={{ $json.md }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "User-Agent",
+              "value": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/147.0.0.0 Safari/537.36"
+            }
+          ]
+        },
+        "options": {
+          "batching": {
+            "batch": {
+              "batchSize": 3,
+              "batchInterval": 1500
+            }
+          }
+        }
+      },
+      "id": "fetch-course-tree",
+      "name": "Course-Baum laden",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1680, 480],
+      "notes": "Mit md-Parameter → liefert course.children mit allen Modulen/Sets.",
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "4iWrjh7Q6fuWlUeb",
+          "name": "Skool Session Cookie"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Aggregiert alle Course-Bäume zu flachen Arrays von Lessons/Chapters.\n// Struktur (verifiziert):\n//   pageProps.course.course = { ...course-metadaten }\n//   pageProps.course.children = [{ course: {...unit}, children?: [...] }]\n//   unit.unitType = 'module' (Lesson) | 'set' (Kapitel mit Sub-Modulen)\n\nconst items = $input.all();\nconst lessons = [];\nconst chapters = [];\nconst failed = [];\n\nfunction walk(children, courseSlug, courseId, chapterId, sortBase) {\n  children.forEach((wrapper, idx) => {\n    const u = wrapper.course || {};\n    const meta = u.metadata || {};\n    const sortOrder = sortBase * 100 + idx;\n    \n    if (u.unitType === 'set') {\n      chapters.push({\n        skool_chapter_id: u.id,\n        skool_course_slug: courseSlug,\n        title: meta.title || '',\n        description: meta.desc || '',\n        sort_order: sortOrder\n      });\n      walk(wrapper.children || [], courseSlug, courseId, u.id, idx + 1);\n    } else {\n      // module = Lesson\n      let resources = [];\n      try {\n        const rawResources = meta.resources;\n        if (typeof rawResources === 'string' && rawResources.length > 2) {\n          resources = JSON.parse(rawResources);\n        } else if (Array.isArray(rawResources)) {\n          resources = rawResources;\n        }\n      } catch(e) {}\n      \n      lessons.push({\n        skool_lesson_id: u.id,\n        skool_course_slug: courseSlug,\n        skool_course_id: courseId,\n        skool_chapter_id: chapterId || null,\n        title: meta.title || '',\n        description: meta.desc || '',\n        sort_order: sortOrder,\n        resources: resources,\n        skool_url: `https://www.skool.com/ki-marketing-club/classroom/${courseSlug}?md=${u.id}`\n      });\n    }\n  });\n}\n\nfor (const item of items) {\n  const data = item.json;\n  const courseWrapper = data.pageProps?.course;\n  if (!courseWrapper || !courseWrapper.course) {\n    failed.push({ title: 'unknown', reason: 'Keine course-Daten im Response' });\n    continue;\n  }\n  const course = courseWrapper.course;\n  walk(courseWrapper.children || [], course.name, course.id, null, 0);\n}\n\nreturn [{ json: { lessons, chapters, failed, lessonCount: lessons.length, chapterCount: chapters.length } }];"
+      },
+      "id": "aggregate-lessons",
+      "name": "Lessons aggregieren",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1680, 480],
+      "notes": "TODO: Course-Detail-Response noch einmal recon-en — Feldnamen für Lessons/Module bestätigen."
+    },
+    {
+      "parameters": {
+        "operation": "getAll",
+        "tableId": "module_videos",
+        "returnAll": true,
+        "filterType": "string",
+        "filterString": "skool_lesson_id=not.is.null"
+      },
+      "id": "fetch-existing-lessons",
+      "name": "Existierende Lessons (DB)",
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [1680, 680],
+      "executeOnce": true,
+      "credentials": {
+        "supabaseApi": {
+          "name": "Supabase herrtechGPT"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "getAll",
+        "tableId": "module_chapters",
+        "returnAll": true,
+        "filterType": "string",
+        "filterString": "skool_chapter_id=not.is.null"
+      },
+      "id": "fetch-existing-chapters",
+      "name": "Existierende Chapters (DB)",
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [1920, 680],
+      "executeOnce": true,
+      "credentials": {
+        "supabaseApi": {
+          "name": "Supabase herrtechGPT"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "getAll",
+        "tableId": "course_modules",
+        "returnAll": true,
+        "filterType": "string",
+        "filterString": "skool_course_slug=not.is.null"
+      },
+      "id": "fetch-module-mapping",
+      "name": "Module-Mapping laden",
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [2160, 680],
+      "executeOnce": true,
+      "credentials": {
+        "supabaseApi": {
+          "name": "Supabase herrtechGPT"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Diff: Skool vs. Supabase + Module-ID-Resolution\nconst skool = $('Lessons aggregieren').first().json;\nconst existingLessons = $('Existierende Lessons (DB)').all().map(i => i.json);\nconst existingChapters = $('Existierende Chapters (DB)').all().map(i => i.json);\nconst moduleMapping = $('Module-Mapping laden').all().map(i => i.json);\n\nconst existingLessonsMap = new Map(existingLessons.map(l => [l.skool_lesson_id, l]));\nconst existingChaptersMap = new Map(existingChapters.map(c => [c.skool_chapter_id, c]));\n// Skool-Course-Slug → course_modules.id (UUID)\nconst moduleIdBySkoolSlug = new Map(moduleMapping.map(m => [m.skool_course_slug, m.id]));\n// Skool-Chapter-ID → module_chapters.id (UUID), für chapter_id FK bei Lessons\nconst chapterIdBySkoolId = new Map(existingChapters.map(c => [c.skool_chapter_id, c.id]));\n\nconst report = {\n  newChapters: [],\n  newLessons: [],\n  changedLessons: [],\n  unchangedCount: 0,\n  failed: skool.failed || []\n};\n\n// Chapters: neue ermitteln + module_id resolven\nfor (const ch of skool.chapters || []) {\n  const moduleId = moduleIdBySkoolSlug.get(ch.skool_course_slug);\n  if (!moduleId) {\n    report.failed.push({ title: ch.title, reason: `Kein Mapping für Skool-Course '${ch.skool_course_slug}'` });\n    continue;\n  }\n  if (!existingChaptersMap.has(ch.skool_chapter_id)) {\n    report.newChapters.push({ ...ch, module_id: moduleId });\n  }\n}\n\n// Lessons: neue ermitteln + module_id + chapter_id resolven\nfor (const l of skool.lessons || []) {\n  const moduleId = moduleIdBySkoolSlug.get(l.skool_course_slug);\n  if (!moduleId) {\n    report.failed.push({ title: l.title, reason: `Kein Mapping für Skool-Course '${l.skool_course_slug}'`, skool_url: l.skool_url });\n    continue;\n  }\n  const chapterId = l.skool_chapter_id ? chapterIdBySkoolId.get(l.skool_chapter_id) : null;\n  const enriched = { ...l, module_id: moduleId, chapter_id: chapterId || null };\n  \n  const existing = existingLessonsMap.get(l.skool_lesson_id);\n  if (!existing) {\n    report.newLessons.push(enriched);\n  } else if (existing.title !== l.title || existing.wistia_hashed_id === 'MISSING___' || !existing.skool_video_id && !existing.wistia_hashed_id) {\n    // Re-fetch wenn: Title geändert ODER noch kein Wistia (Backfill skool_video_id)\n    report.changedLessons.push({ ...enriched, _existing_id: existing.id });\n  } else {\n    report.unchangedCount++;\n  }\n}\n\nreturn [{ json: report }];"
+      },
+      "id": "diff",
+      "name": "Diff Skool ↔ DB",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1920, 680]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Fan-out: Neue Lessons als Drafts anlegen\nconst report = $input.first().json;\nreturn (report.newLessons || []).map(l => ({ json: l }));"
+      },
+      "id": "split-new-lessons",
+      "name": "Neue Lessons splitten",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [2400, 500]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "=https://www.skool.com/_next/data/{{ $('BuildId extrahieren').first().json.buildId }}/ki-marketing-club/classroom/{{ $json.skool_course_slug }}.json?group=ki-marketing-club&md={{ $json.skool_lesson_id }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "User-Agent",
+              "value": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/147.0.0.0 Safari/537.36"
+            }
+          ]
+        },
+        "options": {
+          "batching": {
+            "batch": {
+              "batchSize": 3,
+              "batchInterval": 1500
+            }
+          }
+        }
+      },
+      "id": "fetch-lesson-detail",
+      "name": "Lesson-Details laden",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [2640, 500],
+      "notes": "Pro neuer Lektion: Skool-Detail mit md-Parameter. Liefert desc, videoLink, resources.",
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "4iWrjh7Q6fuWlUeb",
+          "name": "Skool Session Cookie"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Pro Item: Extrahiert aus Skool-Detail die echten Felder und konvertiert desc (PM-JSON v2) zu Markdown.\n\nfunction pmToMarkdown(doc) {\n  if (!doc) return '';\n  \n  function walkMarks(text, marks) {\n    if (!marks?.length) return text;\n    let out = text;\n    for (const m of marks) {\n      if (m.type === 'bold') out = `**${out}**`;\n      else if (m.type === 'italic') out = `*${out}*`;\n      else if (m.type === 'code') out = `\\`${out}\\``;\n      else if (m.type === 'strike') out = `~~${out}~~`;\n      else if (m.type === 'link') out = `[${out}](${m.attrs?.href || ''})`;\n    }\n    return out;\n  }\n  \n  function walkNode(n, depth = 0) {\n    if (!n) return '';\n    const t = n.type;\n    const content = (n.content || []).map(c => walkNode(c, depth)).join('');\n    \n    switch (t) {\n      case 'text':\n        return walkMarks(n.text || '', n.marks);\n      case 'paragraph':\n        return content + '\\n\\n';\n      case 'heading': {\n        const lvl = Math.min(Math.max(n.attrs?.level || 1, 1), 6);\n        return '#'.repeat(lvl) + ' ' + content + '\\n\\n';\n      }\n      case 'bulletList':\n        return (n.content || []).map(li => walkNode(li, depth + 1)).join('') + '\\n';\n      case 'orderedList':\n        return (n.content || []).map((li, i) => walkNode(li, depth + 1).replace(/^- /, `${(n.attrs?.start || 1) + i}. `)).join('') + '\\n';\n      case 'listItem':\n        return '- ' + (n.content || []).map(c => walkNode(c, depth + 1)).join('').trim() + '\\n';\n      case 'blockquote':\n        return '> ' + content.trim().replace(/\\n/g, '\\n> ') + '\\n\\n';\n      case 'codeBlock': {\n        const lang = n.attrs?.language || '';\n        return '```' + lang + '\\n' + content + '\\n```\\n\\n';\n      }\n      case 'horizontalRule':\n        return '\\n---\\n\\n';\n      case 'hardBreak':\n        return '  \\n';\n      case 'image': {\n        const src = n.attrs?.src || '';\n        const alt = n.attrs?.alt || '';\n        return `![${alt}](${src})\\n\\n`;\n      }\n      default:\n        return content;\n    }\n  }\n  \n  const arr = Array.isArray(doc) ? doc : [doc];\n  return arr.map(n => walkNode(n)).join('').trim();\n}\n\nfunction parseSkoolDesc(raw) {\n  if (!raw) return '';\n  // Format: \"[v2]<JSON>\" or just plain text\n  if (typeof raw !== 'string') return '';\n  const m = raw.match(/^\\[v2\\](.*)$/s);\n  if (!m) return raw;  // Plain text fallback\n  try {\n    const parsed = JSON.parse(m[1]);\n    return pmToMarkdown(parsed);\n  } catch (e) {\n    return raw;\n  }\n}\n\nfunction extractWistiaId(url) {\n  if (!url) return null;\n  const m = url.match(/wistia\\.(?:com|net)\\/(?:medias|embed\\/iframe|embed\\/channel\\/[^/]+\\/iframe)\\/([a-z0-9]{10})/i);\n  return m ? m[1] : null;\n}\n\n// Find the selected module in the returned tree\nfunction findModule(items, targetId) {\n  for (const it of items || []) {\n    const c = it.course || {};\n    if (c.id === targetId) return c;\n    const sub = findModule(it.children, targetId);\n    if (sub) return sub;\n  }\n  return null;\n}\n\nconst items = $input.all();\nconst split = $('Neue Lessons splitten').all();\nconst out = [];\n\nfor (let i = 0; i < items.length; i++) {\n  const resp = items[i].json;\n  const ctx = split[i]?.json || {};\n  const pp = resp.pageProps || {};\n  const selected = pp.selectedModule;\n  const mod = findModule(pp.course?.children || [], selected);\n  \n  if (!mod) {\n    // Fallback: leeres Detail\n    out.push({ json: { ...ctx, wistia_hashed_id: 'MISSING___', description_md: '', duration_seconds: null, resources: [] } });\n    continue;\n  }\n  \n  const meta = mod.metadata || {};\n  const wistiaId = extractWistiaId(meta.videoLink) || 'MISSING___';\n  let descMd = parseSkoolDesc(meta.desc);\n  const durationMs = meta.videoLenMs || 0;\n  const durationSec = durationMs ? Math.round(durationMs / 1000) : null;\n  \n  // Skool-natives Video (nicht Wistia) — prepend Hinweis in Description\n  if (!wistiaId || wistiaId === 'MISSING___') {\n    if (meta.videoId) {\n      const note = `> 📹 **Skool-natives Video vorhanden** — muss manuell zu Wistia hochgeladen werden\\n> Skool Video-ID: \\`${meta.videoId}\\`\\n> [🔗 In Skool ansehen](${ctx.skool_url})\\n\\n---\\n\\n`;\n      descMd = note + descMd;\n    }\n  }\n  \n  // Resources: Skool liefert {title, file_id, file_name, file_content_type}.\n  // Direct-Download nicht möglich (signed CDN) — wir zeigen auf Skool-Lektion.\n  let resources = [];\n  try {\n    const raw = meta.resources;\n    const arr = typeof raw === 'string' ? JSON.parse(raw) : (Array.isArray(raw) ? raw : []);\n    resources = arr.map((r, idx) => ({\n      title: r.title || r.file_name || `Resource ${idx+1}`,\n      url: ctx.skool_url,  // Point to Skool lesson for download\n      resource_type: (r.file_content_type || '').includes('pdf') ? 'pdf' : 'link',\n      sort_order: idx + 1,\n      skool_resource_id: r.file_id || null\n    }));\n  } catch(e) {}\n  \n  out.push({\n    json: {\n      ...ctx,\n      wistia_hashed_id: wistiaId,\n      description_md: descMd,\n      duration_seconds: durationSec,\n      skool_video_id: meta.videoId || null,\n      resources\n    }\n  });\n}\n\nreturn out;"
+      },
+      "id": "parse-lesson-detail",
+      "name": "Lesson-Detail parsen",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [2880, 500]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Fan-out: Neue Chapters als Drafts anlegen\nconst report = $input.first().json;\nreturn (report.newChapters || []).map(c => ({ json: c }));"
+      },
+      "id": "split-new-chapters",
+      "name": "Neue Chapters splitten",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [2160, 680]
+    },
+    {
+      "parameters": {
+        "operation": "create",
+        "tableId": "module_chapters",
+        "fieldsUi": {
+          "fieldValues": [
+            { "fieldId": "module_id", "fieldValue": "={{ $json.module_id }}" },
+            { "fieldId": "skool_chapter_id", "fieldValue": "={{ $json.skool_chapter_id }}" },
+            { "fieldId": "title", "fieldValue": "={{ $json.title }}" },
+            { "fieldId": "description", "fieldValue": "={{ $json.description }}" },
+            { "fieldId": "sort_order", "fieldValue": "={{ $json.sort_order }}" },
+            { "fieldId": "is_published", "fieldValue": "=true" }
+          ]
+        }
+      },
+      "id": "insert-draft-chapter",
+      "name": "Draft-Chapter anlegen",
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [2400, 680],
+      "credentials": {
+        "supabaseApi": {
+          "name": "Supabase herrtechGPT"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "create",
+        "tableId": "module_videos",
+        "fieldsUi": {
+          "fieldValues": [
+            { "fieldId": "module_id", "fieldValue": "={{ $json.module_id }}" },
+            { "fieldId": "chapter_id", "fieldValue": "={{ $json.chapter_id }}" },
+            { "fieldId": "skool_lesson_id", "fieldValue": "={{ $json.skool_lesson_id }}" },
+            { "fieldId": "skool_chapter_id", "fieldValue": "={{ $json.skool_chapter_id }}" },
+            { "fieldId": "title", "fieldValue": "={{ $json.title }}" },
+            { "fieldId": "description", "fieldValue": "={{ $json.description_md }}" },
+            { "fieldId": "sort_order", "fieldValue": "={{ $json.sort_order }}" },
+            { "fieldId": "duration_seconds", "fieldValue": "={{ $json.duration_seconds }}" },
+            { "fieldId": "is_published", "fieldValue": "=false" },
+            { "fieldId": "wistia_hashed_id", "fieldValue": "={{ $json.wistia_hashed_id }}" },
+            { "fieldId": "skool_video_id", "fieldValue": "={{ $json.skool_video_id }}" }
+          ]
+        }
+      },
+      "id": "insert-draft-lesson",
+      "name": "Draft-Lesson anlegen",
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [3120, 500],
+      "notes": "Jetzt mit echtem Wistia-ID, Markdown-Description und Duration aus Skool-Detail-Endpoint.",
+      "credentials": {
+        "supabaseApi": {
+          "name": "Supabase herrtechGPT"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Fan-out: Für jede neue Lesson → ihre Resources als einzelne Items.\n// Input ist die Supabase-Create-Response (1 Item pro eingefügter Lesson inkl. id).\n// Wir müssen den ursprünglichen Resources-Array über den vorherigen Code-Output verknüpfen.\n\nconst inserted = $input.all();\nconst parsed = $('Lesson-Detail parsen').all();\nconst out = [];\n\nfor (let i = 0; i < inserted.length; i++) {\n  const lessonRow = inserted[i].json;  // Das ist das eben eingefügte module_videos-Zeile mit .id\n  const ctx = parsed[i]?.json;\n  if (!ctx || !ctx.resources?.length) continue;\n  \n  for (const r of ctx.resources) {\n    out.push({\n      json: {\n        video_id: lessonRow.id,\n        title: r.title,\n        url: r.url,\n        resource_type: r.resource_type,\n        sort_order: r.sort_order,\n        skool_resource_id: r.skool_resource_id\n      }\n    });\n  }\n}\n\nreturn out;"
+      },
+      "id": "split-lesson-resources",
+      "name": "Resources splitten",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [3360, 500]
+    },
+    {
+      "parameters": {
+        "operation": "create",
+        "tableId": "module_video_resources",
+        "fieldsUi": {
+          "fieldValues": [
+            { "fieldId": "video_id", "fieldValue": "={{ $json.video_id }}" },
+            { "fieldId": "title", "fieldValue": "={{ $json.title }}" },
+            { "fieldId": "url", "fieldValue": "={{ $json.url }}" },
+            { "fieldId": "resource_type", "fieldValue": "={{ $json.resource_type }}" },
+            { "fieldId": "sort_order", "fieldValue": "={{ $json.sort_order }}" },
+            { "fieldId": "skool_resource_id", "fieldValue": "={{ $json.skool_resource_id }}" }
+          ]
+        }
+      },
+      "id": "insert-resource",
+      "name": "Resource anlegen",
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [3600, 500],
+      "credentials": {
+        "supabaseApi": {
+          "name": "Supabase herrtechGPT"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Fan-out: Geänderte Lessons für Detail-Fetch & Update\nconst report = $input.first().json;\nreturn (report.changedLessons || []).map(l => ({ json: l }));"
+      },
+      "id": "split-changed-lessons",
+      "name": "Geänderte Lessons splitten",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [2400, 900]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "=https://www.skool.com/_next/data/{{ $('BuildId extrahieren').first().json.buildId }}/ki-marketing-club/classroom/{{ $json.skool_course_slug }}.json?group=ki-marketing-club&md={{ $json.skool_lesson_id }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "User-Agent", "value": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/147.0.0.0 Safari/537.36" }
+          ]
+        },
+        "options": {
+          "batching": { "batch": { "batchSize": 3, "batchInterval": 1500 } }
+        }
+      },
+      "id": "fetch-changed-detail",
+      "name": "Changed-Details laden",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [2640, 900],
+      "credentials": {
+        "httpHeaderAuth": { "id": "4iWrjh7Q6fuWlUeb", "name": "Skool Session Cookie" }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Parser für Changed: gleiche Logik wie 'Lesson-Detail parsen', aber Kontext aus 'Geänderte Lessons splitten'\n\nfunction pmToMarkdown(doc) {\n  if (!doc) return '';\n  function walkMarks(text, marks) {\n    if (!marks?.length) return text;\n    let out = text;\n    for (const m of marks) {\n      if (m.type === 'bold') out = `**${out}**`;\n      else if (m.type === 'italic') out = `*${out}*`;\n      else if (m.type === 'code') out = `\\`${out}\\``;\n      else if (m.type === 'strike') out = `~~${out}~~`;\n      else if (m.type === 'link') out = `[${out}](${m.attrs?.href || ''})`;\n    }\n    return out;\n  }\n  function walkNode(n, depth = 0) {\n    if (!n) return '';\n    const t = n.type;\n    const content = (n.content || []).map(c => walkNode(c, depth)).join('');\n    switch (t) {\n      case 'text': return walkMarks(n.text || '', n.marks);\n      case 'paragraph': return content + '\\n\\n';\n      case 'heading': { const lvl = Math.min(Math.max(n.attrs?.level || 1, 1), 6); return '#'.repeat(lvl) + ' ' + content + '\\n\\n'; }\n      case 'bulletList': return (n.content || []).map(li => walkNode(li, depth + 1)).join('') + '\\n';\n      case 'orderedList': return (n.content || []).map((li, i) => walkNode(li, depth + 1).replace(/^- /, `${(n.attrs?.start || 1) + i}. `)).join('') + '\\n';\n      case 'listItem': return '- ' + (n.content || []).map(c => walkNode(c, depth + 1)).join('').trim() + '\\n';\n      case 'blockquote': return '> ' + content.trim().replace(/\\n/g, '\\n> ') + '\\n\\n';\n      case 'codeBlock': { const lang = n.attrs?.language || ''; return '```' + lang + '\\n' + content + '\\n```\\n\\n'; }\n      case 'horizontalRule': return '\\n---\\n\\n';\n      case 'hardBreak': return '  \\n';\n      case 'image': { const src = n.attrs?.src || ''; const alt = n.attrs?.alt || ''; return `![${alt}](${src})\\n\\n`; }\n      default: return content;\n    }\n  }\n  const arr = Array.isArray(doc) ? doc : [doc];\n  return arr.map(n => walkNode(n)).join('').trim();\n}\n\nfunction parseSkoolDesc(raw) {\n  if (!raw || typeof raw !== 'string') return '';\n  const m = raw.match(/^\\[v2\\](.*)$/s);\n  if (!m) return raw;\n  try { return pmToMarkdown(JSON.parse(m[1])); } catch(e) { return raw; }\n}\n\nfunction extractWistiaId(url) {\n  if (!url) return null;\n  const m = url.match(/wistia\\.(?:com|net)\\/(?:medias|embed\\/iframe|embed\\/channel\\/[^/]+\\/iframe)\\/([a-z0-9]{10})/i);\n  return m ? m[1] : null;\n}\n\nfunction findModule(items, targetId) {\n  for (const it of items || []) {\n    const c = it.course || {};\n    if (c.id === targetId) return c;\n    const sub = findModule(it.children, targetId);\n    if (sub) return sub;\n  }\n  return null;\n}\n\nconst items = $input.all();\nconst split = $('Geänderte Lessons splitten').all();\nconst out = [];\n\nfor (let i = 0; i < items.length; i++) {\n  const resp = items[i].json;\n  const ctx = split[i]?.json || {};\n  const pp = resp.pageProps || {};\n  const mod = findModule(pp.course?.children || [], pp.selectedModule);\n  if (!mod) continue;\n  \n  const meta = mod.metadata || {};\n  const wistiaId = extractWistiaId(meta.videoLink);\n  let descMd = parseSkoolDesc(meta.desc);\n  const durationMs = meta.videoLenMs || 0;\n  const durationSec = durationMs ? Math.round(durationMs / 1000) : null;\n  \n  // Skool-natives Video hinweis in Desc\n  if (!wistiaId && meta.videoId) {\n    const note = `> 📹 **Skool-natives Video vorhanden** — muss manuell zu Wistia hochgeladen werden\\n> Skool Video-ID: \\`${meta.videoId}\\`\\n> [🔗 In Skool ansehen](${ctx.skool_url})\\n\\n---\\n\\n`;\n    descMd = note + descMd;\n  }\n  \n  out.push({\n    json: {\n      _existing_id: ctx._existing_id,\n      title: ctx.title,\n      description_md: descMd,\n      duration_seconds: durationSec,\n      sort_order: ctx.sort_order,\n      skool_video_id: meta.videoId || null,\n      wistia_hashed_id: wistiaId || 'MISSING___'\n    }\n  });\n}\n\nreturn out;"
+      },
+      "id": "parse-changed-detail",
+      "name": "Changed parsen",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [2880, 900]
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "tableId": "module_videos",
+        "filterType": "string",
+        "filterString": "=id=eq.{{ $json._existing_id }}",
+        "fieldsUi": {
+          "fieldValues": [
+            { "fieldId": "title", "fieldValue": "={{ $json.title }}" },
+            { "fieldId": "description", "fieldValue": "={{ $json.description_md }}" },
+            { "fieldId": "duration_seconds", "fieldValue": "={{ $json.duration_seconds }}" },
+            { "fieldId": "sort_order", "fieldValue": "={{ $json.sort_order }}" },
+            { "fieldId": "skool_video_id", "fieldValue": "={{ $json.skool_video_id }}" },
+            { "fieldId": "wistia_hashed_id", "fieldValue": "={{ $json.wistia_hashed_id }}" }
+          ]
+        }
+      },
+      "id": "update-lesson",
+      "name": "Lesson updaten",
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [3120, 900],
+      "notes": "Updates title/description/duration/sort_order + skool_video_id + wistia_hashed_id (Backfill für MISSING___ Altfälle). is_published bleibt unberührt (Admin-Control). Re-fetch passiert nur wenn title geändert oder wistia noch MISSING___.",
+      "credentials": {
+        "supabaseApi": { "name": "Supabase herrtechGPT" }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const report = $('Diff Skool ↔ DB').first().json;\n\nconst lines = [];\nlines.push(`📚 *Skool-Sync Bericht — ${new Date().toLocaleDateString('de-DE')}*`);\nlines.push('');\n\nif (report.newLessons?.length) {\n  lines.push(`✅ *Neu in Skool (${report.newLessons.length}):*`);\n  report.newLessons.slice(0, 20).forEach(l => {\n    lines.push(`  • ${l.title}`);\n    lines.push(`    <${l.skool_url}|In Skool öffnen>`);\n  });\n  if (report.newLessons.length > 20) lines.push(`  … und ${report.newLessons.length - 20} weitere`);\n  lines.push('');\n}\n\nif (report.newChapters?.length) {\n  lines.push(`📂 *Neue Kapitel (${report.newChapters.length}):*`);\n  report.newChapters.forEach(c => lines.push(`  • ${c.title}`));\n  lines.push('');\n}\n\nif (report.changedLessons?.length) {\n  lines.push(`🔄 *Geändert (${report.changedLessons.length}):*`);\n  report.changedLessons.slice(0, 20).forEach(l => lines.push(`  • ${l.title}`));\n  lines.push('');\n}\n\nif (report.failed?.length) {\n  lines.push(`⚠️ *Konnte nicht übertragen werden (${report.failed.length}):*`);\n  report.failed.forEach(f => lines.push(`  • ${f.title || f.reason}`));\n  lines.push('');\n}\n\nlines.push(`🆗 Unverändert: ${report.unchangedCount || 0} Lektionen.`);\nlines.push('');\nlines.push(`👉 Drafts prüfen: https://herrtechgpt.de/admin/content/videos`);\n\nreturn [{ json: { text: lines.join('\\n') } }];"
+      },
+      "id": "format-report",
+      "name": "Slack-Report formatieren",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [2160, 860]
+    },
+    {
+      "parameters": {
+        "select": "channel",
+        "channelId": {
+          "__rl": true,
+          "value": "n8n-ki-support",
+          "mode": "name"
+        },
+        "text": "={{ $json.text }}",
+        "otherOptions": {}
+      },
+      "id": "slack-post",
+      "name": "Slack: n8n-ki-support",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 2.3,
+      "position": [2400, 860],
+      "credentials": {
+        "slackOAuth2Api": {
+          "name": "Slack KI Support – SC – GER/IND"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Sonntag 23:00": {
+      "main": [[{ "node": "Skool HTML laden (für buildId)", "type": "main", "index": 0 }]]
+    },
+    "Manuell testen": {
+      "main": [[{ "node": "Skool HTML laden (für buildId)", "type": "main", "index": 0 }]]
+    },
+    "Skool HTML laden (für buildId)": {
+      "main": [[{ "node": "BuildId extrahieren", "type": "main", "index": 0 }]]
+    },
+    "BuildId extrahieren": {
+      "main": [[{ "node": "Classroom-Liste laden", "type": "main", "index": 0 }]]
+    },
+    "Classroom-Liste laden": {
+      "main": [[{ "node": "Courses splitten", "type": "main", "index": 0 }]]
+    },
+    "Courses splitten": {
+      "main": [[{ "node": "Course Redirect holen", "type": "main", "index": 0 }]]
+    },
+    "Course Redirect holen": {
+      "main": [[{ "node": "Md-Parameter extrahieren", "type": "main", "index": 0 }]]
+    },
+    "Md-Parameter extrahieren": {
+      "main": [[{ "node": "Course-Baum laden", "type": "main", "index": 0 }]]
+    },
+    "Course-Baum laden": {
+      "main": [[{ "node": "Lessons aggregieren", "type": "main", "index": 0 }]]
+    },
+    "Lessons aggregieren": {
+      "main": [[{ "node": "Existierende Lessons (DB)", "type": "main", "index": 0 }]]
+    },
+    "Existierende Lessons (DB)": {
+      "main": [[{ "node": "Existierende Chapters (DB)", "type": "main", "index": 0 }]]
+    },
+    "Existierende Chapters (DB)": {
+      "main": [[{ "node": "Module-Mapping laden", "type": "main", "index": 0 }]]
+    },
+    "Module-Mapping laden": {
+      "main": [[{ "node": "Diff Skool ↔ DB", "type": "main", "index": 0 }]]
+    },
+    "Diff Skool ↔ DB": {
+      "main": [[
+        { "node": "Neue Chapters splitten", "type": "main", "index": 0 },
+        { "node": "Neue Lessons splitten", "type": "main", "index": 0 },
+        { "node": "Geänderte Lessons splitten", "type": "main", "index": 0 },
+        { "node": "Slack-Report formatieren", "type": "main", "index": 0 }
+      ]]
+    },
+    "Geänderte Lessons splitten": {
+      "main": [[{ "node": "Changed-Details laden", "type": "main", "index": 0 }]]
+    },
+    "Changed-Details laden": {
+      "main": [[{ "node": "Changed parsen", "type": "main", "index": 0 }]]
+    },
+    "Changed parsen": {
+      "main": [[{ "node": "Lesson updaten", "type": "main", "index": 0 }]]
+    },
+    "Neue Chapters splitten": {
+      "main": [[{ "node": "Draft-Chapter anlegen", "type": "main", "index": 0 }]]
+    },
+    "Neue Lessons splitten": {
+      "main": [[{ "node": "Lesson-Details laden", "type": "main", "index": 0 }]]
+    },
+    "Lesson-Details laden": {
+      "main": [[{ "node": "Lesson-Detail parsen", "type": "main", "index": 0 }]]
+    },
+    "Lesson-Detail parsen": {
+      "main": [[{ "node": "Draft-Lesson anlegen", "type": "main", "index": 0 }]]
+    },
+    "Draft-Lesson anlegen": {
+      "main": [[{ "node": "Resources splitten", "type": "main", "index": 0 }]]
+    },
+    "Resources splitten": {
+      "main": [[{ "node": "Resource anlegen", "type": "main", "index": 0 }]]
+    },
+    "Slack-Report formatieren": {
+      "main": [[{ "node": "Slack: n8n-ki-support", "type": "main", "index": 0 }]]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  }
+}
