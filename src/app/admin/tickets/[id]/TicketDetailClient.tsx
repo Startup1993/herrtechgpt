@@ -3,6 +3,9 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
+import ReactMarkdown from 'react-markdown'
+import remarkBreaks from 'remark-breaks'
+import remarkGfm from 'remark-gfm'
 import { Send, Loader2, Bot, Shield, Info, User, CheckCircle2, ArrowRightLeft, Mail } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
 
@@ -266,6 +269,36 @@ function ModeBadge({ mode }: { mode: Mode }) {
   )
 }
 
+function MarkdownContent({ content }: { content: string }) {
+  return (
+    <div className="text-sm leading-relaxed text-foreground">
+      <ReactMarkdown
+        remarkPlugins={[remarkBreaks, remarkGfm]}
+        components={{
+          p: ({ children }) => <p className="mb-3 last:mb-0">{children}</p>,
+          strong: ({ children }) => <strong className="font-semibold">{children}</strong>,
+          em: ({ children }) => <em className="italic">{children}</em>,
+          ul: ({ children }) => <ul className="list-disc pl-5 mb-3 space-y-1">{children}</ul>,
+          ol: ({ children }) => <ol className="list-decimal pl-5 mb-3 space-y-1">{children}</ol>,
+          li: ({ children }) => <li className="leading-relaxed">{children}</li>,
+          h1: ({ children }) => <h1 className="font-bold text-base mb-2 mt-4 first:mt-0">{children}</h1>,
+          h2: ({ children }) => <h2 className="font-semibold mb-2 mt-3 first:mt-0">{children}</h2>,
+          h3: ({ children }) => <h3 className="font-semibold mb-1 mt-2 first:mt-0">{children}</h3>,
+          code: ({ children }) => {
+            const isBlock = String(children).includes('\n')
+            return isBlock
+              ? <code className="font-mono text-xs">{children}</code>
+              : <code className="bg-surface-secondary rounded px-1.5 py-0.5 font-mono text-xs">{children}</code>
+          },
+          hr: () => <hr className="border-border my-4" />,
+        }}
+      >
+        {content}
+      </ReactMarkdown>
+    </div>
+  )
+}
+
 function Bubble({ msg, userEmail }: { msg: Message; userEmail: string }) {
   if (msg.role === 'system') {
     return (
@@ -284,7 +317,7 @@ function Bubble({ msg, userEmail }: { msg: Message; userEmail: string }) {
         <div className="w-8 h-8 rounded-full bg-surface-secondary text-muted flex items-center justify-center shrink-0 text-[11px] font-semibold">
           {userEmail.slice(0, 2).toUpperCase()}
         </div>
-        <div className="max-w-[75%]">
+        <div className="max-w-[80%] flex-1 min-w-0">
           <div className="text-[11px] font-semibold text-muted mb-1">Nutzer</div>
           <div className="bg-surface border border-border text-foreground px-4 py-2.5 rounded-2xl rounded-tl-sm">
             <p className="text-sm whitespace-pre-wrap break-words">{msg.content}</p>
@@ -297,10 +330,10 @@ function Bubble({ msg, userEmail }: { msg: Message; userEmail: string }) {
   if (msg.role === 'admin') {
     return (
       <div className="flex justify-end gap-2">
-        <div className="max-w-[75%]">
+        <div className="max-w-[80%]">
           <div className="text-[11px] font-semibold text-amber-700 dark:text-amber-400 mb-1 text-right">Du (Support-Team)</div>
           <div className="bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-900 text-foreground px-4 py-2.5 rounded-2xl rounded-tr-sm">
-            <p className="text-sm whitespace-pre-wrap break-words">{msg.content}</p>
+            <MarkdownContent content={msg.content} />
           </div>
         </div>
         <div className="w-8 h-8 rounded-full bg-amber-100 dark:bg-amber-950/40 text-amber-700 dark:text-amber-400 flex items-center justify-center shrink-0">
@@ -310,16 +343,15 @@ function Bubble({ msg, userEmail }: { msg: Message; userEmail: string }) {
     )
   }
 
+  // assistant (KI) — fliessender Text wie im Chat-Interface
   return (
     <div className="flex gap-2">
       <div className="w-8 h-8 rounded-full bg-surface-secondary text-muted flex items-center justify-center shrink-0">
         <Bot size={14} />
       </div>
-      <div className="max-w-[75%]">
+      <div className="flex-1 min-w-0">
         <div className="text-[11px] font-semibold text-muted mb-1">Herr Tech KI</div>
-        <div className="bg-surface border border-border text-foreground px-4 py-2.5 rounded-2xl rounded-tl-sm">
-          <p className="text-sm whitespace-pre-wrap break-words">{msg.content}</p>
-        </div>
+        <MarkdownContent content={msg.content} />
       </div>
     </div>
   )
