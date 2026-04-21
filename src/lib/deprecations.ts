@@ -31,20 +31,20 @@ export interface Deprecation {
 
 export const deprecations: Deprecation[] = [
   {
-    deprecated: 'Sora',
-    current: 'Seedance',
+    deprecated: 'Sora / Sora 2',
+    current: 'Veo 3 / Seedance 2.0 / Kling AI / Higgsfield',
     category: 'video-generation',
-    reason: 'Seedance liefert aktuell bessere Kohärenz bei Bewegung und kostet weniger pro Sekunde Output.',
-    since: '2026-01',
-    agents: ['herr-tech', 'ai-prompt', 'content-hook'],
+    reason: 'OpenAI schaltet Sora im April 2026 ab. Wir empfehlen Veo 3 für Audio-Szenen, Seedance für Motion-Konsistenz, Kling für lange Clips und Higgsfield für Camera-Moves.',
+    since: '2026-04',
+    agents: ['herr-tech', 'ai-prompt', 'content-hook', 'ai-video-studio'],
   },
   {
-    deprecated: 'Midjourney v5',
-    current: 'Midjourney v7 / Nano Banana',
+    deprecated: 'Midjourney',
+    current: 'Nano Banana 2',
     category: 'image-generation',
-    reason: 'V5 ist deutlich schlechter bei Prompt-Adherence. Für schnelle Social-Posts ist Nano Banana oft besser.',
-    since: '2025-10',
-    agents: ['ai-prompt', 'content-hook', 'herr-tech'],
+    reason: 'Nano Banana 2 (Google) liefert aktuell bessere Prompt-Adherence und kann Bilder zusätzlich editieren — Midjourney ist nicht mehr Teil unseres Stacks.',
+    since: '2026-04',
+    agents: ['ai-prompt', 'content-hook', 'herr-tech', 'ai-video-studio'],
   },
   {
     deprecated: 'n8n für Solo-Setups',

@@ -16,6 +16,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
       <div className="border-b border-border bg-surface px-8 flex items-center gap-1 shrink-0">
         <AdminTab href="/assistants/admin/dashboard" label="Dashboard" />
         <AdminTab href="/assistants/admin/agents" label="Assistenten" />
+        <AdminTab href="/assistants/admin/tools" label="Tech-Stack" />
         <AdminTab href="/assistants/admin/users" label="Nutzer" />
         <AdminTab href="/assistants/admin/knowledge" label="Wissensbasis" />
       </div>

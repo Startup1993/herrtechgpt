@@ -1,4 +1,4 @@
-import { agents } from '@/lib/agents'
+import { listedAgents as agents } from '@/lib/agents'
 import { createClient } from '@/lib/supabase/server'
 import Link from 'next/link'
 
