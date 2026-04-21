@@ -194,13 +194,39 @@ export function HelpChat({ userId, userInitials }: Props) {
         setMessages((m) => [...m, { id: aiId, role: 'assistant', content: '', created_at: new Date().toISOString() }])
         const reader = res.body.getReader()
         const decoder = new TextDecoder()
-        let aiText = ''
-        while (true) {
-          const { done, value } = await reader.read()
-          if (done) break
-          aiText += decoder.decode(value, { stream: true })
-          setMessages((m) => m.map((msg) => msg.id === aiId ? { ...msg, content: aiText } : msg))
+
+        // Typewriter-Effekt: Stream f\u00fcllt Buffer in voller Geschwindigkeit,
+        // Reveal-Loop zeigt Zeichen sanft mit ~120 chars/sec an (holt auf bei gro\u00dfen Chunks).
+        let targetText = ''
+        let displayedText = ''
+        let streamDone = false
+
+        const revealInterval = setInterval(() => {
+          const ahead = targetText.length - displayedText.length
+          if (ahead > 0) {
+            // Adaptive Schrittweite: mehr ahead = schneller catchup
+            const step = Math.min(Math.max(2, Math.floor(ahead / 25)), 10)
+            displayedText = targetText.slice(0, displayedText.length + step)
+            setMessages((m) => m.map((msg) => msg.id === aiId ? { ...msg, content: displayedText } : msg))
+          }
+        }, 16)
+
+        ;(async () => {
+          while (true) {
+            const { done, value } = await reader.read()
+            if (done) break
+            targetText += decoder.decode(value, { stream: true })
+          }
+          streamDone = true
+        })().catch(() => { streamDone = true })
+
+        // Warten bis Stream durch UND reveal aufgeholt hat
+        while (!streamDone || displayedText.length < targetText.length) {
+          await new Promise((r) => setTimeout(r, 32))
         }
+        clearInterval(revealInterval)
+        // Final sync
+        setMessages((m) => m.map((msg) => msg.id === aiId ? { ...msg, content: targetText } : msg))
       }
       // Delay polling to give onFinish time to save message + generate title
       setTimeout(() => pollMessages(), 500)
@@ -355,13 +381,14 @@ export function HelpChat({ userId, userInitials }: Props) {
 function MarkdownContent({ content }: { content: string }) {
   return (
     <div className="prose prose-sm dark:prose-invert max-w-none
-      prose-p:my-1.5 prose-p:leading-relaxed
-      prose-headings:font-semibold prose-headings:my-2
-      prose-h1:text-base prose-h2:text-sm prose-h3:text-sm
+      prose-p:my-3 prose-p:leading-relaxed
+      prose-headings:font-semibold prose-headings:mt-5 prose-headings:mb-2 first:prose-headings:mt-0
+      prose-h1:text-base prose-h2:text-[15px] prose-h3:text-sm
       prose-strong:font-semibold prose-strong:text-foreground
-      prose-ul:my-1.5 prose-ol:my-1.5 prose-li:my-0.5
+      prose-ul:my-3 prose-ol:my-3 prose-li:my-1 prose-li:leading-relaxed
       prose-code:text-xs prose-code:bg-surface-secondary prose-code:px-1 prose-code:py-0.5 prose-code:rounded prose-code:before:content-none prose-code:after:content-none
       prose-a:text-primary prose-a:no-underline hover:prose-a:underline
+      [&>*:first-child]:mt-0 [&>*:last-child]:mb-0
     ">
       <ReactMarkdown>{content}</ReactMarkdown>
     </div>
