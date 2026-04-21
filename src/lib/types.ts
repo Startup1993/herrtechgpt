@@ -39,3 +39,34 @@ export interface Message {
   content: string
   created_at: string
 }
+
+export type CoreToolTier = 'primary' | 'secondary' | 'fallback'
+
+export type CoreToolCategory =
+  | 'ki-chat'
+  | 'automation'
+  | 'video'
+  | 'video-edit'
+  | 'video-avatar'
+  | 'image'
+  | 'coding'
+  | 'knowledge'
+  | 'design'
+  | 'other'
+
+export interface CoreTool {
+  id: string
+  name: string
+  category: CoreToolCategory
+  tier: CoreToolTier
+  what_for: string
+  why_we_use_it: string | null
+  alternatives_handled: string[]
+  relevant_agents: string[]
+  url: string | null
+  icon: string | null
+  active: boolean
+  sort_order: number
+  created_at: string
+  updated_at: string
+}
