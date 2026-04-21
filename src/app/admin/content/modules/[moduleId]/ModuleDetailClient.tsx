@@ -928,6 +928,17 @@ function EditVideoModal({
                wistiaId === 'MISSING___' || !wistiaId ? '⚠ Kein Video — Lektion zeigt nur Beschreibung' :
                '⚠ Keine gültige 10-stellige Wistia-ID'}
             </p>
+            {video.skool_video_id && (wistiaId === 'MISSING___' || !/^[a-z0-9]{10}$/i.test(wistiaId)) && (
+              <div className="mt-2 p-2 rounded-[var(--radius-md)] bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-900/40 text-xs">
+                <p className="text-amber-800 dark:text-amber-300 font-medium">📹 Skool-natives Video vorhanden</p>
+                <p className="text-amber-700 dark:text-amber-400 mt-0.5">
+                  Muss manuell zu Wistia hochgeladen und hier oben eingetragen werden.
+                </p>
+                <p className="text-amber-700 dark:text-amber-400/80 mt-1 font-mono text-[11px]">
+                  Skool Video-ID: {video.skool_video_id}
+                </p>
+              </div>
+            )}
           </div>
 
           {/* RESOURCES */}
