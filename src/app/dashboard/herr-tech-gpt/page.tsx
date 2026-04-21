@@ -2,7 +2,7 @@
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { agents } from '@/lib/agents'
+import { listedAgents as agents } from '@/lib/agents'
 import { createClient } from '@/lib/supabase/client'
 import { ArrowRight, Loader2, MessageSquare, Send } from 'lucide-react'
 

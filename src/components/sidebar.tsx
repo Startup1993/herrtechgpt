@@ -3,7 +3,7 @@
 import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
 import { useState, useRef, useEffect, useMemo } from 'react'
-import { agents } from '@/lib/agents'
+import { listedAgents as agents } from '@/lib/agents'
 import { useTheme } from '@/lib/theme-context'
 import { createClient } from '@/lib/supabase/client'
 import type { Conversation } from '@/lib/types'
