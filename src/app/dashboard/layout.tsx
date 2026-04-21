@@ -14,7 +14,7 @@ export default async function DashboardLayout({
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) redirect('/login')
 
-  const [{ data: profile }, { data: conversations }, cookieStore, matrix] = await Promise.all([
+  const [{ data: profile }, { data: conversations }, cookieStore, matrix, { count: helpUnreadCount }] = await Promise.all([
     supabase
       .from('profiles')
       .select('role, access_tier, background, market, target_audience, offer')
@@ -22,12 +22,18 @@ export default async function DashboardLayout({
       .single(),
     supabase
       .from('conversations')
-      .select('id, user_id, agent_id, title, created_at, updated_at')
+      .select('id, user_id, agent_id, title, created_at, updated_at, user_has_unread')
       .eq('user_id', user.id)
       .order('updated_at', { ascending: false })
       .limit(15),
     cookies(),
     getPermissionMatrix(supabase),
+    supabase
+      .from('conversations')
+      .select('*', { count: 'exact', head: true })
+      .eq('user_id', user.id)
+      .eq('agent_id', 'help')
+      .eq('user_has_unread', true),
   ])
 
   const viewAsRaw = cookieStore.get(VIEW_AS_COOKIE)?.value
@@ -63,6 +69,7 @@ export default async function DashboardLayout({
       viewAs={access.viewAs}
       states={states}
       newTicketCount={newTicketCount}
+      helpUnreadCount={helpUnreadCount ?? 0}
     >
       {children}
     </AppShell>

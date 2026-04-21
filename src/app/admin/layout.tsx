@@ -14,7 +14,7 @@ export default async function AdminLayout({
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) redirect('/login')
 
-  const [{ data: profile }, { data: conversations }, cookieStore, matrix, { count: ticketCount }] = await Promise.all([
+  const [{ data: profile }, { data: conversations }, cookieStore, matrix, { count: ticketCount }, { count: helpUnreadCount }] = await Promise.all([
     supabase
       .from('profiles')
       .select('role, access_tier')
@@ -22,7 +22,7 @@ export default async function AdminLayout({
       .single(),
     supabase
       .from('conversations')
-      .select('id, user_id, agent_id, title, created_at, updated_at')
+      .select('id, user_id, agent_id, title, created_at, updated_at, user_has_unread')
       .eq('user_id', user.id)
       .order('updated_at', { ascending: false })
       .limit(15),
@@ -34,6 +34,12 @@ export default async function AdminLayout({
       .eq('agent_id', 'help')
       .eq('status', 'new')
       .eq('mode', 'human'),
+    supabase
+      .from('conversations')
+      .select('*', { count: 'exact', head: true })
+      .eq('user_id', user.id)
+      .eq('agent_id', 'help')
+      .eq('user_has_unread', true),
   ])
 
   if (!profile || profile.role !== 'admin') {
@@ -61,6 +67,7 @@ export default async function AdminLayout({
       viewAs={access.viewAs}
       states={states}
       newTicketCount={ticketCount ?? 0}
+      helpUnreadCount={helpUnreadCount ?? 0}
     >
       {children}
     </AppShell>

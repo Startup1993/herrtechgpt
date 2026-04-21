@@ -93,10 +93,20 @@ export function HelpChat({ userId, userInitials }: Props) {
       setMode((conv?.mode as Mode) ?? 'ai')
       setStatus((conv?.status as Status) ?? 'new')
       setLoading(false)
+
+      // Als gelesen markieren (Unread-Flag in DB abr\u00e4umen + Layout refreshen)
+      void supabase
+        .from('conversations')
+        .update({ user_has_unread: false })
+        .eq('id', activeId)
+        .eq('user_has_unread', true)
+        .then(({ error }) => {
+          if (!error) router.refresh()
+        })
     }
     load()
     return () => { cancelled = true }
-  }, [urlChatId, userId])
+  }, [urlChatId, userId, router])
 
   // ─── Polling f\u00fcr Admin-Antworten (nur wenn Human-Mode / wartend) ──────────
   const pollMessages = useCallback(async () => {
@@ -110,10 +120,19 @@ export function HelpChat({ userId, userInitials }: Props) {
         .order('created_at', { ascending: true }),
       supabase
         .from('conversations')
-        .select('mode, status')
+        .select('mode, status, user_has_unread')
         .eq('id', conversationId)
         .single(),
     ])
+    // Falls w\u00e4hrend offener Ansicht ein neuer Admin-Reply landet
+    // (user_has_unread=true) \u2192 direkt als gelesen markieren
+    if (conv?.user_has_unread) {
+      await supabase
+        .from('conversations')
+        .update({ user_has_unread: false })
+        .eq('id', conversationId)
+      router.refresh()
+    }
     if (msgs) {
       setMessages((prev) => {
         const dbMsgs = msgs as Message[]

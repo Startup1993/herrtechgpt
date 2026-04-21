@@ -57,6 +57,7 @@ interface SidebarProps {
   viewAs?: ViewAsMode
   states?: Record<FeatureKey, FeatureState>
   newTicketCount?: number
+  helpUnreadCount?: number
 }
 
 // ═══════════════════════════════════════════════════════════
@@ -325,6 +326,7 @@ function MainSidebar({
   realIsAdmin,
   states,
   newTicketCount,
+  helpUnreadCount,
   pathname,
   onDrillDown,
 }: {
@@ -332,6 +334,7 @@ function MainSidebar({
   realIsAdmin?: boolean
   states?: Record<FeatureKey, FeatureState>
   newTicketCount?: number
+  helpUnreadCount?: number
   pathname: string
   onDrillDown: (mode: SidebarMode) => void
 }) {
@@ -388,6 +391,7 @@ function MainSidebar({
           label="Hilfe & Kontakt"
           isActive={pathname.startsWith('/dashboard/help')}
           onClick={() => onDrillDown('help')}
+          badge={helpUnreadCount}
         />
       </div>
 
@@ -763,6 +767,8 @@ function HelpConversationItem({
     )
   }
 
+  const hasUnread = !!conv.user_has_unread
+
   return (
     <div className={`group relative flex items-center rounded-[var(--radius-md)] transition-colors ${
       isActive ? 'bg-primary/10' : 'hover:bg-surface-hover'
@@ -770,10 +776,15 @@ function HelpConversationItem({
       <Link
         href={`/dashboard/help?chat=${conv.id}`}
         className={`flex-1 min-w-0 flex items-center gap-3 px-3 py-2 text-sm pr-8 ${
-          isActive ? 'text-foreground font-medium' : 'text-muted group-hover:text-foreground'
+          isActive ? 'text-foreground font-medium' : hasUnread ? 'text-foreground font-medium' : 'text-muted group-hover:text-foreground'
         }`}
       >
-        <span className="text-base shrink-0">💬</span>
+        <span className="text-base shrink-0 relative">
+          💬
+          {hasUnread && (
+            <span className="absolute -top-0.5 -right-0.5 w-2 h-2 rounded-full bg-red-500 ring-2 ring-surface" />
+          )}
+        </span>
         <span className="truncate flex-1 min-w-0">{conv.title ?? 'Anfrage'}</span>
       </Link>
 
@@ -1087,7 +1098,7 @@ function ToolboxSidebar({
 // MAIN SIDEBAR EXPORT
 // ═══════════════════════════════════════════════════════════
 
-export function Sidebar({ conversations, userEmail, userName, isAdmin, realIsAdmin, accessTier, viewAs, states, newTicketCount }: SidebarProps) {
+export function Sidebar({ conversations, userEmail, userName, isAdmin, realIsAdmin, accessTier, viewAs, states, newTicketCount, helpUnreadCount }: SidebarProps) {
   const pathname = usePathname()
   const router = useRouter()
   const { theme, toggleTheme } = useTheme()
@@ -1167,6 +1178,7 @@ export function Sidebar({ conversations, userEmail, userName, isAdmin, realIsAdm
             realIsAdmin={realIsAdmin}
             states={states}
             newTicketCount={newTicketCount}
+            helpUnreadCount={helpUnreadCount}
             pathname={pathname}
             onDrillDown={handleDrillDown}
           />

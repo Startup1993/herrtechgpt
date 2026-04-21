@@ -36,6 +36,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     .update({
       mode: 'human',
       status: 'answered',
+      user_has_unread: true,
       updated_at: new Date().toISOString(),
     })
     .eq('id', id)

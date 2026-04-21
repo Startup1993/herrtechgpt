@@ -19,10 +19,11 @@ interface AppShellProps {
   viewAs?: ViewAsMode
   states?: Record<FeatureKey, FeatureState>
   newTicketCount?: number
+  helpUnreadCount?: number
   children: React.ReactNode
 }
 
-export function AppShell({ conversations, userEmail, userName, isAdmin, realIsAdmin, accessTier, viewAs, states, newTicketCount, children }: AppShellProps) {
+export function AppShell({ conversations, userEmail, userName, isAdmin, realIsAdmin, accessTier, viewAs, states, newTicketCount, helpUnreadCount, children }: AppShellProps) {
   const [sidebarOpen, setSidebarOpen] = useState(false)       // mobile overlay
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false) // desktop collapse
   const pathname = usePathname()
@@ -61,6 +62,7 @@ export function AppShell({ conversations, userEmail, userName, isAdmin, realIsAd
           viewAs={viewAs}
           states={states}
           newTicketCount={newTicketCount}
+          helpUnreadCount={helpUnreadCount}
         />
       </div>
 
