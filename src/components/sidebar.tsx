@@ -604,7 +604,6 @@ function ChatSidebar({
 
 function HelpSidebar({
   helpConversations,
-  pathname,
   onBack,
   onNewChat,
 }: {
@@ -613,11 +612,42 @@ function HelpSidebar({
   onBack: () => void
   onNewChat: () => void
 }) {
-  // Extract active conversation id from ?chat= query param (pathname doesn't carry it,
-  // but useSearchParams isn't ideal for SSR; we just highlight by URL search)
-  const activeId = typeof window !== 'undefined'
-    ? new URLSearchParams(window.location.search).get('chat')
-    : null
+  const router = useRouter()
+  const [activeId, setActiveId] = useState<string | null>(null)
+  const [deleting, setDeleting] = useState<string | null>(null)
+
+  useEffect(() => {
+    const update = () => {
+      setActiveId(new URLSearchParams(window.location.search).get('chat'))
+    }
+    update()
+    window.addEventListener('popstate', update)
+    return () => window.removeEventListener('popstate', update)
+  }, [])
+
+  // Auto-update activeId on navigation (Next.js soft nav)
+  useEffect(() => {
+    const interval = setInterval(() => {
+      const current = new URLSearchParams(window.location.search).get('chat')
+      if (current !== activeId) setActiveId(current)
+    }, 200)
+    return () => clearInterval(interval)
+  }, [activeId])
+
+  const handleDelete = async (convId: string, e: React.MouseEvent) => {
+    e.preventDefault()
+    e.stopPropagation()
+    if (!confirm('Diese Anfrage wirklich löschen?')) return
+    setDeleting(convId)
+    const supabase = createClient()
+    await supabase.from('conversations').delete().eq('id', convId)
+    setDeleting(null)
+    // Wenn gerade aktiv → wegnavigieren
+    if (activeId === convId) {
+      router.push('/dashboard/help')
+    }
+    router.refresh()
+  }
 
   return (
     <div className="flex-1 overflow-y-auto flex flex-col">
@@ -642,25 +672,46 @@ function HelpSidebar({
         </button>
       </div>
 
-      {/* Letzte Anfragen — nur anzeigen wenn welche da */}
+      {/* Letzte Anfragen */}
       {helpConversations.length > 0 && (
         <div className="px-3 py-2 border-t border-border">
           <SectionHeader label="Letzte Anfragen" />
           <div className="space-y-0.5">
-            {helpConversations.map((conv) => (
-              <Link
-                key={conv.id}
-                href={`/dashboard/help?chat=${conv.id}`}
-                className={`flex items-center gap-3 px-3 py-2 rounded-[var(--radius-md)] text-sm transition-colors ${
-                  activeId === conv.id || (!activeId && helpConversations[0]?.id === conv.id)
-                    ? 'bg-primary/10 text-foreground font-medium'
-                    : 'text-muted hover:bg-surface-hover hover:text-foreground'
-                }`}
-              >
-                <span className="text-base shrink-0">💬</span>
-                <span className="truncate flex-1 min-w-0">{conv.title ?? 'Anfrage'}</span>
-              </Link>
-            ))}
+            {helpConversations.map((conv) => {
+              const isActive = activeId === conv.id
+              return (
+                <div
+                  key={conv.id}
+                  className={`group relative flex items-center rounded-[var(--radius-md)] transition-colors ${
+                    isActive
+                      ? 'bg-primary/10'
+                      : 'hover:bg-surface-hover'
+                  }`}
+                >
+                  <Link
+                    href={`/dashboard/help?chat=${conv.id}`}
+                    className={`flex-1 min-w-0 flex items-center gap-3 px-3 py-2 text-sm ${
+                      isActive ? 'text-foreground font-medium' : 'text-muted group-hover:text-foreground'
+                    }`}
+                  >
+                    <span className="text-base shrink-0">💬</span>
+                    <span className="truncate flex-1 min-w-0 pr-8">{conv.title ?? 'Anfrage'}</span>
+                  </Link>
+                  <button
+                    onClick={(e) => handleDelete(conv.id, e)}
+                    disabled={deleting === conv.id}
+                    className="absolute right-1 top-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100 p-1.5 rounded hover:bg-red-50 dark:hover:bg-red-950/30 text-muted hover:text-red-500 transition-all disabled:opacity-50"
+                    title="Anfrage löschen"
+                  >
+                    {deleting === conv.id ? (
+                      <svg className="animate-spin" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="10" strokeDasharray="30 20"/></svg>
+                    ) : (
+                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-2 14a2 2 0 0 1-2 2H9a2 2 0 0 1-2-2L5 6"/></svg>
+                    )}
+                  </button>
+                </div>
+              )
+            })}
           </div>
         </div>
       )}
