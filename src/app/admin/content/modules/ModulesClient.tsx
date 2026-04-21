@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { Plus, Edit, Trash2, Eye, EyeOff, GripVertical, BookOpen, Loader2 } from 'lucide-react'
+import { Plus, Edit, Trash2, Eye, EyeOff, GripVertical, BookOpen, Loader2, AlertTriangle } from 'lucide-react'
 import {
   DndContext, closestCenter, PointerSensor, useSensor, useSensors,
   type DragEndEvent,
@@ -22,6 +22,8 @@ interface Module {
   sort_order: number
   is_published: boolean
   videoCount: number
+  draftCount: number
+  missingWistiaCount: number
 }
 
 export function ModulesClient({ initialModules }: { initialModules: Module[] }) {
@@ -32,8 +34,10 @@ export function ModulesClient({ initialModules }: { initialModules: Module[] }) 
   const [loading, setLoading] = useState<string | null>(null)
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null)
   const [savedFlash, setSavedFlash] = useState(false)
+  const [mounted, setMounted] = useState(false)
 
   useEffect(() => setModules(initialModules), [initialModules])
+  useEffect(() => setMounted(true), [])
 
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 6 } }))
 
@@ -132,25 +136,29 @@ export function ModulesClient({ initialModules }: { initialModules: Module[] }) 
         </div>
       )}
 
-      {/* Module list with Drag and Drop */}
-      <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
-        <SortableContext items={modules.map(m => m.id)} strategy={verticalListSortingStrategy}>
-          <div className="space-y-2">
-            {modules.map((m) => (
-              <SortableModuleRow
-                key={m.id}
-                module={m}
-                onEdit={() => setEditing(m)}
-                onTogglePublish={() => handleTogglePublish(m)}
-                onDelete={() => handleDelete(m.id)}
-                confirmingDelete={confirmDelete === m.id}
-                setConfirmingDelete={(c) => setConfirmDelete(c ? m.id : null)}
-                loading={loading === m.id}
-              />
-            ))}
-          </div>
-        </SortableContext>
-      </DndContext>
+      {/* Module list. DndContext only renders after mount — dnd-kit's random IDs mismatch between SSR and hydration. */}
+      <div suppressHydrationWarning>
+        {mounted && (
+          <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
+            <SortableContext items={modules.map(m => m.id)} strategy={verticalListSortingStrategy}>
+              <div className="space-y-2">
+                {modules.map((m) => (
+                  <SortableModuleRow
+                    key={m.id}
+                    module={m}
+                    onEdit={() => setEditing(m)}
+                    onTogglePublish={() => handleTogglePublish(m)}
+                    onDelete={() => handleDelete(m.id)}
+                    confirmingDelete={confirmDelete === m.id}
+                    setConfirmingDelete={(c) => setConfirmDelete(c ? m.id : null)}
+                    loading={loading === m.id}
+                  />
+                ))}
+              </div>
+            </SortableContext>
+          </DndContext>
+        )}
+      </div>
 
       {/* Edit / Create Modal */}
       {(editing || creating) && (
@@ -213,7 +221,21 @@ function SortableModuleRow({
           )}
         </div>
         <p className="text-xs text-muted truncate">{module.description}</p>
-        <p className="text-xs text-muted mt-0.5">{module.videoCount} Videos · /{module.slug}</p>
+        <p className="text-xs text-muted mt-0.5 inline-flex items-center flex-wrap gap-1.5">
+          <span>{module.videoCount} Videos</span>
+          {module.draftCount > 0 && (
+            <span className="inline-flex items-center px-1.5 py-0.5 rounded bg-[#B598E2]/15 text-[#9b51e0] font-medium">
+              {module.draftCount} {module.draftCount === 1 ? 'Entwurf' : 'Entwürfe'}
+            </span>
+          )}
+          {module.missingWistiaCount > 0 && (
+            <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-amber-100 text-amber-700 dark:bg-amber-950/40 dark:text-amber-400 font-medium" title="Lektionen mit Skool-nativem Video — müssen manuell zu Wistia hochgeladen werden">
+              <AlertTriangle size={10} />
+              {module.missingWistiaCount} Skool→Wistia
+            </span>
+          )}
+          <span className="ml-0.5">· /{module.slug}</span>
+        </p>
       </div>
       <div className="flex items-center gap-1 shrink-0">
         <button

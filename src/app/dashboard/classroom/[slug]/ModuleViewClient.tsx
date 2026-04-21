@@ -252,7 +252,7 @@ export function ModuleViewClient({
               </div>
             )}
 
-            {activeVideo.description ? (
+            {activeVideo.description && (
               <div className="text-foreground">
                 <ReactMarkdown
                   components={{
@@ -285,8 +285,6 @@ export function ModuleViewClient({
                   {activeVideo.description}
                 </ReactMarkdown>
               </div>
-            ) : (
-              <p className="text-sm text-muted italic">Keine Beschreibung verfügbar.</p>
             )}
 
             {activeResources.length > 0 && (

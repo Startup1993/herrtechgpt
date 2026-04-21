@@ -10,9 +10,13 @@ export default async function ModuleDetailPage({
   const { moduleId } = await params
   const admin = createAdminClient()
 
-  const [{ data: courseModule }, { data: videos }, { data: allModules }] = await Promise.all([
+  // Auto-link orphan lessons from past Skool-syncs (idempotent, cheap UPDATE)
+  try { await admin.rpc('link_orphan_lessons') } catch {}
+
+  const [{ data: courseModule }, { data: videos }, { data: chapters }, { data: allModules }] = await Promise.all([
     admin.from('course_modules').select('*').eq('id', moduleId).single(),
     admin.from('module_videos').select('*').eq('module_id', moduleId).order('sort_order', { ascending: true }),
+    admin.from('module_chapters').select('*').eq('module_id', moduleId).order('sort_order', { ascending: true }),
     admin.from('course_modules').select('id, title, emoji').order('sort_order', { ascending: true }),
   ])
 
@@ -22,6 +26,7 @@ export default async function ModuleDetailPage({
     <ModuleDetailClient
       module={courseModule}
       initialVideos={videos ?? []}
+      initialChapters={chapters ?? []}
       allModules={allModules ?? []}
     />
   )
