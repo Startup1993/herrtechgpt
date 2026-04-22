@@ -2,10 +2,10 @@ import { redirect } from 'next/navigation'
 import { cookies } from 'next/headers'
 import { createClient } from '@/lib/supabase/server'
 import { computeEffectiveAccess, VIEW_AS_COOKIE } from '@/lib/access'
-import VideoCreatorHome from './VideoCreatorHome'
-import PremiumGate from './PremiumGate'
+import PremiumGate from '../PremiumGate'
+import NewProjectForm from './NewProjectForm'
 
-export default async function VideoCreatorPage() {
+export default async function NewProjectPage() {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) redirect('/login')
@@ -20,9 +20,9 @@ export default async function VideoCreatorPage() {
   const viewAs = cookieStore.get(VIEW_AS_COOKIE)?.value
   const access = computeEffectiveAccess(profile, viewAs)
 
-  const hasAccess = access.isAdmin || access.tier === 'premium'
-  if (!hasAccess) return <PremiumGate currentTier={access.tier} />
+  if (!access.isAdmin && access.tier !== 'premium') {
+    return <PremiumGate currentTier={access.tier} />
+  }
 
-  const configured = !!process.env.VIDEO_CREATOR_INTERNAL_URL
-  return <VideoCreatorHome configured={configured} />
+  return <NewProjectForm />
 }
