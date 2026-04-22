@@ -1,7 +1,16 @@
+/**
+ * Parse a freeform CI description into the v2 schema:
+ * { primaryColor: "#hex", fontPairingId: "modern" | ... }
+ *
+ * The rest of the palette is derived client-side via deriveBrandPalette().
+ */
+
 import { NextRequest, NextResponse } from 'next/server'
 import { createAnthropic } from '@ai-sdk/anthropic'
 import { generateText } from 'ai'
 import { createClient } from '@/lib/supabase/server'
+
+const PAIRING_IDS = ['editorial', 'modern', 'warm', 'technical', 'bold', 'classic', 'rounded'] as const
 
 export async function POST(req: NextRequest) {
   const supabase = await createClient()
@@ -15,53 +24,44 @@ export async function POST(req: NextRequest) {
     model: anthropic('claude-sonnet-4-5-20250929'),
     messages: [{
       role: 'user',
-      content: `Du bist ein Branding-Experte. Analysiere diese CI-Beschreibung und extrahiere alle relevanten Design-Werte für Instagram-Karussell-Slides.
+      content: `Du bist ein Branding-Experte. Analysiere diese CI-Beschreibung und wähle eine Primärfarbe + passendes Font-Pairing für ein Instagram-Karussell-Tool.
 
-CI-Beschreibung:
+CI-BESCHREIBUNG:
 """
 ${description}
 """
 
-Regeln:
-- primaryColor: Hauptakzentfarbe (für Headlines, Bullet-Punkte, Akzentbalken). Wähle die auffälligste/markanteste Farbe.
-- bgColor: Hintergrundfarbe der Slides (hell, ruhig — oft weiß oder sehr heller Ton aus der Palette)
-- textColor: Haupttextfarbe (dunkel genug für gute Lesbarkeit auf bgColor)
-- accentColor: Zweite Akzentfarbe für CTA-Slide-Hintergrund oder Highlights
-- headlineFont: Exakter Font-Name für Headlines. Wenn der Font auf Google Fonts verfügbar ist, nimm ihn direkt. Wenn nicht (z.B. "Black Mango"), wähle den ähnlichsten Google Font (z.B. "Playfair Display" für elegante Display-Fonts, "Bebas Neue" für Bold-Sans-Fonts).
-- bodyFont: Exakter Font-Name für Fließtext/Bullets. Wenn auf Google Fonts: direkt nutzen. Sonst ähnlichen nehmen.
-- headlineFontWeight: CSS font-weight für Headlines (z.B. "900", "700", "800")
-- bodyFontWeight: CSS font-weight für Body-Text (z.B. "300", "400", "600")
-- lineHeight: CSS line-height Wert als String (z.B. "1.8" für viel Whitespace, "1.4" für kompakt)
-- letterSpacing: CSS letter-spacing (z.B. "0.02em" für leicht gesperrt, "0em" für normal)
-- spacious: true wenn der Stil viel Whitespace/Luft haben soll, false für kompakt
-- googleFontsQuery: URL-Parameter für Google Fonts API (kombiniere beide Fonts). Beispiel: "family=Playfair+Display:wght@700;900&family=Raleway:wght@300;400;600"
+REGELN:
+- primaryColor: Die markanteste/auffälligste Markenfarbe als Hex (z.B. #B598E2). Ignoriere Hintergrund-Weißtöne, Grau-Töne — wir brauchen die ECHTE Marken-Akzentfarbe.
+- fontPairingId: Wähle das passendste Pairing aus:
+    "editorial"   — Playfair Display + DM Sans (Serifen-Magazin-Look)
+    "modern"      — Plus Jakarta Sans (clean, geometrisch, tech)
+    "warm"        — Lora + Nunito Sans (einladend, soft, human)
+    "technical"   — Space Grotesk (Developer-vibe, Mono-Flair)
+    "bold"        — Fraunces + Outfit (expressive, maximale Präsenz)
+    "classic"     — Libre Baskerville + Work Sans (zeitlos, seriös)
+    "rounded"     — Bricolage Grotesque (playful, kreativ)
 
-Gib NUR valides JSON zurück, kein Text davor oder danach:
-{
-  "primaryColor": "#hex",
-  "bgColor": "#hex",
-  "textColor": "#hex",
-  "accentColor": "#hex",
-  "headlineFont": "Font Name",
-  "bodyFont": "Font Name",
-  "headlineFontWeight": "900",
-  "bodyFontWeight": "400",
-  "lineHeight": "1.7",
-  "letterSpacing": "0em",
-  "spacious": true,
-  "googleFontsQuery": "family=..."
-}`,
+Gib NUR valides JSON zurück:
+{ "primaryColor": "#hex", "fontPairingId": "modern" }`,
     }],
   })
 
   try {
     const cleaned = text.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim()
-    return NextResponse.json(JSON.parse(cleaned))
+    const parsed = JSON.parse(cleaned) as { primaryColor?: string; fontPairingId?: string }
+    // Validate pairing id
+    const pairingId = PAIRING_IDS.includes(parsed.fontPairingId as typeof PAIRING_IDS[number])
+      ? parsed.fontPairingId
+      : 'modern'
+    return NextResponse.json({
+      primaryColor: parsed.primaryColor ?? '#B598E2',
+      fontPairingId: pairingId,
+    })
   } catch {
     return NextResponse.json({
-      primaryColor: '#7c3aed', bgColor: '#ffffff', textColor: '#111111', accentColor: '#7c3aed',
-      headlineFont: 'Inter', bodyFont: 'Inter', headlineFontWeight: '700', bodyFontWeight: '400',
-      lineHeight: '1.5', letterSpacing: '0em', spacious: false, googleFontsQuery: 'family=Inter:wght@400;700'
+      primaryColor: '#B598E2',
+      fontPairingId: 'modern',
     })
   }
 }

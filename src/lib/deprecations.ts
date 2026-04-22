@@ -80,9 +80,9 @@ export const deprecations: Deprecation[] = [
   },
   {
     deprecated: 'Canva Free für Karussell-Posts',
-    current: 'PPTX-Export aus Karussell-Tool → Canva-Import',
+    current: 'Karussell-Generator v2 (4:5, 7-Slide-Narrative, PNG + PPTX Export)',
     category: 'design',
-    reason: 'Unser Karussell-Tool erzeugt direkt editierbare PPTX-Dateien, die Canva sauber importiert — spart 20 Min pro Post.',
+    reason: 'Unser neuer Karussell-Generator erzeugt 4:5 Instagram-Slides (1080×1350) mit 7-Slide-Narrative-Arc (Hero → Problem → Lösung → Features → Details → How-To → CTA), abgeleitetem Brand-Palette aus einer Primärfarbe, embedded Progress-Bar + Swipe-Arrow. Export als PNG-ZIP (direkter Post) oder PPTX (Canva-Import für Feinschliff) — spart 30 Min pro Post.',
     since: '2026-04',
     agents: ['content-hook'],
   },

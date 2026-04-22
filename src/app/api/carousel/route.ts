@@ -1,3 +1,14 @@
+/**
+ * Carousel Generator v2 API.
+ *
+ * Two modes:
+ *   1. generate — blog post → 5-10 typed slides (7-slide narrative arc)
+ *   2. refine   — prompt + current slides → updated slides (keeps types stable)
+ *
+ * Slide types: hero | problem | solution | features | details | how-to | cta
+ * Each has a `type` field plus type-specific content fields.
+ */
+
 import { NextRequest, NextResponse } from 'next/server'
 import { createAnthropic } from '@ai-sdk/anthropic'
 import { generateText } from 'ai'
@@ -5,45 +16,70 @@ import { createClient } from '@/lib/supabase/server'
 
 export const maxDuration = 60
 
+const SCHEMA_DOC = `
+Erlaubte Slide-Typen + Felder (JSON-Schema):
+
+1. hero (Einstieg, LIGHT_BG)
+   { "type": "hero", "tagLabel": "NEU", "headline": "...", "hook": "...", "showWatermark": true }
+
+2. problem (Status-Quo-Kritik, DARK_BG)
+   { "type": "problem", "tagLabel": "DAS PROBLEM", "headline": "...", "strikethroughPills": ["...", "...", "..."] }
+
+3. solution (Die Lösung, Brand-Gradient)
+   { "type": "solution", "tagLabel": "DIE LÖSUNG", "headline": "...", "promptBox": { "label": "Beispiel", "quote": "..." } }
+
+4. features (LIGHT_BG)
+   { "type": "features", "tagLabel": "FEATURES", "headline": "...", "features": [{ "icon": "⚡", "label": "...", "description": "..." }] }
+
+5. details (DARK_BG)
+   { "type": "details", "tagLabel": "IM DETAIL", "headline": "...", "tags": ["...", "...", "..."] }
+
+6. how-to (LIGHT_BG, nummerierte Schritte)
+   { "type": "how-to", "tagLabel": "SO GEHT'S", "headline": "...", "steps": [{ "title": "...", "description": "..." }] }
+
+7. cta (Abschluss, Brand-Gradient, KEIN Swipe-Arrow)
+   { "type": "cta", "tagLabel": "JETZT STARTEN", "headline": "...", "tagline": "...", "ctaText": "Zum Tool →" }
+`
+
 export async function POST(req: NextRequest) {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
-  const { blogPost, slideCount = 7, handle = '', refinePrompt, currentSlides, currentCI } = await req.json()
+  const { blogPost, slideCount = 7, handle = '', refinePrompt, currentSlides, currentPalette } = await req.json()
 
   const anthropic = createAnthropic({ apiKey: process.env.ANTHROPIC_API_KEY! })
 
-  // ── Refine mode: modify existing slides and/or CI based on a prompt ────────
+  // ─── Refine mode ────────────────────────────────────────────────────────────
   if (refinePrompt && currentSlides) {
     const { text } = await generateText({
       model: anthropic('claude-sonnet-4-5-20250929'),
       messages: [{
         role: 'user',
-        content: `Du bist ein Social-Media-Experte. Hier sind die aktuellen Karussell-Slides und CI-Einstellungen:
+        content: `Du bist ein Social-Media-Experte. Hier sind die aktuellen Karussell-Slides und Brand-Farbe:
 
-SLIDES:
+AKTUELLE SLIDES:
 ${JSON.stringify(currentSlides, null, 2)}
 
-AKTUELLE CI-FARBEN:
-${JSON.stringify(currentCI || {}, null, 2)}
+AKTUELLE PRIMÄRFARBE:
+${currentPalette?.brandPrimary || '#B598E2'}
 
 Aufgabe: Überarbeite entsprechend dieser Anweisung:
 "${refinePrompt}"
 
+${SCHEMA_DOC}
+
 Regeln:
-- Behalte die gleiche Anzahl Slides und Slide-Typen
+- Behalte die gleiche Anzahl Slides und Slide-Typen (außer explizit anders verlangt)
 - Ändere nur was die Anweisung verlangt
-- Farb-Anweisungen (z.B. "Hintergrund grün", "Text rot") → aktualisiere die CI-Farben als Hex-Codes
+- Farb-Anweisungen (z.B. "Primärfarbe Grün", "Blauer") → aktualisiere primaryColor als Hex
 - Text-Anweisungen → aktualisiere die Slides
-- Bullets: max. 8 Wörter pro Punkt
 
 Gib NUR valides JSON zurück:
 {
   "slides": [...],
-  "ci": { "bgColor": "#hex", "primaryColor": "#hex", "textColor": "#hex", "accentColor": "#hex" }
-}
-Lasse "ci" weg wenn keine Farben geändert werden.`,
+  "primaryColor": "#hex"  // optional, nur wenn Farbe geändert wurde
+}`,
       }],
     })
     try {
@@ -54,30 +90,35 @@ Lasse "ci" weg wenn keine Farben geändert werden.`,
     }
   }
 
-  // ── Generate mode: create slides from blog post ────────────────────────────
+  // ─── Generate mode ──────────────────────────────────────────────────────────
+  const count = Math.max(5, Math.min(10, Number(slideCount) || 7))
+
   const { text } = await generateText({
     model: anthropic('claude-sonnet-4-5-20250929'),
     messages: [{
       role: 'user',
-      content: `Du bist ein Social-Media-Experte. Strukturiere diesen Text in genau ${slideCount} Instagram-Karussell-Slides.
+      content: `Du bist ein Social-Media-Experte für Instagram-Karussells. Baue aus diesem Text einen Karussell-Narrative-Arc mit genau ${count} Slides.
 
 TEXT:
 ${blogPost}
 
-Regeln:
-- Slide 1: Titel-Slide (type: "title") — starke Headline, kurzer Untertitel
-- Slide 2–${slideCount - 1}: Content-Slides (type: "content") — 1 klare Headline + max. 3 kurze Bullet Points (max. 8 Wörter pro Bullet)
-- Letzter Slide: CTA (type: "cta") — kurzer Call-to-Action Text + folgen/speichern/teilen Aufforderung
+${SCHEMA_DOC}
 
-Wichtig: Kurz und prägnant. Kein langer Fließtext. Bullets max. 8 Wörter.
+NARRATIVE-ARC-REGELN (WICHTIG):
+- Slide 1 ist IMMER "hero" mit starkem Hook
+- Letzte Slide ist IMMER "cta" mit klarem Call-to-Action
+- Dazwischen wähle passende Typen: Nicht jeder Post braucht "problem". Bei How-To-Content kann "how-to" + "features" reichen. Bei Tool-Reviews sind "problem" + "solution" + "features" stark.
+- Hintergründe wechseln sich von selbst ab (light/dark/gradient je nach Typ) — achte darauf, dass nicht 3× hintereinander derselbe Typ kommt
+- Hook-Text max. 2 Sätze
+- Pills/Tags max. 3 Wörter
+- Feature/Step-Descriptions max. 12 Wörter
+- Jeder tagLabel uppercase, max. 3 Wörter (z.B. "DAS PROBLEM", "SO GEHT'S", "FEATURES")
+- ctaText kurz und aktionsorientiert (z.B. "Jetzt testen →", "Folgen für mehr")
+${handle ? `- Wenn sinnvoll, erwähne @${handle} dezent` : ''}
 
 Gib NUR valides JSON zurück, kein Text davor oder danach:
 {
-  "slides": [
-    { "type": "title", "headline": "...", "subtitle": "..." },
-    { "type": "content", "headline": "...", "bullets": ["...", "...", "..."] },
-    { "type": "cta", "headline": "...", "cta": "...", "handle": "${handle}" }
-  ]
+  "slides": [ /* ${count} Objekte gemäß Schema */ ]
 }`,
     }],
   })
