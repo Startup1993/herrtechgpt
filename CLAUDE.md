@@ -98,10 +98,24 @@ herr-tech (Standard), content-hook, funnel-monetization, personal-growth, ai-pro
 
 # Deployment (Vercel)
 
-## Environments
-- **Live/Production:** `world.herr.tech` → deployed vom Branch `production`
-- **Staging:** `herr-tech-gpt-git-main-*.vercel.app` (Preview-URL für `main`) → deployed automatisch bei jedem Merge nach `main`
-- **Feature Previews:** Jeder PR bekommt automatisch eine eigene Vercel-Preview-URL
+## URL-Mapping (auswendig lernen!)
+
+| Rolle | URL | Branch | Deploy-Trigger |
+|---|---|---|---|
+| **Live** (Produktion) | `https://world.herr.tech` | `production` | NUR auf explizite Jacob-Ansage |
+| **Staging** (Testumgebung) | `https://herr-tech-gpt-git-main-jonas-projects.vercel.app` | `main` | Auto bei jedem Merge nach `main` |
+| **Preview** (Feature/PR) | `https://herr-tech-gpt-git-<branch>-jonas-projects.vercel.app` | jeder Feature-Branch | Auto bei jedem Push auf den Branch |
+| ⚠ Nackte Vercel-URL | `https://herr-tech-gpt.vercel.app` | `production` | (Vercel-Zwang = Spiegel von Live, ignorieren) |
+
+Vercel-Team-Slug: `jonas-projects` · Projekt: `herr-tech-gpt`
+
+## URL-Abfrage-Trigger
+Wenn Jacob fragt nach …
+- „live url", „produktiv-url", „die echte domain", „wo ists live" → **`https://world.herr.tech`**
+- „staging url", „staging link", „test-url", „wo teste ich" → **`https://herr-tech-gpt-git-main-jonas-projects.vercel.app`**
+- „preview url", „preview von diesem branch", „PR preview" → Format: `https://herr-tech-gpt-git-<branch-name>-jonas-projects.vercel.app` (Branch-Name aus aktuellem Branch ableiten, Slashes durch `-` ersetzen)
+
+Immer als klickbaren Link antworten, nie nur als Text.
 
 ## Deploy-Flow (IMMER einhalten)
 ```
