@@ -32,7 +32,7 @@ const tools: Tool[] = [
     title: 'Karussell-Generator',
     subtitle: 'Pay-per-Use',
     description: 'Instagram-Karussell-Slides aus deinem Text.',
-    comingSoon: true,
+    href: '/dashboard/ki-toolbox/carousel',
   },
   {
     id: 'video-editor',

@@ -1,20 +1,9 @@
 import type { NextConfig } from "next";
 
-const nextConfig: NextConfig = {
-  async rewrites() {
-    // Video-Creator-Worker läuft auf Hetzner, für den Browser transparent
-    // über die Hauptdomain. Setzt VIDEO_CREATOR_INTERNAL_URL in Vercel,
-    // z.B. https://vc.herr.tech (nicht NEXT_PUBLIC — server-only).
-    const workerUrl = process.env.VIDEO_CREATOR_INTERNAL_URL;
-    if (!workerUrl) return [];
-
-    return [
-      {
-        source: "/api/video-creator/:path*",
-        destination: `${workerUrl}/api/:path*`,
-      },
-    ];
-  },
-};
+// Video-Creator-Worker: Proxy läuft als Route-Handler
+// (src/app/api/video-creator/[...path]/route.ts), nicht als Rewrite —
+// das umgeht Build-Time-ENV-Caching und erlaubt Streaming von grossen
+// Upload-Bodies mit korrektem Header-Durchreichen.
+const nextConfig: NextConfig = {};
 
 export default nextConfig;
