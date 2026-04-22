@@ -1,12 +1,9 @@
 // Gemeinsames HTML-Layout für alle ausgehenden Herr-Tech-World-Mails.
 // Konsistentes Branding: Logo zentriert, Primärfarbe #B598E2, kleiner Fallback-Link.
 
-const LOGO_URL = 'https://kgolrqjkghhwdgoeyppt.supabase.co/storage/v1/object/public/lesson-images/brand/logo.png'
+import { PRODUCTION_URL } from './urls'
 
-function baseUrl(): string {
-  const raw = process.env.NEXT_PUBLIC_BASE_URL ?? 'https://herr.tech'
-  return raw.replace(/\/$/, '')
-}
+const LOGO_URL = 'https://kgolrqjkghhwdgoeyppt.supabase.co/storage/v1/object/public/lesson-images/brand/logo.png'
 
 export interface EmailCta {
   label: string
@@ -28,7 +25,7 @@ export interface RenderEmailOptions {
 
 export function renderEmail(opts: RenderEmailOptions): string {
   const preheader = opts.preheader ?? opts.intro.replace(/<[^>]+>/g, '').slice(0, 100)
-  const siteUrl = baseUrl()
+  const siteUrl = PRODUCTION_URL
 
   return `<!DOCTYPE html>
 <html lang="de">

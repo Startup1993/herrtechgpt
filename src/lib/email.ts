@@ -1,6 +1,7 @@
 import { Resend } from 'resend'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { renderEmail } from './email-template'
+import { PRODUCTION_URL } from './urls'
 
 function getResend(): Resend | null {
   const key = process.env.RESEND_API_KEY
@@ -10,10 +11,6 @@ function getResend(): Resend | null {
 
 function fromAddress(): string {
   return process.env.RESEND_FROM_EMAIL ?? 'Herr Tech <onboarding@resend.dev>'
-}
-
-function baseUrl(): string {
-  return (process.env.NEXT_PUBLIC_BASE_URL ?? 'https://herr.tech').replace(/\/$/, '')
 }
 
 // Sendet eine Benachrichtigung an alle Admins über ein neues Support-Ticket.
@@ -43,7 +40,7 @@ export async function notifyAdminsNewTicket({
 
   if (adminEmails.length === 0) return
 
-  const ticketUrl = `${baseUrl()}/admin/tickets/${conversationId}`
+  const ticketUrl = `${PRODUCTION_URL}/admin/tickets/${conversationId}`
 
   const html = renderEmail({
     heading: 'Neues Support-Ticket',

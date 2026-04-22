@@ -1,6 +1,7 @@
 import { Resend } from 'resend'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { renderEmail } from './email-template'
+import { PRODUCTION_URL } from './urls'
 
 function getResend(): Resend | null {
   const key = process.env.RESEND_API_KEY
@@ -11,11 +12,6 @@ function getResend(): Resend | null {
 function fromAddress(): string {
   return process.env.RESEND_FROM_EMAIL ?? 'Herr Tech <onboarding@resend.dev>'
 }
-
-// Einladungs-Links gehen IMMER auf die Live-Domain — egal von welcher Umgebung
-// der Admin sie verschickt. Verhindert, dass neue User versehentlich auf Staging
-// landen und dort Daten anlegen.
-const PRODUCTION_URL = 'https://world.herr.tech'
 
 // Erzeugt einen Magic-Login-Link via Supabase und versendet ihn per Resend.
 export async function sendInvitationEmail(
