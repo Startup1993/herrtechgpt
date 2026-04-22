@@ -9,16 +9,20 @@ export default async function AdminUsersPage() {
     { data: { users: authUsers } },
     { data: convStats },
   ] = await Promise.all([
-    admin.from('profiles').select('id, role, access_tier, created_at').order('created_at', { ascending: false }),
+    admin.from('profiles').select('id, role, access_tier, created_at, invitation_sent_count').order('created_at', { ascending: false }),
     admin.auth.admin.listUsers({ perPage: 1000 }),
     admin.from('conversations').select('user_id, updated_at'),
   ])
 
   const emailMap: Record<string, string> = {}
   const lastLoginMap: Record<string, string> = {}
+  const hasLoggedInMap: Record<string, boolean> = {}
   authUsers?.forEach((u) => {
     emailMap[u.id] = u.email ?? ''
-    if (u.last_sign_in_at) lastLoginMap[u.id] = u.last_sign_in_at
+    if (u.last_sign_in_at) {
+      lastLoginMap[u.id] = u.last_sign_in_at
+      hasLoggedInMap[u.id] = true
+    }
   })
 
   const convCountMap: Record<string, number> = {}
@@ -38,6 +42,8 @@ export default async function AdminUsersPage() {
     created_at: p.created_at,
     last_active: lastActiveMap[p.id] ?? lastLoginMap[p.id] ?? null,
     conversation_count: convCountMap[p.id] ?? 0,
+    has_logged_in: !!hasLoggedInMap[p.id],
+    invitation_sent_count: (p as { invitation_sent_count?: number }).invitation_sent_count ?? 0,
   }))
 
   return (

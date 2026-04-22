@@ -2,8 +2,10 @@
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
+import { CsvImportModal } from './CsvImportModal'
 
 type AccessTier = 'basic' | 'alumni' | 'premium'
+type UserStatus = 'active' | 'invited' | 'added'
 
 interface UserRow {
   id: string
@@ -13,9 +15,12 @@ interface UserRow {
   created_at: string
   last_active: string | null
   conversation_count: number
+  has_logged_in: boolean
+  invitation_sent_count: number
 }
 
 type TierFilterValue = 'all' | AccessTier
+type StatusFilterValue = 'all' | UserStatus
 
 const TIER_META: Record<AccessTier, { label: string; className: string }> = {
   premium: {
@@ -32,20 +37,41 @@ const TIER_META: Record<AccessTier, { label: string; className: string }> = {
   },
 }
 
+const STATUS_META: Record<UserStatus, { label: string; dot: string; text: string }> = {
+  active:  { label: 'Aktiv',         dot: 'bg-green-500',  text: 'text-green-600 dark:text-green-400' },
+  invited: { label: 'Eingeladen',    dot: 'bg-amber-400',  text: 'text-amber-700 dark:text-amber-400' },
+  added:   { label: 'Hinzugefügt',   dot: 'bg-gray-400',   text: 'text-muted' },
+}
+
+function computeStatus(u: UserRow): UserStatus {
+  if (u.has_logged_in) return 'active'
+  if (u.invitation_sent_count > 0) return 'invited'
+  return 'added'
+}
+
 export default function UsersTable({ users }: { users: UserRow[] }) {
   const router = useRouter()
   const [search, setSearch] = useState('')
   const [loading, setLoading] = useState<string | null>(null)
   const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null)
   const [filterTier, setFilterTier] = useState<TierFilterValue>('all')
+  const [filterStatus, setFilterStatus] = useState<StatusFilterValue>('all')
+  const [importOpen, setImportOpen] = useState(false)
 
-  const filtered = users
+  const withStatus = users.map((u) => ({ ...u, _status: computeStatus(u) as UserStatus }))
+
+  const filtered = withStatus
     .filter((u) => u.email.toLowerCase().includes(search.toLowerCase()))
     .filter((u) => filterTier === 'all' || u.access_tier === filterTier)
+    .filter((u) => filterStatus === 'all' || u._status === filterStatus)
 
   const premiumCount = users.filter((u) => u.access_tier === 'premium').length
   const alumniCount = users.filter((u) => u.access_tier === 'alumni').length
   const basicCount = users.filter((u) => u.access_tier === 'basic').length
+
+  const activeCount = withStatus.filter((u) => u._status === 'active').length
+  const invitedCount = withStatus.filter((u) => u._status === 'invited').length
+  const addedCount = withStatus.filter((u) => u._status === 'added').length
 
   async function deleteUser(userId: string) {
     setLoading(userId + '_delete')
@@ -53,6 +79,25 @@ export default function UsersTable({ users }: { users: UserRow[] }) {
     setLoading(null)
     setDeleteConfirm(null)
     router.refresh()
+  }
+
+  async function sendInvite(userId: string) {
+    setLoading(userId + '_invite')
+    try {
+      const res = await fetch('/api/admin/users/send-invite', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId }),
+      })
+      const data = await res.json()
+      if (!res.ok) {
+        alert(`Einladung fehlgeschlagen: ${data.error ?? 'Unbekannter Fehler'}`)
+      } else {
+        router.refresh()
+      }
+    } finally {
+      setLoading(null)
+    }
   }
 
   function formatDate(iso: string | null) {
@@ -73,7 +118,7 @@ export default function UsersTable({ users }: { users: UserRow[] }) {
 
   return (
     <div className="space-y-4">
-      {/* Search + Filter */}
+      {/* Search + Tier Filter */}
       <div className="flex flex-col sm:flex-row gap-3">
         <div className="relative flex-1">
           <svg className="absolute left-3 top-1/2 -translate-y-1/2 text-muted" xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -88,12 +133,51 @@ export default function UsersTable({ users }: { users: UserRow[] }) {
           />
         </div>
         <div className="flex gap-1.5 flex-wrap">
-          <TierFilter label={`Alle (${users.length})`} active={filterTier === 'all'} onClick={() => setFilterTier('all')} />
-          <TierFilter label={`Community (${premiumCount})`} active={filterTier === 'premium'} onClick={() => setFilterTier('premium')} />
-          <TierFilter label={`Alumni (${alumniCount})`} active={filterTier === 'alumni'} onClick={() => setFilterTier('alumni')} />
-          <TierFilter label={`Basic (${basicCount})`} active={filterTier === 'basic'} onClick={() => setFilterTier('basic')} />
+          <FilterPill label={`Alle (${users.length})`} active={filterTier === 'all'} onClick={() => setFilterTier('all')} />
+          <FilterPill label={`Community (${premiumCount})`} active={filterTier === 'premium'} onClick={() => setFilterTier('premium')} />
+          <FilterPill label={`Alumni (${alumniCount})`} active={filterTier === 'alumni'} onClick={() => setFilterTier('alumni')} />
+          <FilterPill label={`Basic (${basicCount})`} active={filterTier === 'basic'} onClick={() => setFilterTier('basic')} />
+          <button
+            onClick={() => setImportOpen(true)}
+            className="px-3 py-1.5 rounded-lg text-xs font-medium bg-primary text-white hover:bg-primary-hover transition-colors whitespace-nowrap"
+          >
+            CSV importieren
+          </button>
         </div>
       </div>
+
+      {/* Status Filter */}
+      <div className="flex items-center gap-2 flex-wrap">
+        <span className="text-xs text-muted uppercase tracking-wider font-medium">Status:</span>
+        <FilterPill label={`Alle`} active={filterStatus === 'all'} onClick={() => setFilterStatus('all')} />
+        <FilterPill
+          label={`Aktiv (${activeCount})`}
+          active={filterStatus === 'active'}
+          onClick={() => setFilterStatus('active')}
+          dot="bg-green-500"
+        />
+        <FilterPill
+          label={`Eingeladen (${invitedCount})`}
+          active={filterStatus === 'invited'}
+          onClick={() => setFilterStatus('invited')}
+          dot="bg-amber-400"
+        />
+        <FilterPill
+          label={`Hinzugefügt (${addedCount})`}
+          active={filterStatus === 'added'}
+          onClick={() => setFilterStatus('added')}
+          dot="bg-gray-400"
+        />
+      </div>
+
+      <CsvImportModal
+        open={importOpen}
+        onClose={() => setImportOpen(false)}
+        onDone={() => {
+          setImportOpen(false)
+          router.refresh()
+        }}
+      />
 
       {/* Table */}
       <div className="bg-surface border border-border rounded-xl overflow-hidden">
@@ -103,7 +187,7 @@ export default function UsersTable({ users }: { users: UserRow[] }) {
               <th className="text-left px-5 py-3 text-xs font-semibold text-muted uppercase tracking-wider">E-Mail</th>
               <th className="text-left px-4 py-3 text-xs font-semibold text-muted uppercase tracking-wider">Zugang</th>
               <th className="text-left px-4 py-3 text-xs font-semibold text-muted uppercase tracking-wider">Registriert</th>
-              <th className="text-left px-4 py-3 text-xs font-semibold text-muted uppercase tracking-wider">Letzte Aktivität</th>
+              <th className="text-left px-4 py-3 text-xs font-semibold text-muted uppercase tracking-wider">Status</th>
               <th className="text-center px-4 py-3 text-xs font-semibold text-muted uppercase tracking-wider">Chats</th>
               <th className="text-left px-4 py-3 text-xs font-semibold text-muted uppercase tracking-wider">Rolle</th>
               <th className="px-4 py-3" />
@@ -119,6 +203,7 @@ export default function UsersTable({ users }: { users: UserRow[] }) {
             )}
             {filtered.map((u) => {
               const tier = TIER_META[u.access_tier]
+              const status = STATUS_META[u._status]
               return (
                 <tr
                   key={u.id}
@@ -134,7 +219,21 @@ export default function UsersTable({ users }: { users: UserRow[] }) {
                     </span>
                   </td>
                   <td className="px-4 py-3.5 text-xs text-muted">{formatDate(u.created_at)}</td>
-                  <td className="px-4 py-3.5 text-xs text-muted">{timeAgo(u.last_active)}</td>
+                  <td className="px-4 py-3.5">
+                    <div className="flex items-center gap-2">
+                      <span className={`w-2 h-2 rounded-full shrink-0 ${status.dot}`} />
+                      <div className="flex flex-col min-w-0">
+                        <span className={`text-xs font-medium ${status.text}`}>{status.label}</span>
+                        <span className="text-[11px] text-muted truncate">
+                          {u._status === 'active'
+                            ? timeAgo(u.last_active)
+                            : u._status === 'invited'
+                              ? `${u.invitation_sent_count}× versendet`
+                              : 'Noch nicht eingeladen'}
+                        </span>
+                      </div>
+                    </div>
+                  </td>
                   <td className="px-4 py-3.5 text-center">
                     <span className="text-sm font-medium text-foreground">{u.conversation_count}</span>
                   </td>
@@ -147,6 +246,18 @@ export default function UsersTable({ users }: { users: UserRow[] }) {
                   </td>
                   <td className="px-4 py-3.5">
                     <div className="flex items-center gap-2 justify-end" onClick={(e) => e.stopPropagation()}>
+                      {!u.has_logged_in && (
+                        <button
+                          onClick={() => sendInvite(u.id)}
+                          disabled={!!loading}
+                          className="text-xs text-primary hover:text-primary-hover border border-primary/30 px-2.5 py-1.5 rounded-lg hover:bg-primary/5 transition-colors disabled:opacity-50 whitespace-nowrap"
+                          title={u.invitation_sent_count === 0 ? 'Magic-Link per E-Mail versenden' : `Bereits ${u.invitation_sent_count}× versendet — erneut senden`}
+                        >
+                          {loading === u.id + '_invite'
+                            ? '...'
+                            : `Einladung ${u.invitation_sent_count > 0 ? `(${u.invitation_sent_count})` : 'senden'}`}
+                        </button>
+                      )}
                       <button
                         onClick={() => router.push(`/admin/users/${u.id}`)}
                         className="text-xs text-muted hover:text-foreground border border-border px-2.5 py-1.5 rounded-lg hover:bg-surface-secondary transition-colors whitespace-nowrap"
@@ -192,16 +303,27 @@ export default function UsersTable({ users }: { users: UserRow[] }) {
   )
 }
 
-function TierFilter({ label, active, onClick }: { label: string; active: boolean; onClick: () => void }) {
+function FilterPill({
+  label,
+  active,
+  onClick,
+  dot,
+}: {
+  label: string
+  active: boolean
+  onClick: () => void
+  dot?: string
+}) {
   return (
     <button
       onClick={onClick}
-      className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors whitespace-nowrap ${
+      className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors whitespace-nowrap ${
         active
           ? 'bg-primary text-white'
           : 'bg-surface border border-border text-muted hover:text-foreground'
       }`}
     >
+      {dot && <span className={`w-1.5 h-1.5 rounded-full ${dot}`} />}
       {label}
     </button>
   )
