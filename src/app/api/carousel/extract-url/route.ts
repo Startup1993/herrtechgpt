@@ -1,9 +1,16 @@
+/**
+ * Extract brand primary color + font suggestion from a website URL.
+ * Returns the v2 schema: { primaryColor: "#hex", fontPairingId: "modern" | ... }
+ */
+
 import { NextRequest, NextResponse } from 'next/server'
 import { createAnthropic } from '@ai-sdk/anthropic'
 import { generateText } from 'ai'
 import { createClient } from '@/lib/supabase/server'
 
 export const maxDuration = 30
+
+const PAIRING_IDS = ['editorial', 'modern', 'warm', 'technical', 'bold', 'classic', 'rounded'] as const
 
 export async function POST(req: NextRequest) {
   const supabase = await createClient()
@@ -29,7 +36,6 @@ export async function POST(req: NextRequest) {
   const colorFreq: Record<string, number> = {}
   for (const c of hexMatches) {
     const lower = c.toLowerCase()
-    // Skip near-white, near-black, grays
     const r = parseInt(lower.slice(1, 3), 16)
     const g = parseInt(lower.slice(3, 5), 16)
     const b = parseInt(lower.slice(5, 7), 16)
@@ -49,44 +55,56 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Keine Farben gefunden' }, { status: 400 })
   }
 
-  // Let Claude pick the best brand colors from the extracted list
+  // Extract some meta context for font suggestion
+  const titleMatch = html.match(/<title[^>]*>([^<]{1,200})<\/title>/i)
+  const descMatch = html.match(/<meta[^>]+name=["']description["'][^>]+content=["']([^"']{1,300})["']/i)
+  const title = titleMatch?.[1] ?? ''
+  const desc = descMatch?.[1] ?? ''
+
+  // Let Claude pick the best brand primary + font pairing
   const anthropic = createAnthropic({ apiKey: process.env.ANTHROPIC_API_KEY! })
   const { text } = await generateText({
     model: anthropic('claude-sonnet-4-5-20250929'),
     messages: [{
       role: 'user',
-      content: `Du bist ein Branding-Experte. Ich habe diese Farben von der Website "${url}" extrahiert:
+      content: `Du bist ein Branding-Experte. Analysiere die Website "${url}":
 
+TITLE: ${title}
+BESCHREIBUNG: ${desc}
+
+Gefundene Farben (sortiert nach Häufigkeit):
 ${topColors.join(', ')}
 
-Wähle die besten Farben für Instagram-Karussell-Slides aus und gib NUR valides JSON zurück:
-{
-  "primaryColor": "#hex",
-  "bgColor": "#hex",
-  "textColor": "#hex",
-  "accentColor": "#hex",
-  "headlineFont": "Inter",
-  "bodyFont": "Inter",
-  "headlineFontWeight": "700",
-  "bodyFontWeight": "400",
-  "lineHeight": "1.6",
-  "letterSpacing": "0em",
-  "spacious": false,
-  "googleFontsQuery": "family=Inter:wght@400;700"
-}
+Wähle:
+1. primaryColor — die markanteste Markenfarbe aus der Liste (nicht Weiß/Grau)
+2. fontPairingId — das passendste Font-Pairing:
+    "editorial"   — Serifen-Magazin-Look
+    "modern"      — clean, tech, geometrisch (DEFAULT für SaaS/Tech)
+    "warm"        — einladend, Coaching, Human
+    "technical"   — Developer/Tech
+    "bold"        — expressive, laut, auffällig
+    "classic"     — seriös, zeitlos (Recht, Finanzen)
+    "rounded"     — playful, kreativ, Agentur
 
-Regeln:
-- primaryColor: die markanteste Markenfarbe
-- bgColor: hell/weiß oder sehr heller Ton
-- textColor: dunkel genug für Lesbarkeit
-- accentColor: zweite Akzentfarbe für CTA-Slide`,
+Gib NUR valides JSON zurück:
+{ "primaryColor": "#hex", "fontPairingId": "modern" }`,
     }],
   })
 
   try {
     const cleaned = text.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim()
-    return NextResponse.json(JSON.parse(cleaned))
+    const parsed = JSON.parse(cleaned) as { primaryColor?: string; fontPairingId?: string }
+    const pairingId = PAIRING_IDS.includes(parsed.fontPairingId as typeof PAIRING_IDS[number])
+      ? parsed.fontPairingId
+      : 'modern'
+    return NextResponse.json({
+      primaryColor: parsed.primaryColor ?? topColors[0],
+      fontPairingId: pairingId,
+    })
   } catch {
-    return NextResponse.json({ primaryColor: topColors[0], bgColor: '#ffffff', textColor: '#111111', accentColor: topColors[1] ?? topColors[0] })
+    return NextResponse.json({
+      primaryColor: topColors[0],
+      fontPairingId: 'modern',
+    })
   }
 }
