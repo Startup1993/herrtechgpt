@@ -1,6 +1,7 @@
 import { Resend } from 'resend'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { renderEmail } from './email-template'
+import { PRODUCTION_URL } from './urls'
 
 function getResend(): Resend | null {
   const key = process.env.RESEND_API_KEY
@@ -12,16 +13,12 @@ function fromAddress(): string {
   return process.env.RESEND_FROM_EMAIL ?? 'Herr Tech <onboarding@resend.dev>'
 }
 
-function baseUrl(): string {
-  return (process.env.NEXT_PUBLIC_BASE_URL ?? 'https://herr.tech').replace(/\/$/, '')
-}
-
 // Erzeugt einen Magic-Login-Link via Supabase und versendet ihn per Resend.
 export async function sendInvitationEmail(
   admin: SupabaseClient,
   email: string,
 ): Promise<{ ok: true } | { ok: false; error: string }> {
-  const redirectTo = `${baseUrl()}/auth/callback?next=/dashboard`
+  const redirectTo = `${PRODUCTION_URL}/auth/callback?next=/dashboard`
 
   const { data, error } = await admin.auth.admin.generateLink({
     type: 'magiclink',

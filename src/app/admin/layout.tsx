@@ -2,6 +2,7 @@ import { createClient } from '@/lib/supabase/server'
 import { redirect } from 'next/navigation'
 import { cookies } from 'next/headers'
 import { AppShell } from '@/components/app-shell'
+import { NonProductionBanner } from '@/components/non-production-banner'
 import { computeEffectiveAccess, VIEW_AS_COOKIE } from '@/lib/access'
 import { getPermissionMatrix } from '@/lib/permissions'
 
@@ -69,6 +70,7 @@ export default async function AdminLayout({
       newTicketCount={ticketCount ?? 0}
       helpUnreadCount={helpUnreadCount ?? 0}
     >
+      <NonProductionBanner />
       {children}
     </AppShell>
   )
