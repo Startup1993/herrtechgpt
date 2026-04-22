@@ -197,7 +197,7 @@ export default function OnboardingPage() {
           {step.type === 'welcome' && (
             <div className="text-center">
               <div className="text-5xl mb-6">👋</div>
-              <h1 className="text-2xl font-bold text-foreground mb-3">Willkommen bei Herr Tech</h1>
+              <h1 className="text-2xl font-bold text-foreground mb-3">Willkommen in der Herr Tech World</h1>
               <p className="text-muted text-sm leading-relaxed mb-8 max-w-sm mx-auto">
                 In 3 Minuten bauen wir deinen persönlichen Lernpfad — damit du sofort weißt, was du wann machen sollst, statt dich im Content zu verlieren.
               </p>

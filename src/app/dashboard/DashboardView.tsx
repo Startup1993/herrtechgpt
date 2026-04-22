@@ -257,10 +257,10 @@ function MarketingClubFull({ upsell }: { upsell: UpsellCopy }) {
   const disabled = upsell.cta_coming_soon || !upsell.cta_url
 
   return (
-    <div className="card-static p-6 sm:p-8 bg-gradient-to-br from-primary/5 to-primary/10 border-primary/20 mb-8">
-      <div className="flex flex-col lg:flex-row lg:items-center gap-6">
+    <div className="card-static p-5 sm:p-6 bg-gradient-to-br from-primary/5 to-primary/10 border-primary/20 mb-8">
+      <div className="flex flex-col lg:flex-row lg:items-center gap-4 lg:gap-6">
         <div className="flex-1">
-          <div className="flex items-center gap-2 mb-2">
+          <div className="flex items-center gap-2 mb-1.5">
             <span className="text-xs font-semibold uppercase tracking-wider text-primary">
               KI Marketing Club
             </span>
@@ -270,10 +270,10 @@ function MarketingClubFull({ upsell }: { upsell: UpsellCopy }) {
               </span>
             )}
           </div>
-          <h3 className="text-lg sm:text-xl font-bold text-foreground mb-1.5">
+          <h3 className="text-lg sm:text-xl font-bold text-foreground mb-1">
             {upsell.heading}
           </h3>
-          <p className="text-sm text-muted mb-4 leading-relaxed">
+          <p className={`text-sm text-muted leading-relaxed ${upsell.benefits.length > 0 ? 'mb-4' : ''}`}>
             {upsell.intro}
           </p>
           {upsell.benefits.length > 0 && (
@@ -344,9 +344,10 @@ export default function DashboardView({
   const chatLock = stateToLock(states.chat, isAdmin)
   const toolboxLock = stateToLock(states.toolbox, isAdmin)
 
-  // Premium/Community → kompakter Link oben; sonst → prominenter Upsell-Block
-  const showFullUpsell = !isAdmin && tier !== 'premium'
-  const showCompactCommunity = isAdmin || tier === 'premium'
+  // Alle nicht-Admin-User sehen den vollen Upsell-Block (Copy wird pro Tier im Admin gepflegt).
+  // Admins sehen nur den kompakten Community-Link oben rechts, da der Block sie selbst nicht betrifft.
+  const showFullUpsell = !isAdmin
+  const showCompactCommunity = isAdmin
 
   return (
     <div className="max-w-5xl mx-auto px-4 sm:px-6 py-6 sm:py-10">
@@ -354,12 +355,12 @@ export default function DashboardView({
         <div>
           <div className="flex items-center gap-3 mb-2">
             <h1 className="text-2xl sm:text-3xl font-bold text-foreground">
-              Willkommen bei Herr Tech
+              Willkommen in der Herr Tech World
             </h1>
             <Zap size={24} className="text-primary" />
           </div>
           <p className="text-muted text-sm sm:text-base">
-            Deine All-in-One KI-Plattform für Content, Business & Wachstum.
+            Deine KI-Plattform für Content, Business & Wachstum.
           </p>
         </div>
         {showCompactCommunity && <MarketingClubCompact upsell={upsell} />}

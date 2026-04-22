@@ -1,5 +1,6 @@
 import { Resend } from 'resend'
 import { createAdminClient } from '@/lib/supabase/admin'
+import { renderEmail } from './email-template'
 
 function getResend(): Resend | null {
   const key = process.env.RESEND_API_KEY
@@ -8,11 +9,15 @@ function getResend(): Resend | null {
 }
 
 function fromAddress(): string {
-  return process.env.RESEND_FROM_EMAIL ?? 'Herr Tech Support <onboarding@resend.dev>'
+  return process.env.RESEND_FROM_EMAIL ?? 'Herr Tech <onboarding@resend.dev>'
 }
 
-// Sendet eine Benachrichtigung an alle Admins \u00fcber ein neues Support-Ticket.
-// L\u00e4uft still durch, wenn keine Config vorhanden ist.
+function baseUrl(): string {
+  return (process.env.NEXT_PUBLIC_BASE_URL ?? 'https://herr.tech').replace(/\/$/, '')
+}
+
+// Sendet eine Benachrichtigung an alle Admins über ein neues Support-Ticket.
+// Läuft still durch, wenn keine Config vorhanden ist.
 export async function notifyAdminsNewTicket({
   conversationId,
   userEmail,
@@ -27,7 +32,6 @@ export async function notifyAdminsNewTicket({
   }
 
   const admin = createAdminClient()
-  // Alle Admin-Profile + deren Auth-Emails holen
   const { data: adminProfiles } = await admin.from('profiles').select('id').eq('role', 'admin')
   if (!adminProfiles || adminProfiles.length === 0) return
 
@@ -39,34 +43,34 @@ export async function notifyAdminsNewTicket({
 
   if (adminEmails.length === 0) return
 
-  const baseUrl = process.env.NEXT_PUBLIC_BASE_URL ?? 'https://www.herrtechgpt.de'
-  const ticketUrl = `${baseUrl}/admin/tickets/${conversationId}`
+  const ticketUrl = `${baseUrl()}/admin/tickets/${conversationId}`
+
+  const html = renderEmail({
+    heading: 'Neues Support-Ticket',
+    intro: `
+      <p style="margin:0;"><strong>${escapeHtml(userEmail)}</strong> hat den Support-Chat aktiviert und wartet auf eine Antwort.</p>
+    `,
+    cta: { label: 'Ticket öffnen', href: ticketUrl },
+    preheader: `Neues Support-Ticket von ${userEmail}`,
+  })
 
   try {
     await resend.emails.send({
       from: fromAddress(),
       to: adminEmails,
       subject: `Neues Support-Ticket von ${userEmail}`,
-      html: `
-        <div style="font-family: -apple-system, system-ui, sans-serif; max-width: 560px; margin: 0 auto; padding: 24px;">
-          <h2 style="color: #B598E2; margin: 0 0 16px;">Neues Support-Ticket</h2>
-          <p style="color: #444; font-size: 14px; line-height: 1.6;">
-            <strong>${userEmail}</strong> hat den Support-Chat aktiviert und wartet auf eine Antwort.
-          </p>
-          <p style="margin-top: 24px;">
-            <a href="${ticketUrl}"
-               style="display: inline-block; background: #B598E2; color: white; padding: 12px 20px;
-                      border-radius: 8px; text-decoration: none; font-weight: 600; font-size: 14px;">
-              Ticket \u00f6ffnen \u2192
-            </a>
-          </p>
-          <p style="color: #999; font-size: 12px; margin-top: 32px;">
-            Diese E-Mail wurde automatisch von Herr Tech GPT gesendet.
-          </p>
-        </div>
-      `,
+      html,
     })
   } catch (err) {
     console.error('[email] Resend Fehler:', err)
   }
+}
+
+function escapeHtml(s: string): string {
+  return s
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;')
 }
