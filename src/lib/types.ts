@@ -71,3 +71,56 @@ export interface CoreTool {
   created_at: string
   updated_at: string
 }
+
+// ─── Monetization ────────────────────────────────────────────────────────────
+
+export type PlanTier = 'S' | 'M' | 'L'
+export type PriceBand = 'basic' | 'community'
+export type BillingCycle = 'monthly' | 'yearly'
+
+export interface Plan {
+  id: string
+  tier: PlanTier
+  name: string
+  description: string | null
+  price_basic_cents: number
+  price_community_cents: number
+  price_yearly_basic_cents: number | null
+  price_yearly_community_cents: number | null
+  credits_per_month: number
+  ablefy_product_basic: string | null
+  ablefy_product_community: string | null
+  ablefy_product_yearly_basic: string | null
+  ablefy_product_yearly_community: string | null
+  features: string[]
+  sort_order: number
+  active: boolean
+  created_at: string
+  updated_at: string
+}
+
+export interface CreditPack {
+  id: string
+  name: string
+  credits: number
+  price_basic_cents: number
+  price_community_cents: number
+  ablefy_product_basic: string | null
+  ablefy_product_community: string | null
+  expiry_months: number
+  sort_order: number
+  active: boolean
+  created_at: string
+  updated_at: string
+}
+
+export interface FeatureCreditCost {
+  feature: string
+  label: string
+  credits_per_unit: number
+  unit: string
+  category: string | null
+  description: string | null
+  active: boolean
+  updated_at: string
+}
