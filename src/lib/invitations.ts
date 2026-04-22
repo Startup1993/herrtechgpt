@@ -12,16 +12,17 @@ function fromAddress(): string {
   return process.env.RESEND_FROM_EMAIL ?? 'Herr Tech <onboarding@resend.dev>'
 }
 
-function baseUrl(): string {
-  return (process.env.NEXT_PUBLIC_BASE_URL ?? 'https://herr.tech').replace(/\/$/, '')
-}
+// Einladungs-Links gehen IMMER auf die Live-Domain — egal von welcher Umgebung
+// der Admin sie verschickt. Verhindert, dass neue User versehentlich auf Staging
+// landen und dort Daten anlegen.
+const PRODUCTION_URL = 'https://world.herr.tech'
 
 // Erzeugt einen Magic-Login-Link via Supabase und versendet ihn per Resend.
 export async function sendInvitationEmail(
   admin: SupabaseClient,
   email: string,
 ): Promise<{ ok: true } | { ok: false; error: string }> {
-  const redirectTo = `${baseUrl()}/auth/callback?next=/dashboard`
+  const redirectTo = `${PRODUCTION_URL}/auth/callback?next=/dashboard`
 
   const { data, error } = await admin.auth.admin.generateLink({
     type: 'magiclink',
