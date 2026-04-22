@@ -62,6 +62,10 @@ export async function middleware(request: NextRequest) {
       url.pathname = '/dashboard/herr-tech-gpt'
     } else if (pathname.startsWith('/assistants/profile')) {
       url.pathname = '/dashboard/account'
+    } else if (pathname.startsWith('/assistants/admin/knowledge')) {
+      url.pathname = pathname.replace('/assistants/admin/knowledge', '/admin/content/knowledge')
+    } else if (pathname.startsWith('/assistants/admin/tools')) {
+      url.pathname = pathname.replace('/assistants/admin/tools', '/admin/content/tools')
     } else if (pathname.startsWith('/assistants/admin')) {
       url.pathname = pathname.replace('/assistants/admin', '/admin')
     } else {
