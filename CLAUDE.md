@@ -133,3 +133,17 @@ Feature-Branch → PR → main (Staging)  →  PR main → production (Live)
 - Bei „push"/„pushen" ohne Zusatz → immer nach `main` (Staging), nie auf `production`
 - Explizite Live-Trigger sind nur: „deploy live", „auf Produktion deployen", „auf world.herr.tech", „live schalten", „auf die echte Domain"
 - Bei Unsicherheit: **nachfragen**, nicht raten
+
+## ⚠ GETEILTE DATENBANK (Live + Staging = gleiche Supabase-Instanz)
+**Live und Staging hängen an derselben Supabase-Datenbank.** Es gibt keine separate Staging-DB.
+
+Das heißt:
+- Nutzer, die auf Staging angelegt werden → sofort auch auf Live sichtbar
+- Classroom-Module, Agenten-Configs, Knowledge-Einträge etc. → sofort auf beiden Umgebungen
+- Migrationen & Schema-Änderungen treffen Live SOFORT, auch wenn auf Staging „getestet"
+
+**Konsequenzen für Claude:**
+- Staging-Tests sind für **Code-Verhalten**, nicht für Daten-Experimente
+- Bei Migrationen / Schema-Änderungen / Seed-Daten / Bulk-Updates → **immer** vorher Jacob fragen, bevor Scripts laufen
+- Keine „Test-Nutzer" auf Staging anlegen ohne Absprache — die landen direkt in der Live-DB
+- Bei Features die DB-Schreibzugriffe machen (z.B. neue Tabellen, Spalten, RLS-Änderungen): Jacob darauf hinweisen dass das Live-Daten betrifft
