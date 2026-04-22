@@ -14,20 +14,30 @@ function fromAddress(): string {
 }
 
 // Erzeugt einen Magic-Login-Link via Supabase und versendet ihn per Resend.
+// Nutzt token_hash statt action_link: wir bauen die Callback-URL selbst und
+// verifizieren in /auth/callback via verifyOtp serverseitig. So wird die Session
+// direkt als Cookie gesetzt und der User ist nach Klick sofort eingeloggt
+// (statt wie beim default-Flow auf der Login-Seite zu landen, weil Supabase
+// Tokens im URL-Fragment liefert, das der Server nicht sieht).
 export async function sendInvitationEmail(
   admin: SupabaseClient,
   email: string,
 ): Promise<{ ok: true } | { ok: false; error: string }> {
-  const redirectTo = `${PRODUCTION_URL}/auth/callback?next=/dashboard`
-
   const { data, error } = await admin.auth.admin.generateLink({
     type: 'magiclink',
     email,
-    options: { redirectTo },
   })
-  if (error || !data?.properties?.action_link) {
+  const hashedToken = data?.properties?.hashed_token
+  if (error || !hashedToken) {
     return { ok: false, error: error?.message ?? 'Link-Erstellung fehlgeschlagen' }
   }
+
+  const params = new URLSearchParams({
+    token_hash: hashedToken,
+    type: 'magiclink',
+    next: '/dashboard',
+  })
+  const loginLink = `${PRODUCTION_URL}/auth/callback?${params.toString()}`
 
   const resend = getResend()
   if (!resend) {
@@ -40,10 +50,10 @@ export async function sendInvitationEmail(
       <p style="margin:0 0 10px;">Du wurdest in die Herr Tech World eingeladen — deiner KI-Plattform für Content, Business &amp; Wachstum.</p>
       <p style="margin:0;">Klick auf den Button unten, um dich einzuloggen. Kein Passwort nötig.</p>
     `,
-    cta: { label: 'Jetzt einloggen', href: data.properties.action_link },
+    cta: { label: 'Jetzt einloggen', href: loginLink },
     footerNote: `
       Falls der Button nicht funktioniert, kopiere diesen Link in deinen Browser:<br>
-      <span style="word-break:break-all; color:#666;">${data.properties.action_link}</span><br><br>
+      <span style="word-break:break-all; color:#666;">${loginLink}</span><br><br>
       Der Link ist zeitlich begrenzt gültig und kann nur einmal verwendet werden.
     `,
     preheader: 'Dein persönlicher Login-Link für Herr Tech World',
