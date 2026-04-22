@@ -95,3 +95,27 @@ herr-tech (Standard), content-hook, funnel-monetization, personal-growth, ai-pro
 - [ ] Sind alle gewünschten Änderungen committed?
 - [ ] Gibt es neue Commits auf `main` die ich nicht habe? (`git log HEAD..origin/main --oneline`)
 - [ ] PR-Beschreibung erklärt was und warum?
+
+# Deployment (Vercel)
+
+## Environments
+- **Live/Production:** `world.herr.tech` → deployed vom Branch `production`
+- **Staging:** `herr-tech-gpt-git-main-*.vercel.app` (Preview-URL für `main`) → deployed automatisch bei jedem Merge nach `main`
+- **Feature Previews:** Jeder PR bekommt automatisch eine eigene Vercel-Preview-URL
+
+## Deploy-Flow (IMMER einhalten)
+```
+Feature-Branch → PR → main (Staging)  →  PR main → production (Live)
+```
+1. Arbeit läuft auf Feature-Branch (`feature/...` oder `fix/...`)
+2. PR gegen `main` → nach Merge automatisch auf Staging-URL deployed
+3. Jacob testet auf Staging
+4. **NUR wenn Jacob explizit sagt „deploy live" / „auf Produktion" / „live schalten"** → PR `main → production` erstellen
+5. Nach Jacobs OK: PR mergen → Vercel deployed automatisch auf `world.herr.tech`
+
+## WICHTIG — Claude-Regeln
+- **NIEMALS** direkt auf `production` pushen oder mergen ohne explizite Ansage
+- **NIEMALS** Production-Deploy aus eigenem Antrieb anstoßen, auch nicht wenn „alles fertig" wirkt
+- Bei „push"/„pushen" ohne Zusatz → immer nach `main` (Staging), nie auf `production`
+- Explizite Live-Trigger sind nur: „deploy live", „auf Produktion deployen", „auf world.herr.tech", „live schalten", „auf die echte Domain"
+- Bei Unsicherheit: **nachfragen**, nicht raten
