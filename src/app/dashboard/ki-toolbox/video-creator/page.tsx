@@ -23,5 +23,6 @@ export default async function VideoCreatorPage() {
   const hasAccess = access.isAdmin || access.tier === 'premium'
   if (!hasAccess) return <PremiumGate currentTier={access.tier} />
 
-  return <VideoCreatorHome />
+  const configured = !!process.env.VIDEO_CREATOR_INTERNAL_URL
+  return <VideoCreatorHome configured={configured} />
 }

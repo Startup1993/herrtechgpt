@@ -11,7 +11,11 @@
 
 import { createClient } from '@/lib/supabase/client'
 
-const WORKER_URL = process.env.NEXT_PUBLIC_VIDEO_CREATOR_URL
+// Der Video-Creator-Worker läuft auf Hetzner, wird aber transparent über
+// Vercel-Rewrites unter /api/video-creator/* erreichbar gemacht (siehe
+// next.config.ts). Aus Browser-Sicht gibt es nur die Hauptdomain — kein CORS,
+// keine zweite URL, keine gesonderte ENV-Variable fürs Frontend.
+const WORKER_BASE = '/api/video-creator'
 
 export class VideoCreatorApiError extends Error {
   status: number
@@ -93,13 +97,6 @@ export async function videoCreatorFetch<T = unknown>(
   path: string,
   init: RequestInit = {},
 ): Promise<T> {
-  if (!WORKER_URL) {
-    throw new VideoCreatorApiError(
-      'NEXT_PUBLIC_VIDEO_CREATOR_URL ist nicht gesetzt',
-      500,
-    )
-  }
-
   const auth = await getAuthHeader()
   const isFormData = init.body instanceof FormData
   const isJson =
@@ -113,7 +110,12 @@ export async function videoCreatorFetch<T = unknown>(
 
   const body = isJson ? JSON.stringify(init.body) : (init.body as BodyInit)
 
-  const res = await fetch(`${WORKER_URL}${path}`, {
+  // path beginnt mit /api/... (worker-seitig), wir prefixen mit /api/video-creator/
+  // und strippen das doppelte /api aus dem path.
+  const workerPath = path.startsWith('/api/')
+    ? path.slice('/api'.length) // '/api/projects/list' → '/projects/list'
+    : path
+  const res = await fetch(`${WORKER_BASE}${workerPath}`, {
     ...init,
     headers,
     body,
@@ -184,6 +186,5 @@ export function workerMediaUrl(
   projectId: string,
   ...fileParts: string[]
 ): string {
-  if (!WORKER_URL) return ''
-  return `${WORKER_URL}/api/projects/${projectId}/media/${fileParts.join('/')}`
+  return `${WORKER_BASE}/projects/${projectId}/media/${fileParts.join('/')}`
 }

@@ -22,18 +22,23 @@ import {
 
 type LoadState = 'loading' | 'ready' | 'error' | 'not-configured'
 
-export default function VideoCreatorHome() {
+export default function VideoCreatorHome({
+  configured,
+}: {
+  configured: boolean
+}) {
   const [state, setState] = useState<LoadState>('loading')
   const [projects, setProjects] = useState<Project[]>([])
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
-    if (!process.env.NEXT_PUBLIC_VIDEO_CREATOR_URL) {
+    if (!configured) {
       setState('not-configured')
       return
     }
     void loadProjects()
-  }, [])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [configured])
 
   async function loadProjects() {
     setState('loading')
@@ -179,10 +184,10 @@ function NotConfiguredState() {
           <p className="text-sm text-muted leading-relaxed">
             Der Worker auf Hetzner läuft noch nicht oder{' '}
             <code className="text-xs bg-surface-hover px-1 py-0.5 rounded">
-              NEXT_PUBLIC_VIDEO_CREATOR_URL
+              VIDEO_CREATOR_INTERNAL_URL
             </code>{' '}
-            ist nicht gesetzt. Sobald der Server deployed ist, erscheinen hier
-            deine Projekte.
+            ist in Vercel nicht gesetzt. Sobald der Server deployed ist,
+            erscheinen hier deine Projekte.
           </p>
         </div>
       </div>
