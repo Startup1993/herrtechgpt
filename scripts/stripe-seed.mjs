@@ -28,7 +28,7 @@ const PLANS = [
     slug: 'herr_tech_s',
     dbPlanId: 'plan_s',
     tier: 'S',
-    name: 'Herr Tech World — Abo S',
+    name: 'Herr Tech World – Abo S',
     description:
       'Starter-Abo. Herr Tech GPT + KI Toolbox mit 200 Credits pro Monat. ' +
       'Für KI Marketing Club Mitglieder kostenlos enthalten.',
@@ -41,7 +41,7 @@ const PLANS = [
     slug: 'herr_tech_m',
     dbPlanId: 'plan_m',
     tier: 'M',
-    name: 'Herr Tech World — Abo M',
+    name: 'Herr Tech World – Abo M',
     description:
       'Professional-Abo für aktive Content-Creator. Herr Tech GPT + KI Toolbox ' +
       'mit 1.500 Credits pro Monat.',
@@ -54,7 +54,7 @@ const PLANS = [
     slug: 'herr_tech_l',
     dbPlanId: 'plan_l',
     tier: 'L',
-    name: 'Herr Tech World — Abo L',
+    name: 'Herr Tech World – Abo L',
     description:
       'Power-Abo für Agenturen und Power-User. Herr Tech GPT + KI Toolbox ' +
       'mit 5.000 Credits pro Monat plus Early Access für neue Features.',
@@ -69,7 +69,7 @@ const PACKS = [
   {
     slug: 'pack_100',
     dbPackId: 'pack_100',
-    name: 'Herr Tech World — +100 Credits',
+    name: 'Herr Tech World – +100 Credits',
     description: '100 zusätzliche Credits. Gültig 12 Monate ab Kauf.',
     credits: 100,
     prices: [
@@ -80,7 +80,7 @@ const PACKS = [
   {
     slug: 'pack_500',
     dbPackId: 'pack_500',
-    name: 'Herr Tech World — +500 Credits',
+    name: 'Herr Tech World – +500 Credits',
     description: '500 zusätzliche Credits. Gültig 12 Monate ab Kauf.',
     credits: 500,
     prices: [
@@ -91,7 +91,7 @@ const PACKS = [
   {
     slug: 'pack_2000',
     dbPackId: 'pack_2000',
-    name: 'Herr Tech World — +2.000 Credits',
+    name: 'Herr Tech World – +2.000 Credits',
     description: '2.000 zusätzliche Credits. Gültig 12 Monate ab Kauf.',
     credits: 2000,
     prices: [
@@ -187,7 +187,14 @@ async function ensurePrice(lookupKey, productId, params) {
   }
 
   if (params.recurring) {
-    priceParams.recurring = { interval: params.recurring }
+    // Unsere Config nutzt 'monthly' / 'yearly' (human-readable),
+    // Stripe will 'month' / 'year'. Mapping hier.
+    const intervalMap = { monthly: 'month', yearly: 'year' }
+    const interval = intervalMap[params.recurring]
+    if (!interval) {
+      throw new Error(`Unbekanntes recurring-Interval: ${params.recurring}`)
+    }
+    priceParams.recurring = { interval }
   }
 
   const created = await stripe.prices.create(priceParams)
