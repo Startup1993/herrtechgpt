@@ -6,7 +6,8 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "stripe:seed": "node --env-file=.env.local scripts/stripe-seed.mjs"
   },
   "dependencies": {
     "@ai-sdk/anthropic": "^3.0.64",
