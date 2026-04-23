@@ -3,6 +3,8 @@ import { cookies } from 'next/headers'
 import { redirect } from 'next/navigation'
 import { computeEffectiveAccess, VIEW_AS_COOKIE } from '@/lib/access'
 import { getPermissionMatrix, getUpsellCopy } from '@/lib/permissions'
+import { getActivePlans, getMonetizationState } from '@/lib/monetization'
+import type { Plan } from '@/lib/types'
 import DashboardView from './DashboardView'
 
 export default async function DashboardPage() {
@@ -18,7 +20,12 @@ export default async function DashboardPage() {
 
   const viewAsRaw = cookieStore.get(VIEW_AS_COOKIE)?.value
   const access = computeEffectiveAccess(profile, viewAsRaw)
-  const upsell = await getUpsellCopy(supabase, access.tier)
+
+  const [upsell, plans, monetization] = await Promise.all([
+    getUpsellCopy(supabase, access.tier),
+    getActivePlans(supabase),
+    getMonetizationState(supabase, user.id, access.tier),
+  ])
 
   return (
     <DashboardView
@@ -26,6 +33,12 @@ export default async function DashboardPage() {
       isAdmin={access.isAdmin}
       states={matrix[access.tier]}
       upsell={upsell}
+      plans={plans as Plan[]}
+      priceBand={monetization.priceBand}
+      isCommunity={access.tier === 'premium'}
+      hasActiveSubscription={monetization.hasActiveSubscription}
+      currentPlanId={monetization.planId}
+      currentCycle={monetization.subscription?.billing_cycle ?? null}
     />
   )
 }

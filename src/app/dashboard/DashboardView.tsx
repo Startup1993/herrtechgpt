@@ -4,11 +4,13 @@ import Link from 'next/link'
 import { useState, useEffect } from 'react'
 import {
   GraduationCap, Bot, Wrench, ArrowRight, Sparkles, Play, Zap,
-  Lock, Clock, Check, Users
+  Lock, Clock, Check, Users, Rocket
 } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
 import type { AccessTier } from '@/lib/access'
 import type { FeatureKey, FeatureState, UpsellCopy } from '@/lib/permissions'
+import type { Plan } from '@/lib/types'
+import { PricingModal } from '@/components/pricing-modal'
 
 // ═══════════════════════════════════════════════════════════
 // DASHBOARD TILE
@@ -317,6 +319,190 @@ function MarketingClubFull({ upsell }: { upsell: UpsellCopy }) {
 }
 
 // ═══════════════════════════════════════════════════════════
+// SUBSCRIPTION UPSELL CARD — Zweigeteilt: Abo + Community
+// ═══════════════════════════════════════════════════════════
+
+function SubscriptionUpsellCard({
+  plans,
+  priceBand,
+  isCommunity,
+  upsell,
+  onOpenPricing,
+}: {
+  plans: Plan[]
+  priceBand: 'basic' | 'community'
+  isCommunity: boolean
+  upsell: UpsellCopy
+  onOpenPricing: () => void
+}) {
+  // Highlight-Plan für die Kachel-Vorschau: M (mittleres Angebot).
+  const highlightPlan = plans.find((p) => p.tier === 'M') ?? plans[0]
+  const highlightCents =
+    priceBand === 'community'
+      ? highlightPlan?.price_community_cents
+      : highlightPlan?.price_basic_cents
+  const highlightBasicCents = highlightPlan?.price_basic_cents
+  const showStrike =
+    priceBand === 'community' &&
+    highlightBasicCents != null &&
+    highlightCents != null &&
+    highlightBasicCents > highlightCents
+
+  const formatEuro = (cents: number | null | undefined) => {
+    if (cents == null) return '—'
+    const euro = cents / 100
+    return euro % 1 === 0 ? `${euro}` : euro.toFixed(2).replace('.', ',')
+  }
+
+  return (
+    <div className="mb-8 rounded-[var(--radius-2xl)] border border-border bg-surface overflow-hidden">
+      <div className="grid grid-cols-1 lg:grid-cols-2 divide-y lg:divide-y-0 lg:divide-x divide-border">
+        {/* Links: Abo abschließen */}
+        <div className="p-6 sm:p-7 flex flex-col">
+          <div className="flex items-center gap-2 mb-3">
+            <div className="w-9 h-9 rounded-lg bg-primary/10 flex items-center justify-center">
+              <Rocket size={18} className="text-primary" />
+            </div>
+            <span className="text-xs font-semibold uppercase tracking-wider text-primary">
+              Abo abschließen
+            </span>
+          </div>
+          <h3 className="text-lg sm:text-xl font-bold text-foreground mb-1.5">
+            Schalte alles frei
+          </h3>
+          <p className="text-sm text-muted mb-4 leading-relaxed">
+            Herr Tech GPT + KI Toolbox nutzen mit monatlichen Credits. S, M oder L — du
+            wählst, wie viel du brauchst.
+          </p>
+
+          {/* Mini-Preis-Teaser */}
+          {highlightPlan && highlightCents != null && (
+            <div className="mb-4 px-3 py-2.5 rounded-xl bg-primary/5 border border-primary/15 inline-flex items-baseline gap-2">
+              <span className="text-xs text-muted">Ab</span>
+              {showStrike && (
+                <span className="text-xs text-muted line-through">
+                  {formatEuro(highlightBasicCents)} €
+                </span>
+              )}
+              <span className="text-xl font-bold text-foreground">
+                {formatEuro(highlightCents)} €
+              </span>
+              <span className="text-xs text-muted">/ Monat</span>
+            </div>
+          )}
+
+          <ul className="space-y-1.5 mb-5 flex-1">
+            {['Herr Tech GPT — 6 Experten-Agenten', 'KI Toolbox — Carousel, Video-Creator', 'Monatliche Credits für jede Aktion', 'Jederzeit kündbar'].map((b) => (
+              <li key={b} className="flex items-start gap-2 text-sm text-foreground">
+                <Check size={14} className="text-primary shrink-0 mt-0.5" />
+                <span>{b}</span>
+              </li>
+            ))}
+          </ul>
+
+          <button
+            onClick={onOpenPricing}
+            className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-5 py-3 bg-primary hover:bg-primary-hover text-primary-foreground font-semibold rounded-xl text-sm transition-colors"
+          >
+            Plan wählen
+            <ArrowRight size={16} />
+          </button>
+        </div>
+
+        {/* Rechts: KI Marketing Club — nur wenn NICHT Community */}
+        {!isCommunity ? (
+          <div className="p-6 sm:p-7 bg-gradient-to-br from-primary/5 to-primary/10 flex flex-col">
+            <div className="flex items-center gap-2 mb-3">
+              <div className="w-9 h-9 rounded-lg bg-primary/15 flex items-center justify-center">
+                <Users size={18} className="text-primary" />
+              </div>
+              <span className="text-xs font-semibold uppercase tracking-wider text-primary">
+                KI Marketing Club
+              </span>
+              {upsell.cta_coming_soon && (
+                <span className="inline-flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wider px-2 py-0.5 rounded-full bg-amber-100 text-amber-700 dark:bg-amber-950/30 dark:text-amber-400">
+                  <Clock size={10} /> Coming Soon
+                </span>
+              )}
+            </div>
+            <h3 className="text-lg sm:text-xl font-bold text-foreground mb-1.5">
+              {upsell.heading}
+            </h3>
+            <p className="text-sm text-muted mb-4 leading-relaxed">{upsell.intro}</p>
+
+            {upsell.benefits.length > 0 && (
+              <ul className="space-y-1.5 mb-5 flex-1">
+                {upsell.benefits.slice(0, 4).map((b) => (
+                  <li key={b} className="flex items-start gap-2 text-sm text-foreground">
+                    <Check size={14} className="text-primary shrink-0 mt-0.5" />
+                    <span>{b}</span>
+                  </li>
+                ))}
+              </ul>
+            )}
+
+            {upsell.cta_coming_soon || !upsell.cta_url ? (
+              <div>
+                <button
+                  disabled
+                  className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-5 py-3 bg-primary/40 text-white font-semibold rounded-xl text-sm cursor-not-allowed"
+                >
+                  {upsell.cta_label}
+                </button>
+                {upsell.cta_coming_soon && (
+                  <p className="text-[11px] text-muted mt-2">
+                    Anmeldung startet bald — wir informieren dich.
+                  </p>
+                )}
+              </div>
+            ) : (
+              <a
+                href={upsell.cta_url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-5 py-3 bg-primary hover:bg-primary-hover text-primary-foreground font-semibold rounded-xl text-sm transition-colors"
+              >
+                {upsell.cta_label}
+              </a>
+            )}
+          </div>
+        ) : (
+          // Community-Mitglied: zeigt „du bist schon drin" + Link zur Community
+          <div className="p-6 sm:p-7 bg-gradient-to-br from-primary/5 to-primary/10 flex flex-col">
+            <div className="flex items-center gap-2 mb-3">
+              <div className="w-9 h-9 rounded-lg bg-primary/15 flex items-center justify-center">
+                <Sparkles size={18} className="text-primary" />
+              </div>
+              <span className="text-xs font-semibold uppercase tracking-wider text-primary">
+                Du bist dabei
+              </span>
+            </div>
+            <h3 className="text-lg sm:text-xl font-bold text-foreground mb-1.5">
+              KI Marketing Club Mitglied
+            </h3>
+            <p className="text-sm text-muted mb-4 leading-relaxed">
+              Plan S ist für dich inklusive. Wähle links einfach deinen Plan — Community-Preise
+              sind automatisch hinterlegt. Tipp: M oder L, wenn du Video-Content machst.
+            </p>
+            {upsell.cta_url && (
+              <a
+                href={upsell.cta_url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-4 py-2 border border-primary/30 text-primary hover:bg-primary/5 font-medium rounded-xl text-sm transition-colors"
+              >
+                <Users size={14} />
+                Zur Community
+              </a>
+            )}
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
+
+// ═══════════════════════════════════════════════════════════
 // MAIN DASHBOARD PAGE
 // ═══════════════════════════════════════════════════════════
 
@@ -334,19 +520,36 @@ export default function DashboardView({
   isAdmin,
   states,
   upsell,
+  plans,
+  priceBand,
+  isCommunity,
+  hasActiveSubscription,
+  currentPlanId,
+  currentCycle,
 }: {
   tier: AccessTier
   isAdmin: boolean
   states: Record<FeatureKey, FeatureState>
   upsell: UpsellCopy
+  plans: Plan[]
+  priceBand: 'basic' | 'community'
+  isCommunity: boolean
+  hasActiveSubscription: boolean
+  currentPlanId: string | null
+  currentCycle: 'monthly' | 'yearly' | null
 }) {
+  const [pricingOpen, setPricingOpen] = useState(false)
+
   const classroomLock = stateToLock(states.classroom, isAdmin)
   const chatLock = stateToLock(states.chat, isAdmin)
   const toolboxLock = stateToLock(states.toolbox, isAdmin)
 
-  // Alle nicht-Admin-User sehen den vollen Upsell-Block (Copy wird pro Tier im Admin gepflegt).
-  // Admins sehen nur den kompakten Community-Link oben rechts, da der Block sie selbst nicht betrifft.
-  const showFullUpsell = !isAdmin
+  // Wann welche Upsell-Variante?
+  // - Kein Abo + nicht Admin → neue zweigeteilte Subscription-Upsell-Karte
+  // - Abo aktiv (oder Admin) + nicht community → alte MarketingClubFull (Community-Upsell ohne Abo-Teil)
+  // - Admin → nur kompakter Community-Link oben
+  const showSubscriptionCard = !isAdmin && !hasActiveSubscription
+  const showFullUpsell = !isAdmin && hasActiveSubscription && !isCommunity
   const showCompactCommunity = isAdmin
 
   return (
@@ -371,7 +574,18 @@ export default function DashboardView({
         <LearningPathWidget />
       </div>
 
-      {/* Community Upsell — für basic + alumni */}
+      {/* Abo-Upsell — zweigeteilt, wenn kein aktives Abo */}
+      {showSubscriptionCard && (
+        <SubscriptionUpsellCard
+          plans={plans}
+          priceBand={priceBand}
+          isCommunity={isCommunity}
+          upsell={upsell}
+          onOpenPricing={() => setPricingOpen(true)}
+        />
+      )}
+
+      {/* Community Upsell — wenn Abo aktiv aber nicht community */}
       {showFullUpsell && <MarketingClubFull upsell={upsell} />}
 
       {/* Main Tiles */}
@@ -428,6 +642,18 @@ export default function DashboardView({
           Support kontaktieren
         </Link>
       </div>
+
+      {/* Pricing-Popup — kontextuell überall auf dem Dashboard auslösbar */}
+      <PricingModal
+        open={pricingOpen}
+        onClose={() => setPricingOpen(false)}
+        plans={plans}
+        defaultPriceBand={priceBand}
+        isCommunity={isCommunity}
+        currentPlanId={currentPlanId}
+        currentCycle={currentCycle}
+        hasActiveSubscription={hasActiveSubscription}
+      />
     </div>
   )
 }

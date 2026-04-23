@@ -52,7 +52,17 @@ export default function PricingClient({
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ planId, cycle }),
       })
-      const data = await res.json()
+      // Safe JSON-Parse — Body ist bei Framework-500ern leer und würde
+      // "Unexpected end of JSON input" werfen
+      const text = await res.text()
+      let data: { url?: string; error?: string } = {}
+      try {
+        data = text ? JSON.parse(text) : {}
+      } catch {
+        throw new Error(
+          `Server hat keine gültige Antwort geschickt (Status ${res.status}). Nochmal probieren.`
+        )
+      }
       if (!res.ok || !data.url) {
         throw new Error(data.error || 'Checkout konnte nicht gestartet werden')
       }

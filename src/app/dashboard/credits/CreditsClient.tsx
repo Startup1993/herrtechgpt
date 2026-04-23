@@ -41,7 +41,13 @@ export default function CreditsClient({
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ packId }),
       })
-      const data = await res.json()
+      const text = await res.text()
+      let data: { url?: string; error?: string } = {}
+      try {
+        data = text ? JSON.parse(text) : {}
+      } catch {
+        throw new Error(`Server-Fehler (${res.status}). Nochmal probieren.`)
+      }
       if (!res.ok || !data.url) throw new Error(data.error || 'Checkout nicht möglich')
       window.location.href = data.url as string
     } catch (err) {
