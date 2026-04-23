@@ -41,6 +41,7 @@ import {
   Loader2,
   CreditCard,
   Coins,
+  Mail,
 } from 'lucide-react'
 
 // ═══════════════════════════════════════════════════════════
@@ -972,6 +973,13 @@ function AdminSidebar({
             label="Gruppen & Rechte"
             description="Matrix + Upsell-Texte"
             isActive={pathname.startsWith('/admin/groups')}
+          />
+          <NavItem
+            href="/admin/newsletter"
+            icon={Mail}
+            label="Newsletter"
+            description="Coming-Soon-Signups + Einladungen"
+            isActive={pathname.startsWith('/admin/newsletter')}
           />
         </div>
 
