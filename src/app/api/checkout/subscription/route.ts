@@ -106,48 +106,70 @@ export async function POST(req: Request) {
     )
   }
 
-  // Stripe Customer sicherstellen. Email kommt aus Supabase-Auth (immer verfügbar),
-  // Name aus user_metadata (optional, vom OAuth-Provider oder bei Signup gesetzt).
-  const customerName =
-    (user.user_metadata?.full_name as string | undefined) ??
-    (user.user_metadata?.name as string | undefined) ??
-    undefined
-  const customerId = await ensureStripeCustomer({
-    userId: user.id,
-    email: user.email ?? '',
-    name: customerName,
-  })
+  // Customer + Stripe-Session — alles in try/catch damit der Client eine
+  // klare Fehlermeldung bekommt statt nur "Checkout konnte nicht gestartet werden"
+  try {
+    const customerName =
+      (user.user_metadata?.full_name as string | undefined) ??
+      (user.user_metadata?.name as string | undefined) ??
+      undefined
+    const customerId = await ensureStripeCustomer({
+      userId: user.id,
+      email: user.email ?? '',
+      name: customerName,
+    })
 
-  // Checkout-Session erstellen
-  const stripe = getStripe()
-  const origin = getAppUrl()
+    const stripe = getStripe()
+    const origin = getAppUrl()
 
-  const session = await stripe.checkout.sessions.create({
-    mode: 'subscription',
-    customer: customerId,
-    line_items: [{ price: priceId, quantity: 1 }],
-    allow_promotion_codes: true,
-    billing_address_collection: 'required',
-    tax_id_collection: { enabled: true },
-    automatic_tax: { enabled: true },
-    success_url: `${origin}/dashboard/account/billing?checkout=success&session_id={CHECKOUT_SESSION_ID}`,
-    cancel_url: `${origin}/dashboard/pricing?checkout=cancelled`,
-    subscription_data: {
+    const session = await stripe.checkout.sessions.create({
+      mode: 'subscription',
+      customer: customerId,
+      line_items: [{ price: priceId, quantity: 1 }],
+      allow_promotion_codes: true,
+      billing_address_collection: 'required',
+      tax_id_collection: { enabled: true },
+      // automatic_tax nur aktivieren wenn explizit konfiguriert. Stripe wirft
+      // sonst Fehler wenn Tax-Registration/Origin-Adresse fehlt.
+      automatic_tax: { enabled: process.env.STRIPE_AUTOMATIC_TAX === 'true' },
+      success_url: `${origin}/dashboard/account/billing?checkout=success&session_id={CHECKOUT_SESSION_ID}`,
+      cancel_url: `${origin}/dashboard/pricing?checkout=cancelled`,
+      subscription_data: {
+        metadata: {
+          user_id: user.id,
+          plan_id: planId,
+          price_band: priceBand,
+          cycle,
+        },
+      },
       metadata: {
         user_id: user.id,
         plan_id: planId,
         price_band: priceBand,
         cycle,
       },
-    },
-    metadata: {
-      user_id: user.id,
-      plan_id: planId,
-      price_band: priceBand,
-      cycle,
-    },
-    locale: 'de',
-  })
+      locale: 'de',
+    })
 
-  return NextResponse.json({ url: session.url })
+    return NextResponse.json({ url: session.url })
+  } catch (err) {
+    // Detaillierte Fehlerinfo für Vercel-Logs + sprechende Message an Client
+    const msg = err instanceof Error ? err.message : String(err)
+    const stripeCode = (err as { code?: string })?.code
+    console.error('[checkout/subscription] Fehler:', {
+      message: msg,
+      code: stripeCode,
+      planId,
+      priceBand,
+      cycle,
+      priceId,
+      userId: user.id,
+    })
+    return NextResponse.json(
+      {
+        error: `Checkout-Fehler: ${msg}${stripeCode ? ` (${stripeCode})` : ''}`,
+      },
+      { status: 500 }
+    )
+  }
 }
