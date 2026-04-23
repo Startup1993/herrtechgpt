@@ -38,6 +38,7 @@ export default async function DashboardPage() {
       isCommunity={access.tier === 'premium'}
       hasActiveSubscription={monetization.hasActiveSubscription}
       currentPlanId={monetization.planId}
+      currentPlanTier={monetization.planTier}
       currentCycle={monetization.subscription?.billing_cycle ?? null}
     />
   )

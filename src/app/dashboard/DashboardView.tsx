@@ -467,37 +467,88 @@ function SubscriptionUpsellCard({
             )}
           </div>
         ) : (
-          // Community-Mitglied: zeigt „du bist schon drin" + Link zur Community
+          // Community-Mitglied (kein Abo): Plan S gratis + Upgrade-Option auf M/L
           <div className="p-6 sm:p-7 bg-gradient-to-br from-primary/5 to-primary/10 flex flex-col">
             <div className="flex items-center gap-2 mb-3">
               <div className="w-9 h-9 rounded-lg bg-primary/15 flex items-center justify-center">
                 <Sparkles size={18} className="text-primary" />
               </div>
               <span className="text-xs font-semibold uppercase tracking-wider text-primary">
-                Du bist dabei
+                Als Community-Mitglied
               </span>
             </div>
             <h3 className="text-lg sm:text-xl font-bold text-foreground mb-1.5">
-              KI Marketing Club Mitglied
+              Plan S ist für dich inklusive
             </h3>
             <p className="text-sm text-muted mb-4 leading-relaxed">
-              Plan S ist für dich inklusive. Wähle links einfach deinen Plan — Community-Preise
-              sind automatisch hinterlegt. Tipp: M oder L, wenn du Video-Content machst.
+              Dein KI Marketing Club-Zugang schaltet Plan S automatisch frei — links
+              einmal aktivieren. Wenn dir die 200 Credits pro Monat nicht reichen,
+              kannst du jederzeit auf M oder L upgraden (zu Community-Preisen).
             </p>
-            {upsell.cta_url && (
-              <a
-                href={upsell.cta_url}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-4 py-2 border border-primary/30 text-primary hover:bg-primary/5 font-medium rounded-xl text-sm transition-colors"
-              >
-                <Users size={14} />
-                Zur Community
-              </a>
-            )}
+            <ul className="space-y-1.5 mb-4 flex-1">
+              {[
+                'Plan S — kostenlos enthalten',
+                'Plan M — 1.500 Credits zu Community-Preis',
+                'Plan L — 5.000 Credits zu Community-Preis',
+              ].map((b) => (
+                <li key={b} className="flex items-start gap-2 text-sm text-foreground">
+                  <Check size={14} className="text-primary shrink-0 mt-0.5" />
+                  <span>{b}</span>
+                </li>
+              ))}
+            </ul>
+            <button
+              onClick={onOpenPricing}
+              className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-4 py-2 bg-primary/15 hover:bg-primary/25 text-primary font-semibold rounded-xl text-sm transition-colors"
+            >
+              Plan vergleichen & aktivieren
+              <ArrowRight size={14} />
+            </button>
           </div>
         )}
       </div>
+    </div>
+  )
+}
+
+// ═══════════════════════════════════════════════════════════
+// UPGRADE HINT CARD — wenn User bereits Plan S/M hat und upgraden könnte
+// ═══════════════════════════════════════════════════════════
+
+function UpgradeHintCard({
+  currentTier,
+  isCommunity,
+  onOpenPricing,
+}: {
+  currentTier: 'S' | 'M'
+  isCommunity: boolean
+  onOpenPricing: () => void
+}) {
+  const nextTier = currentTier === 'S' ? 'M' : 'L'
+  const nextCredits = nextTier === 'M' ? '1.500' : '5.000'
+  const currentCredits = currentTier === 'S' ? '200' : '1.500'
+
+  return (
+    <div className="mb-8 rounded-[var(--radius-2xl)] border border-primary/25 bg-gradient-to-r from-primary/5 to-primary/10 p-5 sm:p-6 flex flex-col sm:flex-row items-start sm:items-center gap-4">
+      <div className="w-10 h-10 rounded-lg bg-primary/15 flex items-center justify-center shrink-0">
+        <Rocket size={20} className="text-primary" />
+      </div>
+      <div className="flex-1">
+        <h3 className="text-base font-semibold text-foreground">
+          Reicht dir Plan {currentTier} nicht?
+        </h3>
+        <p className="text-sm text-muted mt-0.5">
+          Mit Plan {nextTier} bekommst du {nextCredits} Credits statt {currentCredits} pro Monat
+          {isCommunity ? ' — zu deinem Community-Preis' : ''}.
+        </p>
+      </div>
+      <button
+        onClick={onOpenPricing}
+        className="shrink-0 inline-flex items-center gap-2 px-4 py-2 bg-primary hover:bg-primary-hover text-primary-foreground font-semibold rounded-xl text-sm transition-colors"
+      >
+        Auf {nextTier} upgraden
+        <ArrowRight size={14} />
+      </button>
     </div>
   )
 }
@@ -525,6 +576,7 @@ export default function DashboardView({
   isCommunity,
   hasActiveSubscription,
   currentPlanId,
+  currentPlanTier,
   currentCycle,
 }: {
   tier: AccessTier
@@ -536,6 +588,7 @@ export default function DashboardView({
   isCommunity: boolean
   hasActiveSubscription: boolean
   currentPlanId: string | null
+  currentPlanTier: 'S' | 'M' | 'L' | null
   currentCycle: 'monthly' | 'yearly' | null
 }) {
   const [pricingOpen, setPricingOpen] = useState(false)
@@ -544,11 +597,16 @@ export default function DashboardView({
   const chatLock = stateToLock(states.chat, isAdmin)
   const toolboxLock = stateToLock(states.toolbox, isAdmin)
 
-  // Wann welche Upsell-Variante?
-  // - Kein Abo + nicht Admin → neue zweigeteilte Subscription-Upsell-Karte
-  // - Abo aktiv (oder Admin) + nicht community → alte MarketingClubFull (Community-Upsell ohne Abo-Teil)
+  // Anzeige-Logik Upsell-Karten:
+  // - Kein Abo + nicht Admin → große zweigeteilte Subscription-Upsell-Karte
+  // - Aktives Abo S oder M + nicht Admin → kleine UpgradeHintCard (mehr Credits via M/L)
+  // - Abo aktiv + nicht community + nicht Admin → zusätzlich MarketingClubFull (Community beitreten)
   // - Admin → nur kompakter Community-Link oben
   const showSubscriptionCard = !isAdmin && !hasActiveSubscription
+  const showUpgradeHint =
+    !isAdmin &&
+    hasActiveSubscription &&
+    (currentPlanTier === 'S' || currentPlanTier === 'M')
   const showFullUpsell = !isAdmin && hasActiveSubscription && !isCommunity
   const showCompactCommunity = isAdmin
 
@@ -581,6 +639,15 @@ export default function DashboardView({
           priceBand={priceBand}
           isCommunity={isCommunity}
           upsell={upsell}
+          onOpenPricing={() => setPricingOpen(true)}
+        />
+      )}
+
+      {/* Upgrade-Hinweis — wenn Abo S oder M aktiv */}
+      {showUpgradeHint && (currentPlanTier === 'S' || currentPlanTier === 'M') && (
+        <UpgradeHintCard
+          currentTier={currentPlanTier}
+          isCommunity={isCommunity}
           onOpenPricing={() => setPricingOpen(true)}
         />
       )}
