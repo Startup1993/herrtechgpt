@@ -120,7 +120,7 @@ export async function POST(req: Request) {
     })
 
     const stripe = getStripe()
-    const origin = getAppUrl()
+    const origin = getAppUrl(req)
 
     const session = await stripe.checkout.sessions.create({
       mode: 'subscription',
