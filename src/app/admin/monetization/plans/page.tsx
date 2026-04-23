@@ -26,8 +26,9 @@ export default async function AdminPlansPage() {
             <line x1="12" y1="17" x2="12.01" y2="17" />
           </svg>
           <span>
-            Ablefy-Produkt-IDs müssen nach dem Anlegen in Ablefy hier eingetragen werden —
-            sonst kann der Checkout nicht starten.
+            Stripe Price-IDs (<code>price_xxx</code>) müssen nach dem Anlegen in Stripe hier
+            eingetragen werden — sonst kann der Checkout nicht starten. Pro Plan: 1 Product +
+            bis zu 4 Prices (Basic/Community × monatlich/jährlich).
           </span>
         </div>
       </div>

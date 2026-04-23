@@ -1,9 +1,10 @@
 -- =============================================================================
--- Monetarisierungs-Grundgerüst
+-- Monetarisierungs-Grundgerüst (Stripe)
 -- =============================================================================
 -- S/M/L Abos mit Basic- und Community-Preisen, Credit-System, Top-ups.
--- Provider-agnostisch (Ablefy-IDs optional). RLS streng: User liest nur eigene
--- Subscriptions/Wallet/Transactions. Admins CRUD auf Plans, Packs, Costs.
+-- Payment-Provider: Stripe (Products + Prices + Subscriptions + Checkout).
+-- RLS streng: User liest nur eigene Subscriptions/Wallet/Transactions.
+-- Admins CRUD auf Plans, Packs, Costs.
 --
 -- Price-Band-Logik:
 --   access_tier='premium' (KI Marketing Club)  → Community-Preis
@@ -18,6 +19,9 @@
 -- -----------------------------------------------------------------------------
 -- 1) PLANS — S/M/L Konfiguration (Admin-editierbar)
 -- -----------------------------------------------------------------------------
+-- Stripe-Modell: Ein Product pro Plan (z.B. "Herr Tech World S"),
+-- mit 4 Prices (basic monthly, community monthly, basic yearly, community yearly).
+-- Wir speichern hier die Price-IDs (price_xxx), die im Checkout übergeben werden.
 CREATE TABLE IF NOT EXISTS public.plans (
   id text PRIMARY KEY,                      -- 'plan_s', 'plan_m', 'plan_l'
   tier text NOT NULL,                       -- 'S' | 'M' | 'L'
@@ -28,10 +32,11 @@ CREATE TABLE IF NOT EXISTS public.plans (
   price_yearly_basic_cents integer,         -- optional: 11 Monate × monatlich
   price_yearly_community_cents integer,
   credits_per_month integer NOT NULL,
-  ablefy_product_basic text,                -- Ablefy Product-ID (Basic-Preis)
-  ablefy_product_community text,            -- Ablefy Product-ID (Community-Preis)
-  ablefy_product_yearly_basic text,
-  ablefy_product_yearly_community text,
+  stripe_product_id text,                   -- Stripe Product-ID (prod_xxx) — 1× pro Plan
+  stripe_price_basic_monthly text,          -- Stripe Price-ID (price_xxx) Basic monatlich
+  stripe_price_community_monthly text,      -- Stripe Price-ID Community monatlich
+  stripe_price_basic_yearly text,           -- Stripe Price-ID Basic jährlich
+  stripe_price_community_yearly text,       -- Stripe Price-ID Community jährlich
   features jsonb DEFAULT '[]'::jsonb,       -- UI: Liste von Feature-Bullets
   sort_order integer DEFAULT 0,
   active boolean DEFAULT true,
@@ -49,10 +54,11 @@ CREATE TABLE IF NOT EXISTS public.subscriptions (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   user_id uuid NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
   plan_id text NOT NULL REFERENCES public.plans(id),
-  status text NOT NULL DEFAULT 'active',    -- active | past_due | cancelled | ended
+  status text NOT NULL DEFAULT 'active',    -- active | trialing | past_due | cancelled | ended
   price_band text NOT NULL,                 -- 'basic' | 'community' (eingefroren beim Start)
   billing_cycle text NOT NULL DEFAULT 'monthly', -- 'monthly' | 'yearly'
-  ablefy_subscription_id text UNIQUE,       -- Ablefy-Referenz
+  stripe_subscription_id text UNIQUE,       -- Stripe sub_xxx
+  stripe_price_id text,                     -- Welche Price-ID bei Stripe läuft (für Migration bei Preisänderung)
   started_at timestamptz DEFAULT now(),
   current_period_start timestamptz DEFAULT now(),
   current_period_end timestamptz NOT NULL,
@@ -62,7 +68,7 @@ CREATE TABLE IF NOT EXISTS public.subscriptions (
   metadata jsonb DEFAULT '{}'::jsonb,
   created_at timestamptz DEFAULT now(),
   updated_at timestamptz DEFAULT now(),
-  CONSTRAINT subscriptions_status_check CHECK (status IN ('active', 'past_due', 'cancelled', 'ended')),
+  CONSTRAINT subscriptions_status_check CHECK (status IN ('active', 'trialing', 'past_due', 'cancelled', 'ended')),
   CONSTRAINT subscriptions_price_band_check CHECK (price_band IN ('basic', 'community')),
   CONSTRAINT subscriptions_billing_cycle_check CHECK (billing_cycle IN ('monthly', 'yearly'))
 );
@@ -98,7 +104,8 @@ CREATE TABLE IF NOT EXISTS public.credit_purchases (
   credits_remaining integer NOT NULL,
   expires_at timestamptz NOT NULL,
   pack_id text,
-  ablefy_order_id text,
+  stripe_checkout_session_id text,          -- cs_xxx (Idempotenz beim Webhook)
+  stripe_payment_intent_id text,            -- pi_xxx (Fallback-Referenz)
   created_at timestamptz DEFAULT now(),
   CONSTRAINT credit_purchases_remaining_nonneg CHECK (credits_remaining >= 0),
   CONSTRAINT credit_purchases_remaining_max CHECK (credits_remaining <= credits_total)
@@ -141,8 +148,9 @@ CREATE TABLE IF NOT EXISTS public.credit_packs (
   credits integer NOT NULL,
   price_basic_cents integer NOT NULL,
   price_community_cents integer NOT NULL,
-  ablefy_product_basic text,
-  ablefy_product_community text,
+  stripe_product_id text,                   -- Stripe Product-ID (prod_xxx)
+  stripe_price_basic text,                  -- Stripe Price-ID (price_xxx) Basic
+  stripe_price_community text,              -- Stripe Price-ID Community
   expiry_months integer DEFAULT 12,         -- Rolling-Window in Monaten
   sort_order integer DEFAULT 0,
   active boolean DEFAULT true,
@@ -167,21 +175,33 @@ CREATE TABLE IF NOT EXISTS public.feature_credit_costs (
 );
 
 -- -----------------------------------------------------------------------------
--- 7) ABLEFY EVENTS — Webhook-Event-Log (Idempotenz)
+-- 7) STRIPE EVENTS — Webhook-Event-Log (Idempotenz)
 -- -----------------------------------------------------------------------------
-CREATE TABLE IF NOT EXISTS public.ablefy_events (
+CREATE TABLE IF NOT EXISTS public.stripe_events (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  event_id text UNIQUE NOT NULL,            -- Ablefy Event-ID für Idempotenz
-  event_type text NOT NULL,
+  event_id text UNIQUE NOT NULL,            -- Stripe evt_xxx für Idempotenz
+  event_type text NOT NULL,                 -- z.B. 'customer.subscription.updated'
   payload jsonb NOT NULL,
   processed_at timestamptz,
   error text,
   created_at timestamptz DEFAULT now()
 );
 
-CREATE INDEX IF NOT EXISTS idx_ablefy_events_unprocessed
-  ON public.ablefy_events(created_at)
+CREATE INDEX IF NOT EXISTS idx_stripe_events_unprocessed
+  ON public.stripe_events(created_at)
   WHERE processed_at IS NULL;
+
+-- -----------------------------------------------------------------------------
+-- 8) PROFILES ERWEITERUNG — stripe_customer_id
+-- -----------------------------------------------------------------------------
+-- Ein Customer bleibt über mehrere Subscriptions hinweg bestehen
+-- (z.B. bei Kündigung + Re-Abschluss, oder parallelem Top-up-Kauf).
+ALTER TABLE public.profiles
+  ADD COLUMN IF NOT EXISTS stripe_customer_id text UNIQUE;
+
+CREATE INDEX IF NOT EXISTS idx_profiles_stripe_customer_id
+  ON public.profiles(stripe_customer_id)
+  WHERE stripe_customer_id IS NOT NULL;
 
 -- =============================================================================
 -- RLS
@@ -194,7 +214,7 @@ ALTER TABLE public.credit_purchases ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.credit_transactions ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.credit_packs ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.feature_credit_costs ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.ablefy_events ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.stripe_events ENABLE ROW LEVEL SECURITY;
 
 -- Plans: alle eingeloggten User lesen (für Pricing-Seite), Admins schreiben
 CREATE POLICY "plans_read_authenticated" ON public.plans
@@ -259,11 +279,11 @@ CREATE POLICY "tx_admin_read" ON public.credit_transactions
 CREATE POLICY "tx_service_role" ON public.credit_transactions
   FOR ALL TO service_role USING (true);
 
--- Ablefy Events: nur Service-Role + Admin-Read (Debug)
-CREATE POLICY "ablefy_events_admin_read" ON public.ablefy_events
+-- Stripe Events: nur Service-Role + Admin-Read (Debug)
+CREATE POLICY "stripe_events_admin_read" ON public.stripe_events
   FOR SELECT TO authenticated
   USING (EXISTS (SELECT 1 FROM public.profiles WHERE id = auth.uid() AND role = 'admin'));
-CREATE POLICY "ablefy_events_service_role" ON public.ablefy_events
+CREATE POLICY "stripe_events_service_role" ON public.stripe_events
   FOR ALL TO service_role USING (true);
 
 -- =============================================================================

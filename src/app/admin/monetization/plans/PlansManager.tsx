@@ -34,10 +34,11 @@ function emptyPlan(tier: PlanTier): Plan {
     price_yearly_basic_cents: null,
     price_yearly_community_cents: null,
     credits_per_month: 0,
-    ablefy_product_basic: null,
-    ablefy_product_community: null,
-    ablefy_product_yearly_basic: null,
-    ablefy_product_yearly_community: null,
+    stripe_product_id: null,
+    stripe_price_basic_monthly: null,
+    stripe_price_community_monthly: null,
+    stripe_price_basic_yearly: null,
+    stripe_price_community_yearly: null,
     features: [],
     sort_order: TIERS.indexOf(tier) + 1,
     active: true,
@@ -176,9 +177,11 @@ export default function PlansManager({ initialPlans }: Props) {
               />
               <Field label="Credits / Monat" value={plan.credits_per_month.toLocaleString('de-DE')} />
               <Field
-                label="Ablefy verknüpft"
+                label="Stripe verknüpft"
                 value={
-                  plan.ablefy_product_basic && plan.ablefy_product_community ? 'Ja ✓' : 'Fehlt ⚠'
+                  plan.stripe_price_basic_monthly && plan.stripe_price_community_monthly
+                    ? 'Ja ✓'
+                    : 'Fehlt ⚠'
                 }
               />
             </div>
@@ -291,32 +294,40 @@ export default function PlansManager({ initialPlans }: Props) {
               </div>
 
               <div className="border-t border-border pt-4">
-                <h3 className="text-sm font-semibold text-foreground mb-3">Ablefy-Produkt-IDs</h3>
+                <h3 className="text-sm font-semibold text-foreground mb-3">Stripe-Verknüpfung</h3>
                 <p className="text-xs text-muted mb-3">
-                  Nach Anlage in Ablefy hier eintragen. Ohne diese IDs funktioniert der Checkout nicht.
+                  In Stripe 1 Product pro Plan anlegen (z.B. &quot;Herr Tech World {editing.tier}&quot;)
+                  und pro Preisvariante einen Price (<code>price_xxx</code>). IDs hier eintragen —
+                  ohne funktioniert der Checkout nicht.
                 </p>
+                <Input
+                  label="Stripe Product-ID (prod_xxx)"
+                  value={editing.stripe_product_id ?? ''}
+                  onChange={(v) => setEditing({ ...editing, stripe_product_id: v || null })}
+                />
+                <div className="h-3" />
                 <Row>
                   <Input
-                    label="Ablefy Basic (monatl.)"
-                    value={editing.ablefy_product_basic ?? ''}
-                    onChange={(v) => setEditing({ ...editing, ablefy_product_basic: v || null })}
+                    label="Price Basic — monatlich"
+                    value={editing.stripe_price_basic_monthly ?? ''}
+                    onChange={(v) => setEditing({ ...editing, stripe_price_basic_monthly: v || null })}
                   />
                   <Input
-                    label="Ablefy Community (monatl.)"
-                    value={editing.ablefy_product_community ?? ''}
-                    onChange={(v) => setEditing({ ...editing, ablefy_product_community: v || null })}
+                    label="Price Community — monatlich"
+                    value={editing.stripe_price_community_monthly ?? ''}
+                    onChange={(v) => setEditing({ ...editing, stripe_price_community_monthly: v || null })}
                   />
                 </Row>
                 <Row>
                   <Input
-                    label="Ablefy Basic (jährl.)"
-                    value={editing.ablefy_product_yearly_basic ?? ''}
-                    onChange={(v) => setEditing({ ...editing, ablefy_product_yearly_basic: v || null })}
+                    label="Price Basic — jährlich"
+                    value={editing.stripe_price_basic_yearly ?? ''}
+                    onChange={(v) => setEditing({ ...editing, stripe_price_basic_yearly: v || null })}
                   />
                   <Input
-                    label="Ablefy Community (jährl.)"
-                    value={editing.ablefy_product_yearly_community ?? ''}
-                    onChange={(v) => setEditing({ ...editing, ablefy_product_yearly_community: v || null })}
+                    label="Price Community — jährlich"
+                    value={editing.stripe_price_community_yearly ?? ''}
+                    onChange={(v) => setEditing({ ...editing, stripe_price_community_yearly: v || null })}
                   />
                 </Row>
               </div>

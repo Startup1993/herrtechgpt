@@ -88,10 +88,11 @@ export interface Plan {
   price_yearly_basic_cents: number | null
   price_yearly_community_cents: number | null
   credits_per_month: number
-  ablefy_product_basic: string | null
-  ablefy_product_community: string | null
-  ablefy_product_yearly_basic: string | null
-  ablefy_product_yearly_community: string | null
+  stripe_product_id: string | null
+  stripe_price_basic_monthly: string | null
+  stripe_price_community_monthly: string | null
+  stripe_price_basic_yearly: string | null
+  stripe_price_community_yearly: string | null
   features: string[]
   sort_order: number
   active: boolean
@@ -105,8 +106,9 @@ export interface CreditPack {
   credits: number
   price_basic_cents: number
   price_community_cents: number
-  ablefy_product_basic: string | null
-  ablefy_product_community: string | null
+  stripe_product_id: string | null
+  stripe_price_basic: string | null
+  stripe_price_community: string | null
   expiry_months: number
   sort_order: number
   active: boolean

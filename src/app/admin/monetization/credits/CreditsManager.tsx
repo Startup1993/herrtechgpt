@@ -301,8 +301,9 @@ function PacksSection({ initial }: { initial: CreditPack[] }) {
       credits: 0,
       price_basic_cents: 0,
       price_community_cents: 0,
-      ablefy_product_basic: null,
-      ablefy_product_community: null,
+      stripe_product_id: null,
+      stripe_price_basic: null,
+      stripe_price_community: null,
       expiry_months: 12,
       sort_order: (packs[packs.length - 1]?.sort_order ?? 0) + 1,
       active: true,
@@ -378,7 +379,7 @@ function PacksSection({ initial }: { initial: CreditPack[] }) {
               <th className="text-right px-4 py-2 font-medium">Basic</th>
               <th className="text-right px-4 py-2 font-medium">Community</th>
               <th className="text-right px-4 py-2 font-medium">ct / Credit</th>
-              <th className="text-left px-4 py-2 font-medium">Ablefy</th>
+              <th className="text-left px-4 py-2 font-medium">Stripe</th>
               <th className="text-right px-4 py-2 font-medium w-32">Aktionen</th>
             </tr>
           </thead>
@@ -400,7 +401,7 @@ function PacksSection({ initial }: { initial: CreditPack[] }) {
                     : '—'}
                 </td>
                 <td className="px-4 py-2 text-xs">
-                  {p.ablefy_product_basic && p.ablefy_product_community ? (
+                  {p.stripe_price_basic && p.stripe_price_community ? (
                     <span className="text-green-600">✓ verknüpft</span>
                   ) : (
                     <span className="text-amber-600">⚠ fehlt</span>
@@ -478,16 +479,21 @@ function PacksSection({ initial }: { initial: CreditPack[] }) {
               onChange={(c) => setEditing({ ...editing, price_community_cents: c })}
             />
           </Row>
+          <Field
+            label="Stripe Product-ID (prod_xxx) — 1 pro Pack"
+            value={editing.stripe_product_id ?? ''}
+            onChange={(v) => setEditing({ ...editing, stripe_product_id: v || null })}
+          />
           <Row>
             <Field
-              label="Ablefy-Produkt Basic"
-              value={editing.ablefy_product_basic ?? ''}
-              onChange={(v) => setEditing({ ...editing, ablefy_product_basic: v || null })}
+              label="Stripe Price Basic (price_xxx)"
+              value={editing.stripe_price_basic ?? ''}
+              onChange={(v) => setEditing({ ...editing, stripe_price_basic: v || null })}
             />
             <Field
-              label="Ablefy-Produkt Community"
-              value={editing.ablefy_product_community ?? ''}
-              onChange={(v) => setEditing({ ...editing, ablefy_product_community: v || null })}
+              label="Stripe Price Community (price_xxx)"
+              value={editing.stripe_price_community ?? ''}
+              onChange={(v) => setEditing({ ...editing, stripe_price_community: v || null })}
             />
           </Row>
           <Row>
