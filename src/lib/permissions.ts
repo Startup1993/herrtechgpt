@@ -15,10 +15,10 @@ export const FEATURE_LABELS: Record<FeatureKey, { label: string; emoji: string }
 }
 
 export const STATE_META: Record<FeatureState, { label: string; hint: string; badge: string }> = {
-  open:        { label: 'Freigeschaltet',  hint: 'Voller Zugriff',              badge: 'bg-green-100 text-green-700 dark:bg-green-950/30 dark:text-green-400' },
-  coming_soon: { label: 'Coming Soon',     hint: 'Sichtbar, noch nicht nutzbar',badge: 'bg-amber-100 text-amber-700 dark:bg-amber-950/30 dark:text-amber-400' },
-  community:   { label: 'Community-only',  hint: 'KI Marketing Club nötig',     badge: 'bg-primary/10 text-primary' },
-  paid:        { label: 'Pay-per-Use',     hint: 'Kann einzeln erworben werden',badge: 'bg-blue-100 text-blue-700 dark:bg-blue-950/30 dark:text-blue-400' },
+  open:        { label: 'Freigeschaltet',  hint: 'Voller Zugriff, keine Paywall',          badge: 'bg-green-100 text-green-700 dark:bg-green-950/30 dark:text-green-400' },
+  coming_soon: { label: 'Coming Soon',     hint: 'Sichtbar, noch nicht nutzbar',           badge: 'bg-amber-100 text-amber-700 dark:bg-amber-950/30 dark:text-amber-400' },
+  community:   { label: 'Community-only',  hint: 'Nur für KI Marketing Club Mitglieder',   badge: 'bg-primary/10 text-primary' },
+  paid:        { label: 'Abo-Zugriff',     hint: 'Seite sichtbar, Aktionen brauchen Abo',  badge: 'bg-blue-100 text-blue-700 dark:bg-blue-950/30 dark:text-blue-400' },
 }
 
 export const TIER_META: Record<AccessTier, { label: string; hint: string; dot: string }> = {
@@ -39,10 +39,14 @@ export interface UpsellCopy {
 
 export type PermissionMatrix = Record<AccessTier, Record<FeatureKey, FeatureState>>
 
+// Neue Defaults mit Abo-Modell:
+// - Classroom: bleibt wie vorher (Alumni lebenslang, Basic nur Community)
+// - Chat + Toolbox: Abo-Zugriff für alle Tiers ('paid' = Seite sichtbar, Aktionen brauchen Abo)
+//   Community-User haben Plan S gratis, müssen ihn aber aktivieren.
 const DEFAULT_MATRIX: PermissionMatrix = {
-  basic:   { classroom: 'community',   chat: 'community', toolbox: 'coming_soon' },
-  alumni:  { classroom: 'open',        chat: 'community', toolbox: 'coming_soon' },
-  premium: { classroom: 'open',        chat: 'open',      toolbox: 'coming_soon' },
+  basic:   { classroom: 'community',   chat: 'paid', toolbox: 'paid' },
+  alumni:  { classroom: 'open',        chat: 'paid', toolbox: 'paid' },
+  premium: { classroom: 'open',        chat: 'paid', toolbox: 'paid' },
 }
 
 const DEFAULT_UPSELL: Record<AccessTier, UpsellCopy> = {
@@ -134,13 +138,16 @@ export async function getUpsellCopy(supabase: SupabaseClient, tier: AccessTier):
   }
 }
 
-// Admin bypass: echte Admins (nicht impersonating) k\u00f6nnen immer alles
+// Admin bypass: echte Admins können immer alles
 export function canAccessFeature(state: FeatureState, isAdmin: boolean): boolean {
   if (isAdmin) return true
-  return state === 'open' || state === 'coming_soon'
+  // 'paid' = Abo-Zugriff → Seite sichtbar, UI-Gate übernimmt die Aktions-Sperre
+  return state === 'open' || state === 'coming_soon' || state === 'paid'
 }
 
-// Middleware-Gate: blockiert nur community/paid — coming_soon erlaubt Zugang zur Seite (Seite zeigt dann die Coming-Soon-UI)
+// Middleware-Gate: blockiert nur community (Tier-basiert). 'paid' wird NICHT
+// blockiert — User kommt rein, sieht UI, die einzelnen Send/Generate-Buttons
+// sind per Subscription-Gate im Client+Backend gesperrt.
 export function requiresUpgrade(state: FeatureState): boolean {
-  return state === 'community' || state === 'paid'
+  return state === 'community'
 }
