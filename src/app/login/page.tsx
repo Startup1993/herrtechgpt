@@ -1,25 +1,20 @@
 import { AuthForm } from '@/components/auth-form'
-import Link from 'next/link'
 
 export default function LoginPage() {
   return (
-    <div className="min-h-screen flex items-center justify-center bg-background">
+    <div className="min-h-screen flex items-center justify-center bg-background px-4">
       <div className="bg-surface p-8 rounded-2xl shadow-sm border border-border w-full max-w-md">
         <div className="text-center mb-8">
           <img src="/logo.png" alt="Herr Tech" className="h-8 w-auto mx-auto" />
-          <p className="text-muted mt-2">Meld dich an</p>
+          <h1 className="text-foreground font-semibold mt-3">Anmelden oder registrieren</h1>
+          <p className="text-xs text-muted mt-1">
+            Eine Mail, ein Klick — egal ob neu oder alter Hase.
+          </p>
         </div>
 
         <div className="flex justify-center">
-          <AuthForm mode="login" />
+          <AuthForm />
         </div>
-
-        <p className="text-center text-sm text-muted mt-6">
-          Noch kein Konto?{' '}
-          <Link href="/signup" className="text-primary hover:underline">
-            Jetzt registrieren
-          </Link>
-        </p>
       </div>
     </div>
   )

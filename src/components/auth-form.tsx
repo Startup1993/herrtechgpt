@@ -4,11 +4,21 @@ import { createClient } from '@/lib/supabase/client'
 import { useState } from 'react'
 import { Mail, Check } from 'lucide-react'
 
-interface AuthFormProps {
-  mode: 'login' | 'signup'
-}
-
-export function AuthForm({ mode }: AuthFormProps) {
+/**
+ * Unified Auth-Form — ein Flow für Login + Signup.
+ *
+ * Verhalten:
+ *   - User gibt Email ein
+ *   - Supabase schickt Magic-Link
+ *     · Existierender Account → Login-Link
+ *     · Neuer Account        → Bestätigungs-Link (Account wird beim Klick aktiviert)
+ *   - User merkt den Unterschied nicht
+ *
+ * Das setzt in Supabase voraus:
+ *   Authentication → Providers → Email → "Allow new users to sign up" = ON
+ *   UND der spezifische OTP-Signup-Toggle im Email-Provider = ON
+ */
+export function AuthForm() {
   const [email, setEmail] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
@@ -20,20 +30,19 @@ export function AuthForm({ mode }: AuthFormProps) {
     setLoading(true)
 
     const supabase = createClient()
-    const emailRedirectTo = `${window.location.origin}/auth/callback`
+    const emailRedirectTo = `${window.location.origin}/auth/callback?next=/welcome`
 
     const { error } = await supabase.auth.signInWithOtp({
       email,
       options: {
         emailRedirectTo,
-        // Login: nur existierende Nutzer; Signup: neue Nutzer automatisch anlegen
-        shouldCreateUser: mode === 'signup',
+        shouldCreateUser: true, // Unified: immer Account anlegen wenn noch keiner da
       },
     })
 
     setLoading(false)
     if (error) {
-      setError(error.message)
+      setError(translateError(error.message))
       return
     }
     setSent(true)
@@ -48,12 +57,15 @@ export function AuthForm({ mode }: AuthFormProps) {
         <div>
           <h3 className="text-base font-semibold text-foreground">E-Mail versendet</h3>
           <p className="text-sm text-muted mt-1">
-            Wir haben dir einen Login-Link an <strong>{email}</strong> geschickt.
-            Klick auf den Link in der E-Mail, um dich anzumelden.
+            Wir haben dir einen Link an <strong>{email}</strong> geschickt. Klick drauf,
+            um dich anzumelden — falls du noch kein Konto hast, legen wir eins für dich an.
           </p>
         </div>
         <button
-          onClick={() => { setSent(false); setEmail('') }}
+          onClick={() => {
+            setSent(false)
+            setEmail('')
+          }}
           className="text-sm text-muted hover:text-foreground underline"
         >
           Andere E-Mail verwenden
@@ -91,16 +103,37 @@ export function AuthForm({ mode }: AuthFormProps) {
         className="w-full py-2.5 px-4 bg-primary hover:bg-primary-hover disabled:opacity-50 text-white font-medium rounded-lg transition-colors inline-flex items-center justify-center gap-2"
       >
         <Mail size={16} />
-        {loading
-          ? 'Link wird versendet…'
-          : mode === 'login'
-            ? 'Login-Link per E-Mail'
-            : 'Konto erstellen per E-Mail'}
+        {loading ? 'Link wird versendet…' : 'Magic-Link per E-Mail'}
       </button>
 
       <p className="text-xs text-muted text-center leading-relaxed">
-        Kein Passwort nötig — wir schicken dir einen einmaligen Login-Link per E-Mail.
+        Kein Passwort nötig — wir schicken dir einen einmaligen Link per E-Mail.
+        Neuer Account oder bestehender Login: Beides funktioniert hier.
       </p>
     </form>
   )
+}
+
+/**
+ * Übersetzt Supabase-Fehler in verständliches Deutsch.
+ * Neue Fehlercodes bei Bedarf hier ergänzen.
+ */
+function translateError(msg: string): string {
+  const m = msg.toLowerCase()
+  if (m.includes('signups not allowed')) {
+    return (
+      'Registrierung per Magic-Link ist in den Supabase-Einstellungen noch nicht aktiviert. ' +
+      'Admin: Authentication → Providers → Email → OTP Signups aktivieren.'
+    )
+  }
+  if (m.includes('rate limit') || m.includes('too many')) {
+    return 'Zu viele Versuche. Bitte ein paar Minuten warten und nochmal probieren.'
+  }
+  if (m.includes('invalid email')) {
+    return 'Diese E-Mail-Adresse sieht nicht korrekt aus. Bitte prüfen.'
+  }
+  if (m.includes('email not confirmed')) {
+    return 'Du hast dein Konto noch nicht bestätigt. Schau in deinen Posteingang.'
+  }
+  return msg
 }

@@ -39,6 +39,9 @@ import {
   Eye,
   ChevronDown,
   Loader2,
+  CreditCard,
+  Coins,
+  Mail,
 } from 'lucide-react'
 
 // ═══════════════════════════════════════════════════════════
@@ -971,6 +974,13 @@ function AdminSidebar({
             description="Matrix + Upsell-Texte"
             isActive={pathname.startsWith('/admin/groups')}
           />
+          <NavItem
+            href="/admin/newsletter"
+            icon={Mail}
+            label="Newsletter"
+            description="Coming-Soon-Signups + Einladungen"
+            isActive={pathname.startsWith('/admin/newsletter')}
+          />
         </div>
 
         <SectionHeader label="Inhalte" />
@@ -1009,6 +1019,24 @@ function AdminSidebar({
             label="Video-Sync"
             description="Wistia-Status, Transkriptionen"
             isActive={pathname.startsWith('/admin/content/videos')}
+          />
+        </div>
+
+        <SectionHeader label="Monetarisierung" />
+        <div className="space-y-1">
+          <NavItem
+            href="/admin/monetization/plans"
+            icon={CreditCard}
+            label="Abo-Pläne"
+            description="S/M/L Preise, Credits, Ablefy"
+            isActive={pathname.startsWith('/admin/monetization/plans')}
+          />
+          <NavItem
+            href="/admin/monetization/credits"
+            icon={Coins}
+            label="Credits"
+            description="Kosten pro Aktion, Top-ups"
+            isActive={pathname.startsWith('/admin/monetization/credits')}
           />
         </div>
 

@@ -37,8 +37,22 @@ export async function middleware(request: NextRequest) {
 
   const { pathname } = request.nextUrl
 
-  // ── Nicht-eingeloggte User → Login ──────────────────────────────────────
-  if (!user && (pathname.startsWith('/assistants') || pathname.startsWith('/admin') || pathname.startsWith('/dashboard'))) {
+  // ── Nicht-eingeloggte User → /coming-soon (außer /admin → /login) ──────
+  // Admin-Routen gehen auf /login, damit Team direkt einloggen kann.
+  // Alle anderen geschützten Routen leiten auf die Marketing-Landing.
+  if (!user && pathname.startsWith('/admin')) {
+    const url = request.nextUrl.clone()
+    url.pathname = '/login'
+    return NextResponse.redirect(url)
+  }
+  if (!user && (pathname.startsWith('/assistants') || pathname.startsWith('/dashboard'))) {
+    const url = request.nextUrl.clone()
+    url.pathname = '/coming-soon'
+    return NextResponse.redirect(url)
+  }
+
+  // ── /welcome benötigt Login (sonst kann man Screen als Gast sehen) ─────
+  if (!user && pathname.startsWith('/welcome')) {
     const url = request.nextUrl.clone()
     url.pathname = '/login'
     return NextResponse.redirect(url)
