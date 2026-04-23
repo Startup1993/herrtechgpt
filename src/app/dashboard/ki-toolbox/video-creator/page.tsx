@@ -2,7 +2,14 @@ import { redirect } from 'next/navigation'
 import { cookies } from 'next/headers'
 import { createClient } from '@/lib/supabase/server'
 import { computeEffectiveAccess, VIEW_AS_COOKIE } from '@/lib/access'
-import PremiumGate from './PremiumGate'
+import {
+  getActivePacks,
+  getActivePlans,
+  getMonetizationState,
+} from '@/lib/monetization'
+import type { Plan, CreditPack } from '@/lib/types'
+import type { SubscriptionGateState } from '@/components/subscription-gate'
+import VideoCreatorGate from './VideoCreatorGate'
 import SSORedirect from './SSORedirect'
 
 export default async function VideoCreatorPage() {
@@ -10,19 +17,40 @@ export default async function VideoCreatorPage() {
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) redirect('/login')
 
-  const { data: profile } = await supabase
-    .from('profiles')
-    .select('role, access_tier')
-    .eq('id', user.id)
-    .maybeSingle()
+  const [{ data: profile }, plans, packs, cookieStore] = await Promise.all([
+    supabase
+      .from('profiles')
+      .select('role, access_tier')
+      .eq('id', user.id)
+      .maybeSingle(),
+    getActivePlans(supabase),
+    getActivePacks(supabase),
+    cookies(),
+  ])
 
-  const cookieStore = await cookies()
-  const viewAs = cookieStore.get(VIEW_AS_COOKIE)?.value
-  const access = computeEffectiveAccess(profile, viewAs)
+  const access = computeEffectiveAccess(profile, cookieStore.get(VIEW_AS_COOKIE)?.value)
+  const monetization = await getMonetizationState(supabase, user.id, access.tier)
 
-  const hasAccess = access.isAdmin || access.tier === 'premium'
-  if (!hasAccess) return <PremiumGate currentTier={access.tier} />
+  // Admin oder aktives Abo → direkt zum Worker per SSO.
+  // Kein Abo → Gate-Seite mit Pricing-Popup.
+  const hasActiveSubscription = access.isAdmin || monetization.hasActiveSubscription
 
-  const workerUrl = process.env.VIDEO_CREATOR_PUBLIC_URL || 'https://vc.herr.tech'
-  return <SSORedirect workerUrl={workerUrl} />
+  if (hasActiveSubscription) {
+    const workerUrl = process.env.VIDEO_CREATOR_PUBLIC_URL || 'https://vc.herr.tech'
+    return <SSORedirect workerUrl={workerUrl} />
+  }
+
+  const gateState: SubscriptionGateState = {
+    hasActiveSubscription: false,
+    currentPlanId: monetization.planId,
+    currentPlanTier: monetization.planTier,
+    currentCycle: monetization.subscription?.billing_cycle ?? null,
+    priceBand: monetization.priceBand,
+    isCommunity: access.tier === 'premium',
+    credits: monetization.totalCredits,
+    plans: plans as Plan[],
+    packs: packs as CreditPack[],
+  }
+
+  return <VideoCreatorGate gateState={gateState} />
 }

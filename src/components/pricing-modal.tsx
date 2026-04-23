@@ -335,8 +335,8 @@ export function PricingModal({
           <div className="mt-6 text-center text-[11px] text-muted space-y-0.5">
             <p>Alle Preise inkl. USt · Kündbar zum Periodenende</p>
             <p>
-              Monatliche Credits verfallen am Reset · Gekaufte Top-up-Credits 12 Monate
-              gültig
+              Monatliche Credits verfallen am Reset · Gekaufte Top-up-Credits rollieren
+              unbegrenzt
             </p>
           </div>
         </div>

@@ -419,20 +419,25 @@ export async function grantMonthlyCredits(params: {
 
 /**
  * Schreibt einem User gekaufte Credits gut (Top-up via Stripe Checkout).
- * Rolliert `expiry_months` (aus credit_pack konfigurierbar, Default 12).
+ *
+ * Gekaufte Credits rollieren **unbegrenzt** — der Wert bleibt erhalten bis
+ * er aufgebraucht ist (besser für den User, einfacher im Code). Die
+ * credit_purchases.expires_at-Spalte setzen wir trotzdem (auf 100 Jahre
+ * in der Zukunft), damit das DB-Schema intakt bleibt und wir bei Bedarf
+ * später wieder Ablauf einführen können.
  */
 export async function grantPurchasedCredits(params: {
   userId: string
   amount: number
   packId?: string
-  expiryMonths?: number
+  expiryMonths?: number // wird ignoriert — Credits rollieren unbegrenzt
   stripeCheckoutSessionId?: string
   stripePaymentIntentId?: string
 }) {
   const admin = createAdminClient()
-  const expiryMonths = params.expiryMonths ?? 12
+  // 100 Jahre in die Zukunft → effektiv unbegrenzt
   const expiresAt = new Date()
-  expiresAt.setMonth(expiresAt.getMonth() + expiryMonths)
+  expiresAt.setFullYear(expiresAt.getFullYear() + 100)
 
   // 1) credit_purchases anlegen (FIFO-Tracking für spätere Ablauf-Logik)
   await admin.from('credit_purchases').insert({
@@ -472,7 +477,7 @@ export async function grantPurchasedCredits(params: {
     balance_after_purchased: newPurchased,
     reason: 'topup',
     reference_id: params.stripeCheckoutSessionId ?? null,
-    note: `Top-up +${params.amount} Credits (gültig bis ${expiresAt.toISOString()})`,
+    note: `Top-up +${params.amount} Credits (rolliert unbegrenzt)`,
   })
 
   return { ok: true as const, newBalance: newPurchased }

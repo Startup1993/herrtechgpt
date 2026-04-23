@@ -69,7 +69,7 @@ export default function CreditsClient({
         <h1 className="text-2xl font-bold text-foreground mb-1">Credits nachkaufen</h1>
         <p className="text-sm text-muted">
           Monatliche Credits verbraucht? Hier kannst du zusätzliche Credits buchen —
-          gültig 12 Monate ab Kauf.
+          sie rollieren unbegrenzt und bleiben erhalten bis du sie nutzt.
         </p>
       </div>
 
@@ -137,7 +137,7 @@ export default function CreditsClient({
                   <span className="text-sm font-normal text-muted ml-1">Credits</span>
                 </div>
                 <div className="text-xs text-muted mt-0.5">
-                  gültig {pack.expiry_months} Monate
+                  rolliert unbegrenzt
                 </div>
               </div>
 

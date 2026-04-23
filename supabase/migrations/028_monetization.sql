@@ -349,7 +349,7 @@ INSERT INTO public.credit_packs (id, name, credits, price_basic_cents, price_com
 ON CONFLICT (id) DO NOTHING;
 
 INSERT INTO public.feature_credit_costs (feature, label, credits_per_unit, unit, category, description) VALUES
-  ('chat',               'Chat-Nachricht',            1, 'action', 'chat',    'Herr Tech GPT Nachricht'),
+  ('chat',               'Chat-Nachricht',            0, 'action', 'chat',    'Herr Tech GPT Nachricht (Chat ist inklusive, keine Credits)'),
   ('carousel',           'Carousel (7 Slides)',      10, 'action', 'toolbox', 'Instagram-Karussell'),
   ('video_editor_cut',   'Video-Editor Cut',          8, 'action', 'toolbox', 'Einzelner Cut im Video-Editor'),
   ('image_gen',          'Bild-Generierung',          2, 'action', 'video',   'Einzelnes Bild (SDXL / Flux)'),
