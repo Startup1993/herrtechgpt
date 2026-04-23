@@ -78,6 +78,8 @@ export async function POST(req: Request) {
     const session = await stripe.checkout.sessions.create({
       mode: 'payment',
       customer: customerId,
+      // Siehe Subscription-Route: nötig für tax_id_collection bei bestehenden Customern
+      customer_update: { name: 'auto', address: 'auto' },
       line_items: [{ price: priceId, quantity: 1 }],
       allow_promotion_codes: true,
       billing_address_collection: 'required',

@@ -125,6 +125,10 @@ export async function POST(req: Request) {
     const session = await stripe.checkout.sessions.create({
       mode: 'subscription',
       customer: customerId,
+      // Erlaubt Stripe, Name/Adresse des Customers mit dem zu überschreiben,
+      // was im Checkout-Formular eingegeben wird. Wird von tax_id_collection
+      // verlangt, damit Rechnungen die korrekte Firmenadresse zeigen.
+      customer_update: { name: 'auto', address: 'auto' },
       line_items: [{ price: priceId, quantity: 1 }],
       allow_promotion_codes: true,
       billing_address_collection: 'required',
