@@ -290,7 +290,7 @@ export default function BillingClient({
               </div>
             </div>
             <div>
-              <div className="text-xs text-muted">Gekauft (rolliert 12 Monate)</div>
+              <div className="text-xs text-muted">Gekauft (rolliert unbegrenzt)</div>
               <div className="text-lg font-semibold text-foreground">
                 {purchased.toLocaleString('de-DE')}
               </div>

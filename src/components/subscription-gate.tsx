@@ -216,7 +216,7 @@ function CreditTopupModal({
               Oder Credits einmalig nachkaufen
             </h3>
             <p className="text-xs text-muted mb-3">
-              Gekaufte Credits sind 12 Monate gültig und rollieren über den Monatswechsel.
+              Gekaufte Credits rollieren unbegrenzt — bleiben erhalten bis du sie nutzt.
             </p>
 
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">

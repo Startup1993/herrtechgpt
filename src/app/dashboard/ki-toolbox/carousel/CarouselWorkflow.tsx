@@ -10,6 +10,8 @@
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { PricingModal } from '@/components/pricing-modal'
+import { PaywallBanner, type SubscriptionGateState } from '@/components/subscription-gate'
 import {
   DEFAULT_SLIDES,
   DEFAULT_FONT_PAIRING,
@@ -427,7 +429,10 @@ function PalettePreview({ primary }: { primary: string }) {
 
 // ─── Main ────────────────────────────────────────────────────────────────────
 
-export default function CarouselWorkflow() {
+export default function CarouselWorkflow({ gateState }: { gateState?: SubscriptionGateState }) {
+  const [pricingOpen, setPricingOpen] = useState(false)
+  const hasAccess = !gateState || gateState.hasActiveSubscription
+
   const [step, setStep] = useState<'input' | 'preview'>('input')
   const [blogPost, setBlogPost] = useState('')
   const [ci, setCi] = useState<CISettings>({
@@ -459,6 +464,11 @@ export default function CarouselWorkflow() {
 
   const generate = useCallback(async () => {
     if (!blogPost.trim()) return
+    // Paywall-Gate
+    if (!hasAccess) {
+      setPricingOpen(true)
+      return
+    }
     setLoading(true)
     setProgress('KI analysiert deinen Text...')
     try {
@@ -471,6 +481,11 @@ export default function CarouselWorkflow() {
           handle: ci.handle,
         }),
       })
+      // 402 von der API = kein Abo / zu wenig Credits → Pricing öffnen
+      if (res.status === 402) {
+        setPricingOpen(true)
+        return
+      }
       const data = await res.json()
       if (data.slides && Array.isArray(data.slides)) {
         setSlides(data.slides)
@@ -485,7 +500,7 @@ export default function CarouselWorkflow() {
       setLoading(false)
       setProgress('')
     }
-  }, [blogPost, ci.slideCount, ci.handle])
+  }, [blogPost, ci.slideCount, ci.handle, hasAccess])
 
   const updateSlide = useCallback((i: number, updated: Slide) => {
     setSlides((s) => s.map((sl, idx) => (idx === i ? updated : sl)))
@@ -493,6 +508,10 @@ export default function CarouselWorkflow() {
 
   const refineSlides = useCallback(async () => {
     if (!refineInput.trim() || refining) return
+    if (!hasAccess) {
+      setPricingOpen(true)
+      return
+    }
     const prompt = refineInput.trim()
     setRefining(true)
     setRefineInput('')
@@ -506,6 +525,10 @@ export default function CarouselWorkflow() {
           currentPalette: { brandPrimary: ci.primaryColor },
         }),
       })
+      if (res.status === 402) {
+        setPricingOpen(true)
+        return
+      }
       const data = await res.json()
       if (data.slides) setSlides(data.slides)
       if (data.primaryColor) setCi((p) => ({ ...p, primaryColor: data.primaryColor }))
@@ -516,7 +539,7 @@ export default function CarouselWorkflow() {
     } finally {
       setRefining(false)
     }
-  }, [refineInput, slides, ci.primaryColor, refining])
+  }, [refineInput, slides, ci.primaryColor, refining, hasAccess])
 
   const exportPng = useCallback(async () => {
     if (!slides.length) return
@@ -558,6 +581,20 @@ export default function CarouselWorkflow() {
     }
   }, [slides, palette, pairing, ci.brandName, ci.handle])
 
+  // Wird am Ende sowohl im Input- als auch Preview-Step gerendert
+  const pricingModal = gateState && (
+    <PricingModal
+      open={pricingOpen}
+      onClose={() => setPricingOpen(false)}
+      plans={gateState.plans}
+      defaultPriceBand={gateState.priceBand}
+      isCommunity={gateState.isCommunity}
+      currentPlanId={gateState.currentPlanId}
+      currentCycle={gateState.currentCycle}
+      hasActiveSubscription={gateState.hasActiveSubscription}
+    />
+  )
+
   // ─── Input Step ────────────────────────────────────────────────────────────
   if (step === 'input') {
     return (
@@ -568,6 +605,14 @@ export default function CarouselWorkflow() {
             Text rein — fertige 4:5 Instagram-Slides raus (Hero → Problem → Lösung → Features → CTA)
           </p>
         </div>
+
+        {gateState && (
+          <PaywallBanner
+            state={gateState}
+            message="Zum Generieren brauchst du ein aktives Abo. Du kannst den Generator aber gerne durchklicken."
+            onOpenPricing={() => setPricingOpen(true)}
+          />
+        )}
 
         <div className="mb-6">
           <label className="block text-sm font-medium text-foreground mb-2">Dein Text / Blogpost</label>
@@ -635,6 +680,7 @@ export default function CarouselWorkflow() {
             </>
           ) : '🎠 Karussell generieren'}
         </button>
+        {pricingModal}
       </div>
     )
   }
@@ -832,6 +878,7 @@ export default function CarouselWorkflow() {
           ))}
         </div>
       </div>
+      {pricingModal}
     </div>
   )
 }

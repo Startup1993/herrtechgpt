@@ -13,6 +13,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createAnthropic } from '@ai-sdk/anthropic'
 import { generateText } from 'ai'
 import { createClient } from '@/lib/supabase/server'
+import { chargeCredits, hasActionAccess, refundCredits } from '@/lib/monetization'
 
 export const maxDuration = 60
 
@@ -46,10 +47,58 @@ export async function POST(req: NextRequest) {
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
+  // Subscription-Gate
+  if (!(await hasActionAccess(supabase, user.id))) {
+    return NextResponse.json(
+      { error: 'Kein aktives Abo. Bitte Plan abschließen.' },
+      { status: 402 }
+    )
+  }
+
   const { blogPost, slideCount = 7, handle = '', refinePrompt, currentSlides, currentPalette } = await req.json()
+
+  // Credit-Charge: jeder Carousel-Generate/Refine-Call kostet Credits.
+  // Wir laden VOR dem teuren Claude-Call, bei Fehler wird refunded.
+  const feature = 'carousel'
+  const chargeResult = await chargeCredits({
+    userId: user.id,
+    feature,
+    units: 1,
+    note: refinePrompt ? 'Carousel-Refine' : 'Carousel-Generate',
+  })
+  if (!chargeResult.ok) {
+    return NextResponse.json(
+      {
+        error: 'Nicht genug Credits',
+        needed: chargeResult.needed,
+        available: chargeResult.available,
+      },
+      { status: 402 }
+    )
+  }
 
   const anthropic = createAnthropic({ apiKey: process.env.ANTHROPIC_API_KEY! })
 
+  // Helper: bei Fehler/Parse-Error im weiteren Verlauf refunden.
+  async function refundAndFail(message: string, extra: Record<string, unknown> = {}, status = 500) {
+    await refundCredits({
+      userId: user!.id,
+      amount: chargeResult.ok ? chargeResult.charged : 0,
+      feature,
+      note: `Refund wegen: ${message}`,
+    })
+    return NextResponse.json({ error: message, ...extra }, { status })
+  }
+
+  try {
+    return await runCarousel()
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err)
+    console.error('[carousel] Fehler:', msg)
+    return await refundAndFail(msg)
+  }
+
+  async function runCarousel() {
   // ─── Refine mode ────────────────────────────────────────────────────────────
   if (refinePrompt && currentSlides) {
     const { text } = await generateText({
@@ -86,7 +135,7 @@ Gib NUR valides JSON zurück:
       const cleaned = text.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim()
       return NextResponse.json(JSON.parse(cleaned))
     } catch {
-      return NextResponse.json({ error: 'Parse error', raw: text }, { status: 500 })
+      return await refundAndFail('Parse error', { raw: text }, 500)
     }
   }
 
@@ -128,6 +177,7 @@ Gib NUR valides JSON zurück, kein Text davor oder danach:
     const data = JSON.parse(cleaned)
     return NextResponse.json(data)
   } catch {
-    return NextResponse.json({ error: 'Parse error', raw: text }, { status: 500 })
+    return await refundAndFail('Parse error', { raw: text }, 500)
   }
+  } // end runCarousel
 }
