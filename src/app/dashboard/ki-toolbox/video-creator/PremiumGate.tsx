@@ -15,7 +15,7 @@ export default function PremiumGate({ currentTier }: { currentTier: string }) {
       </div>
 
       <div className="card-static p-8 text-center">
-        <div className="w-16 h-16 rounded-full bg-purple-100 dark:bg-purple-950/30 text-purple-500 flex items-center justify-center mx-auto mb-4">
+        <div className="w-16 h-16 rounded-full bg-primary/10 text-primary flex items-center justify-center mx-auto mb-4">
           <Lock size={28} />
         </div>
         <h2 className="text-xl font-semibold text-foreground mb-2">

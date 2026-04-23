@@ -18,7 +18,7 @@ const tools: Tool[] = [
   {
     id: 'video-creator',
     icon: Video,
-    iconBg: 'bg-gradient-to-br from-purple-500 to-violet-600',
+    iconBg: 'bg-gradient-to-br from-primary to-primary-hover',
     title: 'KI Video Creator',
     subtitle: 'Premium',
     description:
@@ -49,7 +49,7 @@ export default function KiToolboxPage() {
   return (
     <div className="max-w-5xl mx-auto px-4 sm:px-6 py-6 sm:py-10">
       <div className="text-center mb-10">
-        <div className="inline-flex items-center gap-1.5 mb-3 px-3 py-1 rounded-full bg-purple-100 text-purple-700 dark:bg-purple-950/30 dark:text-purple-400 text-xs font-semibold uppercase tracking-wider">
+        <div className="inline-flex items-center gap-1.5 mb-3 px-3 py-1 rounded-full bg-primary/10 text-primary text-xs font-semibold uppercase tracking-wider">
           <Sparkles size={12} /> KI Toolbox
         </div>
         <h1 className="text-2xl sm:text-3xl font-bold text-foreground mb-2">
