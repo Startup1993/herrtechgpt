@@ -335,12 +335,19 @@ function SubscriptionUpsellCard({
   upsell: UpsellCopy
   onOpenPricing: () => void
 }) {
-  // Highlight-Plan für die Kachel-Vorschau: M (mittleres Angebot).
-  const highlightPlan = plans.find((p) => p.tier === 'M') ?? plans[0]
-  const highlightCents =
-    priceBand === 'community'
-      ? highlightPlan?.price_community_cents
-      : highlightPlan?.price_basic_cents
+  // "Ab X €/Monat" zeigen wir den günstigsten Plan, der im aktuellen Preisband
+  // tatsächlich Geld kostet. Für Community wäre Plan S = 0 € — "Ab 0 €" ist
+  // irritierend, deshalb nehmen wir dann den nächstgünstigsten kostenpflichtigen Plan.
+  const cheapestPlan = [...plans]
+    .map((p) => ({
+      plan: p,
+      cents:
+        priceBand === 'community' ? p.price_community_cents : p.price_basic_cents,
+    }))
+    .filter((x) => x.cents > 0)
+    .sort((a, b) => a.cents - b.cents)[0]
+  const highlightPlan = cheapestPlan?.plan
+  const highlightCents = cheapestPlan?.cents
   const highlightBasicCents = highlightPlan?.price_basic_cents
   const showStrike =
     priceBand === 'community' &&
