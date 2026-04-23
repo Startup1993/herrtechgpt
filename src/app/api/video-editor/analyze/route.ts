@@ -1,9 +1,22 @@
 import { NextRequest, NextResponse } from 'next/server'
 import Anthropic from '@anthropic-ai/sdk'
 import type { TranscriptSegment, SceneAnalysis } from '@/lib/video/types'
+import { createClient } from '@/lib/supabase/server'
+import { hasActionAccess } from '@/lib/monetization'
 
 export async function POST(req: NextRequest) {
   try {
+    // Auth + Subscription-Gate
+    const supabase = await createClient()
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    if (!(await hasActionAccess(supabase, user.id))) {
+      return NextResponse.json(
+        { error: 'Kein aktives Abo. Bitte Plan abschließen.' },
+        { status: 402 }
+      )
+    }
+
     const { segments, videoTitle } = await req.json() as {
       segments: TranscriptSegment[]
       videoTitle?: string

@@ -103,11 +103,10 @@ export async function middleware(request: NextRequest) {
     }
   }
 
-  // ── Tier-Gating: DB-gesteuert via feature_permissions, respektiert View-As ──
+  // ── Tier-Gating: nur noch für Classroom (Chat + Toolbox darf jeder sehen,
+  //    Paywall wird dort im UI auf die Send/Generate-Buttons gelegt) ──
   const gatedFeature: FeatureKey | null =
-    pathname.startsWith('/dashboard/herr-tech-gpt') ? 'chat' :
-    pathname.startsWith('/dashboard/ki-toolbox')   ? 'toolbox' :
-    pathname.startsWith('/dashboard/classroom')    ? 'classroom' : null
+    pathname.startsWith('/dashboard/classroom') ? 'classroom' : null
 
   if (user && gatedFeature) {
     const { data: profile } = await supabase

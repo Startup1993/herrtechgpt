@@ -55,6 +55,32 @@ export interface MonetizationState {
   hasActiveSubscription: boolean
 }
 
+// ─── Server-side Access Check ───────────────────────────────────────────
+
+/**
+ * Prüft serverseitig ob ein User Aktions-Zugriff hat (aktives Abo oder Admin).
+ * Wird in API-Routes aufgerufen, bevor teure Claude/Stripe/Fal-Calls laufen,
+ * damit niemand per curl die UI-Paywall umgeht.
+ *
+ * Gibt true/false zurück. Admin-Check per role='admin' in profiles.
+ */
+export async function hasActionAccess(
+  supabase: SupabaseClient,
+  userId: string
+): Promise<boolean> {
+  const [{ data: profile }, { data: sub }] = await Promise.all([
+    supabase.from('profiles').select('role').eq('id', userId).single(),
+    supabase
+      .from('subscriptions')
+      .select('status')
+      .eq('user_id', userId)
+      .in('status', ['active', 'trialing'])
+      .maybeSingle(),
+  ])
+  if (profile?.role === 'admin') return true
+  return !!sub
+}
+
 // ─── Price Band ─────────────────────────────────────────────────────────
 
 /**

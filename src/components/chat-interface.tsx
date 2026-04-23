@@ -8,12 +8,15 @@ import { ChatMessage } from './chat-message'
 import type { AgentDefinition } from '@/lib/agents'
 import { VoiceRecordingUI } from './voice-recording-ui'
 import { useVoiceDictation } from '@/hooks/use-voice-dictation'
+import { PricingModal } from './pricing-modal'
+import { PaywallBanner, type SubscriptionGateState } from './subscription-gate'
 
 interface ChatInterfaceProps {
   agent: AgentDefinition
   conversationId: string
   initialMessages: { id: string; role: 'user' | 'assistant'; content: string }[]
   autoSend?: string
+  gateState?: SubscriptionGateState
 }
 
 export function ChatInterface({
@@ -21,7 +24,10 @@ export function ChatInterface({
   conversationId,
   initialMessages,
   autoSend,
+  gateState,
 }: ChatInterfaceProps) {
+  const [pricingOpen, setPricingOpen] = useState(false)
+  const hasAccess = !gateState || gateState.hasActiveSubscription
   const router = useRouter()
   const scrollRef = useRef<HTMLDivElement>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
@@ -59,7 +65,12 @@ export function ChatInterface({
   useEffect(() => {
     if (autoSend && !autoSentRef.current) {
       autoSentRef.current = true
-      sendMessage({ text: autoSend })
+      // AutoSend nur wenn User Zugriff hat — sonst Paywall-Popup statt stillem Blockieren
+      if (hasAccess) {
+        sendMessage({ text: autoSend })
+      } else {
+        setPricingOpen(true)
+      }
       router.replace(`/dashboard/herr-tech-gpt/${conversationId}`)
     }
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
@@ -74,6 +85,11 @@ export function ChatInterface({
   const handleSend = (text?: string) => {
     const messageText = text ?? input.trim()
     if (!messageText || isStreaming) return
+    // Paywall-Check: ohne aktives Abo öffnet Pricing statt Send
+    if (!hasAccess) {
+      setPricingOpen(true)
+      return
+    }
     sendMessage({ text: messageText })
     setInput('')
     if (textareaRef.current) {
@@ -233,8 +249,30 @@ export function ChatInterface({
 
       {/* Input area */}
       <div className="border-t border-border px-3 py-3 md:px-6 md:py-4 bg-surface">
+        {gateState && (
+          <div className="max-w-3xl mx-auto">
+            <PaywallBanner
+              state={gateState}
+              message="Zum Senden brauchst du ein aktives Abo. Du kannst aber gerne alles ansehen."
+              onOpenPricing={() => setPricingOpen(true)}
+            />
+          </div>
+        )}
         {renderInputBar()}
       </div>
+
+      {gateState && (
+        <PricingModal
+          open={pricingOpen}
+          onClose={() => setPricingOpen(false)}
+          plans={gateState.plans}
+          defaultPriceBand={gateState.priceBand}
+          isCommunity={gateState.isCommunity}
+          currentPlanId={gateState.currentPlanId}
+          currentCycle={gateState.currentCycle}
+          hasActiveSubscription={gateState.hasActiveSubscription}
+        />
+      )}
     </div>
   )
 }
