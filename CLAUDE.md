@@ -1,5 +1,10 @@
 @AGENTS.md
 
+> **Arbeitest du am KI Video Creator (Toolbox)?**
+> Lies zuerst [docs/VIDEO_CREATOR.md](docs/VIDEO_CREATOR.md) — komplettes
+> Handover mit Architektur (Hetzner-Worker + Vercel-Proxy), allen URLs,
+> offenen Punkten, Debug-Wegen und Gotchas.
+
 # Projekt-Steckbrief: Herr Tech GPT
 
 ## Was ist das?
