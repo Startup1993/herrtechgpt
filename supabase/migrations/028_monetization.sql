@@ -325,7 +325,7 @@ INSERT INTO public.plans (
    1900, 0,
    19900, 0,
    200, 1,
-   '["Herr Tech GPT Zugang", "KI Toolbox Zugang", "200 Credits/Monat", "Community: inklusive"]'::jsonb),
+   '["Herr Tech GPT Zugang", "KI Toolbox Zugang", "200 Credits/Monat"]'::jsonb),
 
   ('plan_m', 'M', 'Professional',
    'Für aktive Content-Creator. 1.500 Credits/Monat.',
