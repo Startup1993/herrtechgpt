@@ -21,9 +21,7 @@ export default function ComingSoonPage() {
             </p>
 
             <h1 className="text-3xl sm:text-5xl lg:text-6xl font-bold leading-[1.1] tracking-tight mb-6">
-              Wir haben eine ganze Welt gebaut.
-              <br />
-              <span className="text-primary">Mit Claude.</span>
+              Wir haben eine ganze Welt gebaut. <span className="text-primary">Mit Claude.</span>
             </h1>
 
             <p className="text-base sm:text-lg text-muted leading-relaxed mb-10 max-w-2xl">
