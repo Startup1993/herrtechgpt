@@ -103,10 +103,14 @@ export async function middleware(request: NextRequest) {
     }
   }
 
-  // ── Tier-Gating: nur noch für Classroom (Chat + Toolbox darf jeder sehen,
-  //    Paywall wird dort im UI auf die Send/Generate-Buttons gelegt) ──
+  // ── Tier-Gating via feature_permissions-Matrix ──
+  //    'community' → Redirect auf /upgrade (Tier reicht nicht)
+  //    'paid' (Abo-Zugriff) + 'open' + 'coming_soon' → durchlassen,
+  //      UI-Gate übernimmt die Aktions-Sperre bei fehlender Subscription
   const gatedFeature: FeatureKey | null =
-    pathname.startsWith('/dashboard/classroom') ? 'classroom' : null
+    pathname.startsWith('/dashboard/herr-tech-gpt') ? 'chat' :
+    pathname.startsWith('/dashboard/ki-toolbox')   ? 'toolbox' :
+    pathname.startsWith('/dashboard/classroom')    ? 'classroom' : null
 
   if (user && gatedFeature) {
     const { data: profile } = await supabase
