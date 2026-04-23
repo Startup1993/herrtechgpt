@@ -1,6 +1,6 @@
 import { redirect } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
-import ScenesPlaceholder from './ScenesPlaceholder'
+import ScenesView from './ScenesView'
 
 export default async function ScenesPage({
   params,
@@ -12,5 +12,5 @@ export default async function ScenesPage({
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) redirect('/login')
 
-  return <ScenesPlaceholder projectId={id} />
+  return <ScenesView projectId={id} />
 }

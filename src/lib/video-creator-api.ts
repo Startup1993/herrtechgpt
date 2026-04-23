@@ -145,6 +145,9 @@ export const videoCreatorApi = {
   listProjects: () =>
     videoCreatorFetch<{ projects: Project[] }>('/api/projects/list'),
 
+  getProject: (id: string) =>
+    videoCreatorFetch<Project>(`/api/projects/${id}`),
+
   createFromPrompt: (prompt: string) =>
     videoCreatorFetch<{ projectId: string }>(
       '/api/projects/create-from-prompt',
