@@ -354,45 +354,33 @@ function SubscriptionUpsellCard({
     return euro % 1 === 0 ? `${euro}` : euro.toFixed(2).replace('.', ',')
   }
 
+  const comingSoon = upsell.cta_coming_soon || !upsell.cta_url
+  const communityButtonLabel = upsell.cta_label || 'Jetzt beitreten'
+
   return (
     <div className="mb-8 rounded-[var(--radius-2xl)] border border-border bg-surface overflow-hidden">
       <div className="grid grid-cols-1 lg:grid-cols-2 divide-y lg:divide-y-0 lg:divide-x divide-border">
-        {/* Links: Abo abschließen */}
-        <div className="p-6 sm:p-7 flex flex-col">
-          <div className="flex items-center gap-2 mb-3">
-            <div className="w-9 h-9 rounded-lg bg-primary/10 flex items-center justify-center">
-              <Rocket size={18} className="text-primary" />
+        {/* ── Links: Abo abschließen ─────────────────────────────── */}
+        <div className="p-5 sm:p-6 flex flex-col">
+          <div className="flex items-center gap-2 mb-2">
+            <div className="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center">
+              <Rocket size={16} className="text-primary" />
             </div>
-            <span className="text-xs font-semibold uppercase tracking-wider text-primary">
+            <span className="text-[11px] font-semibold uppercase tracking-wider text-primary">
               Abo abschließen
             </span>
           </div>
-          <h3 className="text-lg sm:text-xl font-bold text-foreground mb-1.5">
-            Schalte alles frei
-          </h3>
-          <p className="text-sm text-muted mb-4 leading-relaxed">
-            Herr Tech GPT + KI Toolbox nutzen mit monatlichen Credits. S, M oder L — du
-            wählst, wie viel du brauchst.
+          <h3 className="text-lg font-bold text-foreground mb-1">Schalte alles frei</h3>
+          <p className="text-sm text-muted mb-3 leading-snug">
+            Herr Tech GPT + KI Toolbox nutzen. S, M oder L — du wählst die passenden Credits.
           </p>
 
-          {/* Mini-Preis-Teaser */}
-          {highlightPlan && highlightCents != null && (
-            <div className="mb-4 px-3 py-2.5 rounded-xl bg-primary/5 border border-primary/15 inline-flex items-baseline gap-2">
-              <span className="text-xs text-muted">Ab</span>
-              {showStrike && (
-                <span className="text-xs text-muted line-through">
-                  {formatEuro(highlightBasicCents)} €
-                </span>
-              )}
-              <span className="text-xl font-bold text-foreground">
-                {formatEuro(highlightCents)} €
-              </span>
-              <span className="text-xs text-muted">/ Monat</span>
-            </div>
-          )}
-
-          <ul className="space-y-1.5 mb-5 flex-1">
-            {['Herr Tech GPT — 6 Experten-Agenten', 'KI Toolbox — Carousel, Video-Creator', 'Monatliche Credits für jede Aktion', 'Jederzeit kündbar'].map((b) => (
+          <ul className="space-y-1 mb-4 flex-1">
+            {[
+              'Herr Tech GPT — 6 Experten-Agenten',
+              'KI Toolbox — Carousel, Video-Creator, mehr',
+              'Monatliche Credits für die KI Toolbox',
+            ].map((b) => (
               <li key={b} className="flex items-start gap-2 text-sm text-foreground">
                 <Check size={14} className="text-primary shrink-0 mt-0.5" />
                 <span>{b}</span>
@@ -400,39 +388,58 @@ function SubscriptionUpsellCard({
             ))}
           </ul>
 
-          <button
-            onClick={onOpenPricing}
-            className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-5 py-3 bg-primary hover:bg-primary-hover text-primary-foreground font-semibold rounded-xl text-sm transition-colors"
-          >
-            Plan wählen
-            <ArrowRight size={16} />
-          </button>
+          {/* Footer: Preis links + Button rechts */}
+          <div className="flex items-center justify-between gap-3 pt-3 border-t border-border">
+            {highlightPlan && highlightCents != null ? (
+              <div className="min-w-0">
+                <div className="text-[11px] text-muted leading-none mb-0.5">Ab</div>
+                <div className="flex items-baseline gap-1.5">
+                  {showStrike && (
+                    <span className="text-xs text-muted line-through">
+                      {formatEuro(highlightBasicCents)} €
+                    </span>
+                  )}
+                  <span className="text-xl font-bold text-foreground">
+                    {formatEuro(highlightCents)} €
+                  </span>
+                  <span className="text-xs text-muted">/ Monat</span>
+                </div>
+              </div>
+            ) : (
+              <div />
+            )}
+            <button
+              onClick={onOpenPricing}
+              className="shrink-0 inline-flex items-center gap-2 px-4 py-2.5 bg-primary hover:bg-primary-hover text-primary-foreground font-semibold rounded-xl text-sm transition-colors"
+            >
+              Plan wählen
+              <ArrowRight size={14} />
+            </button>
+          </div>
         </div>
 
-        {/* Rechts: KI Marketing Club — nur wenn NICHT Community */}
+        {/* ── Rechts: KI Marketing Club ──────────────────────────── */}
         {!isCommunity ? (
-          <div className="p-6 sm:p-7 bg-gradient-to-br from-primary/5 to-primary/10 flex flex-col">
-            <div className="flex items-center gap-2 mb-3">
-              <div className="w-9 h-9 rounded-lg bg-primary/15 flex items-center justify-center">
-                <Users size={18} className="text-primary" />
+          <div className="p-5 sm:p-6 bg-gradient-to-br from-primary/5 to-primary/10 flex flex-col">
+            <div className="flex items-center gap-2 mb-2">
+              <div className="w-8 h-8 rounded-lg bg-primary/15 flex items-center justify-center">
+                <Users size={16} className="text-primary" />
               </div>
-              <span className="text-xs font-semibold uppercase tracking-wider text-primary">
+              <span className="text-[11px] font-semibold uppercase tracking-wider text-primary">
                 KI Marketing Club
               </span>
               {upsell.cta_coming_soon && (
-                <span className="inline-flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wider px-2 py-0.5 rounded-full bg-amber-100 text-amber-700 dark:bg-amber-950/30 dark:text-amber-400">
-                  <Clock size={10} /> Coming Soon
+                <span className="inline-flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wider px-1.5 py-0.5 rounded-full bg-amber-100 text-amber-700 dark:bg-amber-950/30 dark:text-amber-400">
+                  <Clock size={10} /> Soon
                 </span>
               )}
             </div>
-            <h3 className="text-lg sm:text-xl font-bold text-foreground mb-1.5">
-              {upsell.heading}
-            </h3>
-            <p className="text-sm text-muted mb-4 leading-relaxed">{upsell.intro}</p>
+            <h3 className="text-lg font-bold text-foreground mb-1">{upsell.heading}</h3>
+            <p className="text-sm text-muted mb-3 leading-snug">{upsell.intro}</p>
 
             {upsell.benefits.length > 0 && (
-              <ul className="space-y-1.5 mb-5 flex-1">
-                {upsell.benefits.slice(0, 4).map((b) => (
+              <ul className="space-y-1 mb-4 flex-1">
+                {upsell.benefits.slice(0, 3).map((b) => (
                   <li key={b} className="flex items-start gap-2 text-sm text-foreground">
                     <Check size={14} className="text-primary shrink-0 mt-0.5" />
                     <span>{b}</span>
@@ -441,55 +448,54 @@ function SubscriptionUpsellCard({
               </ul>
             )}
 
-            {upsell.cta_coming_soon || !upsell.cta_url ? (
-              <div>
+            {/* Footer symmetrisch zu links */}
+            <div className="flex items-center justify-between gap-3 pt-3 border-t border-primary/15">
+              <div className="text-xs text-muted">
+                {upsell.cta_coming_soon ? 'Anmeldung startet bald' : 'Community + Live-Calls'}
+              </div>
+              {comingSoon ? (
                 <button
                   disabled
-                  className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-5 py-3 bg-primary/40 text-white font-semibold rounded-xl text-sm cursor-not-allowed"
+                  className="shrink-0 inline-flex items-center gap-2 px-4 py-2.5 bg-primary/40 text-white font-semibold rounded-xl text-sm cursor-not-allowed"
                 >
-                  {upsell.cta_label}
+                  {communityButtonLabel}
                 </button>
-                {upsell.cta_coming_soon && (
-                  <p className="text-[11px] text-muted mt-2">
-                    Anmeldung startet bald — wir informieren dich.
-                  </p>
-                )}
-              </div>
-            ) : (
-              <a
-                href={upsell.cta_url}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-5 py-3 bg-primary hover:bg-primary-hover text-primary-foreground font-semibold rounded-xl text-sm transition-colors"
-              >
-                {upsell.cta_label}
-              </a>
-            )}
+              ) : (
+                <a
+                  href={upsell.cta_url!}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="shrink-0 inline-flex items-center gap-2 px-4 py-2.5 bg-primary hover:bg-primary-hover text-primary-foreground font-semibold rounded-xl text-sm transition-colors"
+                >
+                  {communityButtonLabel}
+                  <ArrowRight size={14} />
+                </a>
+              )}
+            </div>
           </div>
         ) : (
-          // Community-Mitglied (kein Abo): Plan S gratis + Upgrade-Option auf M/L
-          <div className="p-6 sm:p-7 bg-gradient-to-br from-primary/5 to-primary/10 flex flex-col">
-            <div className="flex items-center gap-2 mb-3">
-              <div className="w-9 h-9 rounded-lg bg-primary/15 flex items-center justify-center">
-                <Sparkles size={18} className="text-primary" />
+          // Community-Mitglied (kein Abo): Plan S gratis + Upgrade-Option
+          <div className="p-5 sm:p-6 bg-gradient-to-br from-primary/5 to-primary/10 flex flex-col">
+            <div className="flex items-center gap-2 mb-2">
+              <div className="w-8 h-8 rounded-lg bg-primary/15 flex items-center justify-center">
+                <Sparkles size={16} className="text-primary" />
               </div>
-              <span className="text-xs font-semibold uppercase tracking-wider text-primary">
-                Als Community-Mitglied
+              <span className="text-[11px] font-semibold uppercase tracking-wider text-primary">
+                Community-Mitglied
               </span>
             </div>
-            <h3 className="text-lg sm:text-xl font-bold text-foreground mb-1.5">
-              Plan S ist für dich inklusive
+            <h3 className="text-lg font-bold text-foreground mb-1">
+              Plan S ist inklusive
             </h3>
-            <p className="text-sm text-muted mb-4 leading-relaxed">
-              Dein KI Marketing Club-Zugang schaltet Plan S automatisch frei — links
-              einmal aktivieren. Wenn dir die 200 Credits pro Monat nicht reichen,
-              kannst du jederzeit auf M oder L upgraden (zu Community-Preisen).
+            <p className="text-sm text-muted mb-3 leading-snug">
+              Dein Club-Zugang schaltet Plan S gratis frei. Für mehr Credits auf M oder L
+              upgraden — zu Community-Preisen.
             </p>
-            <ul className="space-y-1.5 mb-4 flex-1">
+            <ul className="space-y-1 mb-4 flex-1">
               {[
-                'Plan S — kostenlos enthalten',
-                'Plan M — 1.500 Credits zu Community-Preis',
-                'Plan L — 5.000 Credits zu Community-Preis',
+                'Plan S — kostenlos',
+                'Plan M — 1.500 Credits (Community-Preis)',
+                'Plan L — 5.000 Credits (Community-Preis)',
               ].map((b) => (
                 <li key={b} className="flex items-start gap-2 text-sm text-foreground">
                   <Check size={14} className="text-primary shrink-0 mt-0.5" />
@@ -497,13 +503,17 @@ function SubscriptionUpsellCard({
                 </li>
               ))}
             </ul>
-            <button
-              onClick={onOpenPricing}
-              className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-4 py-2 bg-primary/15 hover:bg-primary/25 text-primary font-semibold rounded-xl text-sm transition-colors"
-            >
-              Plan vergleichen & aktivieren
-              <ArrowRight size={14} />
-            </button>
+
+            <div className="flex items-center justify-between gap-3 pt-3 border-t border-primary/15">
+              <div className="text-xs text-muted">Community-Preise aktiv</div>
+              <button
+                onClick={onOpenPricing}
+                className="shrink-0 inline-flex items-center gap-2 px-4 py-2.5 bg-primary hover:bg-primary-hover text-primary-foreground font-semibold rounded-xl text-sm transition-colors"
+              >
+                Plan wählen
+                <ArrowRight size={14} />
+              </button>
+            </div>
           </div>
         )}
       </div>
