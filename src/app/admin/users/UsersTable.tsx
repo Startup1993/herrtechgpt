@@ -1,11 +1,23 @@
 'use client'
 
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { CsvImportModal } from './CsvImportModal'
 
 type AccessTier = 'basic' | 'alumni' | 'premium'
 type UserStatus = 'active' | 'invited' | 'added'
+type SubStatus = 'active' | 'trialing' | 'past_due' | 'cancelled' | 'ended'
+type PlanTier = 'S' | 'M' | 'L'
+
+interface SubscriptionInfo {
+  plan_id: string
+  plan_tier: PlanTier
+  plan_name: string
+  status: SubStatus
+  billing_cycle: 'monthly' | 'yearly'
+  cancel_at_period_end: boolean
+  current_period_end: string | null
+}
 
 interface UserRow {
   id: string
@@ -17,10 +29,24 @@ interface UserRow {
   conversation_count: number
   has_logged_in: boolean
   invitation_sent_count: number
+  subscription: SubscriptionInfo | null
 }
 
-type TierFilterValue = 'all' | AccessTier
-type StatusFilterValue = 'all' | UserStatus
+type TierFilter = 'all' | AccessTier
+type StatusFilter = 'all' | UserStatus
+type RoleFilter = 'all' | 'user' | 'admin'
+type SubFilter =
+  | 'all'
+  | 'any_active'
+  | 'none'
+  | 'cancelling'
+  | 'past_due'
+  | 'plan_s'
+  | 'plan_m'
+  | 'plan_l'
+
+type SortKey = 'email' | 'created_at' | 'last_active' | 'conversation_count' | 'access_tier' | 'subscription'
+type SortDir = 'asc' | 'desc'
 
 const TIER_META: Record<AccessTier, { label: string; className: string }> = {
   premium: {
@@ -49,29 +75,115 @@ function computeStatus(u: UserRow): UserStatus {
   return 'added'
 }
 
+function subRank(s: SubscriptionInfo | null): number {
+  // für Sortierung: Kein Abo < Past Due < Cancelling < Plan S < Plan M < Plan L
+  if (!s) return 0
+  if (s.status === 'past_due') return 1
+  if (s.cancel_at_period_end) return 2
+  return s.plan_tier === 'S' ? 3 : s.plan_tier === 'M' ? 4 : 5
+}
+
 export default function UsersTable({ users }: { users: UserRow[] }) {
   const router = useRouter()
   const [search, setSearch] = useState('')
   const [loading, setLoading] = useState<string | null>(null)
   const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null)
-  const [filterTier, setFilterTier] = useState<TierFilterValue>('all')
-  const [filterStatus, setFilterStatus] = useState<StatusFilterValue>('all')
+  const [filterTier, setFilterTier] = useState<TierFilter>('all')
+  const [filterStatus, setFilterStatus] = useState<StatusFilter>('all')
+  const [filterRole, setFilterRole] = useState<RoleFilter>('all')
+  const [filterSub, setFilterSub] = useState<SubFilter>('all')
+  const [sortKey, setSortKey] = useState<SortKey>('created_at')
+  const [sortDir, setSortDir] = useState<SortDir>('desc')
   const [importOpen, setImportOpen] = useState(false)
 
-  const withStatus = users.map((u) => ({ ...u, _status: computeStatus(u) as UserStatus }))
+  const withStatus = useMemo(
+    () => users.map((u) => ({ ...u, _status: computeStatus(u) as UserStatus })),
+    [users]
+  )
 
-  const filtered = withStatus
-    .filter((u) => u.email.toLowerCase().includes(search.toLowerCase()))
-    .filter((u) => filterTier === 'all' || u.access_tier === filterTier)
-    .filter((u) => filterStatus === 'all' || u._status === filterStatus)
+  function matchesSubFilter(sub: SubscriptionInfo | null, f: SubFilter): boolean {
+    if (f === 'all') return true
+    if (f === 'none') return !sub
+    if (!sub) return false
+    if (f === 'any_active') return sub.status === 'active' || sub.status === 'trialing'
+    if (f === 'cancelling') return sub.cancel_at_period_end
+    if (f === 'past_due') return sub.status === 'past_due'
+    if (f === 'plan_s') return sub.plan_tier === 'S'
+    if (f === 'plan_m') return sub.plan_tier === 'M'
+    if (f === 'plan_l') return sub.plan_tier === 'L'
+    return true
+  }
 
-  const premiumCount = users.filter((u) => u.access_tier === 'premium').length
-  const alumniCount = users.filter((u) => u.access_tier === 'alumni').length
-  const basicCount = users.filter((u) => u.access_tier === 'basic').length
+  const filtered = useMemo(() => {
+    const q = search.toLowerCase()
+    return withStatus
+      .filter((u) => u.email.toLowerCase().includes(q))
+      .filter((u) => filterTier === 'all' || u.access_tier === filterTier)
+      .filter((u) => filterStatus === 'all' || u._status === filterStatus)
+      .filter((u) => filterRole === 'all' || u.role === filterRole)
+      .filter((u) => matchesSubFilter(u.subscription, filterSub))
+  }, [withStatus, search, filterTier, filterStatus, filterRole, filterSub])
 
-  const activeCount = withStatus.filter((u) => u._status === 'active').length
-  const invitedCount = withStatus.filter((u) => u._status === 'invited').length
-  const addedCount = withStatus.filter((u) => u._status === 'added').length
+  const sorted = useMemo(() => {
+    const tierRank: Record<AccessTier, number> = { basic: 0, alumni: 1, premium: 2 }
+    const arr = [...filtered]
+    arr.sort((a, b) => {
+      let cmp = 0
+      switch (sortKey) {
+        case 'email':
+          cmp = a.email.localeCompare(b.email)
+          break
+        case 'created_at':
+          cmp = (a.created_at ?? '').localeCompare(b.created_at ?? '')
+          break
+        case 'last_active':
+          cmp = (a.last_active ?? '').localeCompare(b.last_active ?? '')
+          break
+        case 'conversation_count':
+          cmp = a.conversation_count - b.conversation_count
+          break
+        case 'access_tier':
+          cmp = tierRank[a.access_tier] - tierRank[b.access_tier]
+          break
+        case 'subscription':
+          cmp = subRank(a.subscription) - subRank(b.subscription)
+          break
+      }
+      return sortDir === 'asc' ? cmp : -cmp
+    })
+    return arr
+  }, [filtered, sortKey, sortDir])
+
+  function toggleSort(key: SortKey) {
+    if (sortKey === key) {
+      setSortDir((d) => (d === 'asc' ? 'desc' : 'asc'))
+    } else {
+      setSortKey(key)
+      setSortDir(key === 'email' || key === 'access_tier' ? 'asc' : 'desc')
+    }
+  }
+
+  function resetFilters() {
+    setSearch('')
+    setFilterTier('all')
+    setFilterStatus('all')
+    setFilterRole('all')
+    setFilterSub('all')
+  }
+
+  const filtersActive =
+    search !== '' ||
+    filterTier !== 'all' ||
+    filterStatus !== 'all' ||
+    filterRole !== 'all' ||
+    filterSub !== 'all'
+
+  // Counts pro Option (vor Anwendung des eigenen Filters, aber mit den anderen)
+  // → simpel: nur globale Gesamtzahl zeigen, reicht fürs Menü
+  const total = users.length
+  const activeSubCount = users.filter(
+    (u) => u.subscription && (u.subscription.status === 'active' || u.subscription.status === 'trialing')
+  ).length
 
   async function deleteUser(userId: string) {
     setLoading(userId + '_delete')
@@ -118,7 +230,7 @@ export default function UsersTable({ users }: { users: UserRow[] }) {
 
   return (
     <div className="space-y-4">
-      {/* Search + Tier Filter */}
+      {/* Zeile 1: Suche + CSV-Import */}
       <div className="flex flex-col sm:flex-row gap-3">
         <div className="relative flex-1">
           <svg className="absolute left-3 top-1/2 -translate-y-1/2 text-muted" xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -126,48 +238,98 @@ export default function UsersTable({ users }: { users: UserRow[] }) {
           </svg>
           <input
             type="text"
-            placeholder="Nutzer suchen..."
+            placeholder="Nutzer suchen…"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             className="w-full pl-9 pr-4 py-2 text-sm border border-border rounded-lg bg-surface focus:outline-none focus:ring-2 focus:ring-primary/30"
           />
         </div>
-        <div className="flex gap-1.5 flex-wrap">
-          <FilterPill label={`Alle (${users.length})`} active={filterTier === 'all'} onClick={() => setFilterTier('all')} />
-          <FilterPill label={`Community (${premiumCount})`} active={filterTier === 'premium'} onClick={() => setFilterTier('premium')} />
-          <FilterPill label={`Alumni (${alumniCount})`} active={filterTier === 'alumni'} onClick={() => setFilterTier('alumni')} />
-          <FilterPill label={`Basic (${basicCount})`} active={filterTier === 'basic'} onClick={() => setFilterTier('basic')} />
-          <button
-            onClick={() => setImportOpen(true)}
-            className="px-3 py-1.5 rounded-lg text-xs font-medium bg-primary text-white hover:bg-primary-hover transition-colors whitespace-nowrap"
-          >
-            CSV importieren
-          </button>
-        </div>
+        <button
+          onClick={() => setImportOpen(true)}
+          className="px-3 py-2 rounded-lg text-sm font-medium bg-primary text-white hover:bg-primary-hover transition-colors whitespace-nowrap"
+        >
+          CSV importieren
+        </button>
       </div>
 
-      {/* Status Filter */}
-      <div className="flex items-center gap-2 flex-wrap">
-        <span className="text-xs text-muted uppercase tracking-wider font-medium">Status:</span>
-        <FilterPill label={`Alle`} active={filterStatus === 'all'} onClick={() => setFilterStatus('all')} />
-        <FilterPill
-          label={`Aktiv (${activeCount})`}
-          active={filterStatus === 'active'}
-          onClick={() => setFilterStatus('active')}
-          dot="bg-green-500"
+      {/* Zeile 2: Filter-Dropdowns */}
+      <div className="flex flex-wrap items-center gap-2">
+        <FilterSelect
+          label="Zugang"
+          value={filterTier}
+          onChange={(v) => setFilterTier(v as TierFilter)}
+          options={[
+            { value: 'all', label: `Alle (${total})` },
+            { value: 'premium', label: 'Community' },
+            { value: 'alumni', label: 'Alumni' },
+            { value: 'basic', label: 'Basic' },
+          ]}
         />
-        <FilterPill
-          label={`Eingeladen (${invitedCount})`}
-          active={filterStatus === 'invited'}
-          onClick={() => setFilterStatus('invited')}
-          dot="bg-amber-400"
+        <FilterSelect
+          label="Abo"
+          value={filterSub}
+          onChange={(v) => setFilterSub(v as SubFilter)}
+          options={[
+            { value: 'all', label: 'Alle' },
+            { value: 'any_active', label: `Mit aktivem Abo (${activeSubCount})` },
+            { value: 'none', label: 'Ohne Abo' },
+            { value: 'plan_s', label: 'Plan S' },
+            { value: 'plan_m', label: 'Plan M' },
+            { value: 'plan_l', label: 'Plan L' },
+            { value: 'cancelling', label: 'Läuft aus (gekündigt)' },
+            { value: 'past_due', label: 'Zahlung offen' },
+          ]}
         />
-        <FilterPill
-          label={`Hinzugefügt (${addedCount})`}
-          active={filterStatus === 'added'}
-          onClick={() => setFilterStatus('added')}
-          dot="bg-gray-400"
+        <FilterSelect
+          label="Status"
+          value={filterStatus}
+          onChange={(v) => setFilterStatus(v as StatusFilter)}
+          options={[
+            { value: 'all', label: 'Alle' },
+            { value: 'active', label: 'Aktiv' },
+            { value: 'invited', label: 'Eingeladen' },
+            { value: 'added', label: 'Hinzugefügt' },
+          ]}
         />
+        <FilterSelect
+          label="Rolle"
+          value={filterRole}
+          onChange={(v) => setFilterRole(v as RoleFilter)}
+          options={[
+            { value: 'all', label: 'Alle' },
+            { value: 'user', label: 'Nutzer' },
+            { value: 'admin', label: 'Admin' },
+          ]}
+        />
+        <FilterSelect
+          label="Sortierung"
+          value={`${sortKey}:${sortDir}`}
+          onChange={(v) => {
+            const [k, d] = v.split(':') as [SortKey, SortDir]
+            setSortKey(k)
+            setSortDir(d)
+          }}
+          options={[
+            { value: 'created_at:desc', label: 'Registriert (neu → alt)' },
+            { value: 'created_at:asc', label: 'Registriert (alt → neu)' },
+            { value: 'last_active:desc', label: 'Letzte Aktivität (neu → alt)' },
+            { value: 'last_active:asc', label: 'Letzte Aktivität (alt → neu)' },
+            { value: 'email:asc', label: 'E-Mail (A → Z)' },
+            { value: 'email:desc', label: 'E-Mail (Z → A)' },
+            { value: 'conversation_count:desc', label: 'Chats (meisten)' },
+            { value: 'conversation_count:asc', label: 'Chats (wenigsten)' },
+            { value: 'access_tier:desc', label: 'Zugang (höchster)' },
+            { value: 'subscription:desc', label: 'Abo (höchstes)' },
+          ]}
+        />
+        {filtersActive && (
+          <button
+            onClick={resetFilters}
+            className="px-3 py-1.5 text-xs font-medium text-muted hover:text-foreground border border-border rounded-lg bg-surface hover:bg-surface-secondary transition-colors whitespace-nowrap"
+          >
+            × Filter zurücksetzen
+          </button>
+        )}
       </div>
 
       <CsvImportModal
@@ -179,29 +341,30 @@ export default function UsersTable({ users }: { users: UserRow[] }) {
         }}
       />
 
-      {/* Table */}
+      {/* Tabelle */}
       <div className="bg-surface border border-border rounded-xl overflow-hidden">
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b border-border bg-surface-secondary">
-              <th className="text-left px-5 py-3 text-xs font-semibold text-muted uppercase tracking-wider">E-Mail</th>
-              <th className="text-left px-4 py-3 text-xs font-semibold text-muted uppercase tracking-wider">Zugang</th>
-              <th className="text-left px-4 py-3 text-xs font-semibold text-muted uppercase tracking-wider">Registriert</th>
-              <th className="text-left px-4 py-3 text-xs font-semibold text-muted uppercase tracking-wider">Status</th>
-              <th className="text-center px-4 py-3 text-xs font-semibold text-muted uppercase tracking-wider">Chats</th>
+              <SortableTh label="E-Mail" sortKey="email" current={sortKey} dir={sortDir} onClick={toggleSort} align="left" />
+              <SortableTh label="Zugang" sortKey="access_tier" current={sortKey} dir={sortDir} onClick={toggleSort} align="left" />
+              <SortableTh label="Abo" sortKey="subscription" current={sortKey} dir={sortDir} onClick={toggleSort} align="left" />
+              <SortableTh label="Registriert" sortKey="created_at" current={sortKey} dir={sortDir} onClick={toggleSort} align="left" />
+              <SortableTh label="Status" sortKey="last_active" current={sortKey} dir={sortDir} onClick={toggleSort} align="left" />
+              <SortableTh label="Chats" sortKey="conversation_count" current={sortKey} dir={sortDir} onClick={toggleSort} align="center" />
               <th className="text-left px-4 py-3 text-xs font-semibold text-muted uppercase tracking-wider">Rolle</th>
               <th className="px-4 py-3" />
             </tr>
           </thead>
           <tbody className="divide-y divide-border">
-            {filtered.length === 0 && (
+            {sorted.length === 0 && (
               <tr>
-                <td colSpan={7} className="px-5 py-8 text-center text-sm text-muted">
+                <td colSpan={8} className="px-5 py-8 text-center text-sm text-muted">
                   Keine Nutzer gefunden.
                 </td>
               </tr>
             )}
-            {filtered.map((u) => {
+            {sorted.map((u) => {
               const tier = TIER_META[u.access_tier]
               const status = STATUS_META[u._status]
               return (
@@ -217,6 +380,9 @@ export default function UsersTable({ users }: { users: UserRow[] }) {
                     <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium ${tier.className}`}>
                       {tier.label}
                     </span>
+                  </td>
+                  <td className="px-4 py-3.5">
+                    <SubscriptionBadge sub={u.subscription} />
                   </td>
                   <td className="px-4 py-3.5 text-xs text-muted">{formatDate(u.created_at)}</td>
                   <td className="px-4 py-3.5">
@@ -298,33 +464,139 @@ export default function UsersTable({ users }: { users: UserRow[] }) {
           </tbody>
         </table>
       </div>
-      <p className="text-xs text-muted">{filtered.length} von {users.length} Nutzern</p>
+      <p className="text-xs text-muted">{sorted.length} von {users.length} Nutzern</p>
     </div>
   )
 }
 
-function FilterPill({
+function FilterSelect({
   label,
-  active,
-  onClick,
-  dot,
+  value,
+  onChange,
+  options,
 }: {
   label: string
-  active: boolean
-  onClick: () => void
-  dot?: string
+  value: string
+  onChange: (v: string) => void
+  options: { value: string; label: string }[]
 }) {
+  const isDefault = value === 'all' || value.startsWith('created_at:desc')
   return (
-    <button
-      onClick={onClick}
-      className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors whitespace-nowrap ${
-        active
-          ? 'bg-primary text-white'
-          : 'bg-surface border border-border text-muted hover:text-foreground'
-      }`}
-    >
-      {dot && <span className={`w-1.5 h-1.5 rounded-full ${dot}`} />}
-      {label}
-    </button>
+    <label className="inline-flex items-center gap-1.5">
+      <span className="text-xs text-muted uppercase tracking-wider font-medium">{label}</span>
+      <div className="relative">
+        <select
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          className={`appearance-none pl-3 pr-8 py-1.5 text-xs font-medium rounded-lg border cursor-pointer transition-colors focus:outline-none focus:ring-2 focus:ring-primary/30 ${
+            isDefault
+              ? 'bg-surface border-border text-foreground hover:bg-surface-secondary'
+              : 'bg-primary/10 border-primary/30 text-primary hover:bg-primary/15'
+          }`}
+        >
+          {options.map((o) => (
+            <option key={o.value} value={o.value}>
+              {o.label}
+            </option>
+          ))}
+        </select>
+        <svg
+          className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 text-muted"
+          width="12"
+          height="12"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="2.5"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        >
+          <path d="m6 9 6 6 6-6" />
+        </svg>
+      </div>
+    </label>
+  )
+}
+
+function SortableTh({
+  label,
+  sortKey,
+  current,
+  dir,
+  onClick,
+  align,
+}: {
+  label: string
+  sortKey: SortKey
+  current: SortKey
+  dir: SortDir
+  onClick: (k: SortKey) => void
+  align: 'left' | 'center'
+}) {
+  const active = current === sortKey
+  return (
+    <th className={`${align === 'center' ? 'text-center' : 'text-left'} px-4 py-3`}>
+      <button
+        type="button"
+        onClick={() => onClick(sortKey)}
+        className={`inline-flex items-center gap-1 text-xs font-semibold uppercase tracking-wider transition-colors ${
+          active ? 'text-foreground' : 'text-muted hover:text-foreground'
+        }`}
+      >
+        {label}
+        <span className={`text-[10px] leading-none ${active ? 'opacity-100' : 'opacity-30'}`}>
+          {active ? (dir === 'asc' ? '▲' : '▼') : '▾'}
+        </span>
+      </button>
+    </th>
+  )
+}
+
+function SubscriptionBadge({ sub }: { sub: SubscriptionInfo | null }) {
+  if (!sub) {
+    return <span className="text-xs text-muted">—</span>
+  }
+
+  const tierLabel = `Plan ${sub.plan_tier}`
+  const cycle = sub.billing_cycle === 'yearly' ? 'jährlich' : 'monatlich'
+
+  if (sub.status === 'past_due') {
+    return (
+      <div className="flex flex-col gap-0.5">
+        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-700 dark:bg-red-950/30 dark:text-red-400 w-fit">
+          {tierLabel} · Zahlung offen
+        </span>
+        <span className="text-[10px] text-muted">{cycle}</span>
+      </div>
+    )
+  }
+
+  if (sub.cancel_at_period_end) {
+    return (
+      <div className="flex flex-col gap-0.5">
+        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-amber-100 text-amber-700 dark:bg-amber-950/30 dark:text-amber-400 w-fit">
+          {tierLabel} · läuft aus
+        </span>
+        <span className="text-[10px] text-muted">
+          {cycle}
+          {sub.current_period_end && ` · bis ${new Date(sub.current_period_end).toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit' })}`}
+        </span>
+      </div>
+    )
+  }
+
+  const isTrialing = sub.status === 'trialing'
+  return (
+    <div className="flex flex-col gap-0.5">
+      <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium w-fit ${
+        isTrialing
+          ? 'bg-blue-100 text-blue-700 dark:bg-blue-950/30 dark:text-blue-400'
+          : 'bg-primary/10 text-primary'
+      }`}>
+        {tierLabel}
+        {isTrialing && ' · Trial'}
+      </span>
+      <span className="text-[10px] text-muted">{cycle}</span>
+    </div>
   )
 }
