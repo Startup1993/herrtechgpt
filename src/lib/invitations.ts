@@ -1,6 +1,6 @@
 import { Resend } from 'resend'
 import type { SupabaseClient } from '@supabase/supabase-js'
-import { renderEmail } from './email-template'
+import { renderEmail, renderNewsletterInviteEmail } from './email-template'
 import { PRODUCTION_URL } from './urls'
 
 function getResend(): Resend | null {
@@ -64,6 +64,49 @@ export async function sendInvitationEmail(
       from: fromAddress(),
       to: email,
       subject: 'Dein Zugang zur Herr Tech World',
+      html,
+    })
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message : 'Versand fehlgeschlagen' }
+  }
+
+  return { ok: true }
+}
+
+// Launch-Mail für Newsletter-Signups: gleiches Magic-Link-Prinzip,
+// aber spezielles Template + Redirect auf /dashboard/welcome.
+export async function sendNewsletterInviteEmail(
+  admin: SupabaseClient,
+  email: string,
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  const { data, error } = await admin.auth.admin.generateLink({
+    type: 'magiclink',
+    email,
+  })
+  const hashedToken = data?.properties?.hashed_token
+  if (error || !hashedToken) {
+    return { ok: false, error: error?.message ?? 'Link-Erstellung fehlgeschlagen' }
+  }
+
+  const params = new URLSearchParams({
+    token_hash: hashedToken,
+    type: 'magiclink',
+    next: '/welcome',
+  })
+  const loginLink = `${PRODUCTION_URL}/auth/callback?${params.toString()}`
+
+  const resend = getResend()
+  if (!resend) {
+    return { ok: false, error: 'RESEND_API_KEY nicht konfiguriert' }
+  }
+
+  const html = renderNewsletterInviteEmail({ loginLink })
+
+  try {
+    await resend.emails.send({
+      from: fromAddress(),
+      to: email,
+      subject: '🚀 Die Herr Tech World ist offen für dich.',
       html,
     })
   } catch (err) {

@@ -42,10 +42,10 @@ export function SignupForm() {
           <CheckCircle2 className="w-5 h-5 text-primary" />
         </div>
         <div>
-          <div className="font-semibold text-foreground mb-1">Du bist dabei.</div>
+          <div className="font-semibold text-foreground mb-1">Du stehst auf der Liste. 🚀</div>
           <div className="text-sm text-muted leading-relaxed">
-            Wir melden uns bei dir, sobald die Herr Tech World öffnet. Dein Zugang kommt per
-            E-Mail.
+            Sobald wir aufmachen, bekommst du deinen Zugang per Mail. Keine Warteschlange,
+            kein zweites „Ich melde mich gleich". Wir schreiben dir — und du bist drin.
           </div>
         </div>
       </div>
@@ -55,8 +55,11 @@ export function SignupForm() {
   return (
     <form onSubmit={handleSubmit} className="space-y-4">
       <label className="block">
-        <span className="block text-sm font-medium text-foreground mb-2">
-          Trag dich ein und sei einer der Ersten
+        <span className="block text-base font-semibold text-foreground mb-1">
+          Sicher dir deinen Platz in der ersten Welle.
+        </span>
+        <span className="block text-sm text-muted mb-3">
+          Beschränkte Anzahl an Early-Access-Plätzen. Wer zuerst einträgt, ist zuerst drin.
         </span>
         <input
           type="email"
@@ -80,7 +83,7 @@ export function SignupForm() {
             Wird gesendet…
           </>
         ) : (
-          'Ich will dabei sein'
+          'Ja, ich will rein 🚀'
         )}
       </button>
 
@@ -89,8 +92,7 @@ export function SignupForm() {
       )}
 
       <p className="text-xs text-muted leading-relaxed">
-        Wir nutzen deine E-Mail ausschließlich, um dir Bescheid zu geben, wenn die Plattform öffnet.
-        Kein Spam. Abmeldung jederzeit möglich.
+        Kein Spam, kein Verkaufsgeblubber. Eine einzige Mail: „Die Tür ist auf." Abmeldung jederzeit.
       </p>
     </form>
   )

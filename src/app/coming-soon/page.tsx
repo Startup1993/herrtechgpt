@@ -17,18 +17,21 @@ export default function ComingSoonPage() {
         <main className="flex-1 flex items-center justify-center px-6 sm:px-10 py-12">
           <div className="w-full max-w-3xl">
             <p className="text-xs sm:text-sm font-semibold tracking-[0.2em] uppercase text-primary mb-6">
-              Bald verfügbar
+              Early Access · Bald live
             </p>
 
             <h1 className="text-3xl sm:text-5xl lg:text-6xl font-bold leading-[1.1] tracking-tight mb-6">
               Wir haben eine ganze Welt gebaut. <span className="text-primary">Mit Claude.</span>
             </h1>
 
+            <p className="text-base sm:text-lg text-muted leading-relaxed mb-4 max-w-2xl">
+              Kein Developer-Team. Kein 6-Monats-Projekt. Kein SaaS-Budget. Nur klare Ideen,
+              die richtigen Prompts und Claude als Baumeister — und am Ende stand da
+              die <strong className="text-foreground">Herr Tech World</strong>.
+            </p>
             <p className="text-base sm:text-lg text-muted leading-relaxed mb-10 max-w-2xl">
-              Während andere noch überlegen, ob sie KI &bdquo;mal ausprobieren&ldquo; sollen, haben wir
-              einfach angefangen. Das Ergebnis: <strong className="text-foreground">Herr Tech World</strong>{' '}
-              — eine komplette KI-Plattform mit Toolbox, 6 spezialisierten Coaches und Classroom.
-              Trag dich ein und sei einer der Ersten, wenn wir öffnen.
+              Eine komplette KI-Plattform: Toolbox, 6 spezialisierte Coaches, Classroom.
+              Wenn wir öffnen, willst du drin sein — bevor es alle anderen sind.
             </p>
 
             <div className="bg-surface border border-border rounded-2xl p-6 sm:p-8 shadow-sm">

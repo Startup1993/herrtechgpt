@@ -1,7 +1,7 @@
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { NextResponse } from 'next/server'
-import { sendInvitationEmail } from '@/lib/invitations'
+import { sendNewsletterInviteEmail } from '@/lib/invitations'
 
 async function requireAdmin() {
   const supabase = await createClient()
@@ -62,7 +62,7 @@ export async function POST(request: Request) {
         userId = created.user.id
       }
 
-      const res = await sendInvitationEmail(admin, email)
+      const res = await sendNewsletterInviteEmail(admin, email)
       if (!res.ok) {
         failed += 1
         errors.push({ email, error: res.error })
