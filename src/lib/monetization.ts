@@ -83,7 +83,7 @@ export async function getMonetizationState(
   userId: string,
   accessTier: AccessTier
 ): Promise<MonetizationState> {
-  const [{ data: subscription }, { data: wallet }, { data: plan }] = await Promise.all([
+  const [subResult, walletResult] = await Promise.all([
     supabase
       .from('subscriptions')
       .select('*')
@@ -93,10 +93,13 @@ export async function getMonetizationState(
       .limit(1)
       .maybeSingle(),
     supabase.from('credit_wallets').select('*').eq('user_id', userId).maybeSingle(),
-    // Den Plan separat laden, damit wir den Tier kennen (für UI-Label)
-    null as unknown as Promise<{ data: null }>, // placeholder, filled below
   ])
 
+  const subscription = subResult.data
+  const wallet = walletResult.data
+
+  // Plan-Tier separat laden (kleiner Extra-Roundtrip, aber sauberer als
+  // ein Promise.all-Placeholder für etwas, das nur conditional gebraucht wird)
   let planTier: 'S' | 'M' | 'L' | null = null
   if (subscription?.plan_id) {
     const { data: planRow } = await supabase
@@ -116,10 +119,9 @@ export async function getMonetizationState(
     planId: subscription?.plan_id ?? null,
     planTier,
     totalCredits,
-    hasActiveSubscription: subscription?.status === 'active' || subscription?.status === 'trialing',
+    hasActiveSubscription:
+      subscription?.status === 'active' || subscription?.status === 'trialing',
   }
-  // Unused plan import suppressed — we fetch tier above when needed
-  void plan
 }
 
 // ─── Plans + Packs laden ────────────────────────────────────────────────
