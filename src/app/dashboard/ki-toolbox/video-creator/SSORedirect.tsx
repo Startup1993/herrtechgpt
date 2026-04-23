@@ -4,15 +4,18 @@ import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { Loader2, AlertCircle, ChevronLeft } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
+import { useTheme } from '@/lib/theme-context'
 
 /**
  * Öffnet den Video-Creator auf dem Worker (vc.herr.tech) via SSO.
- * Holt die aktuelle Supabase-Session im Browser und hängt die Tokens
- * als URL-Hash an — der Worker nimmt sie dort ab und setzt seine eigenen
- * HttpOnly-Cookies für seine Domain.
+ * Holt die aktuelle Supabase-Session und hängt zusätzlich Theme + Back-URL
+ * ans URL-Fragment — der Worker nimmt sie ab, setzt seine Cookies, und
+ * die Worker-UI erscheint im selben Theme und mit funktionierendem
+ * „Zurück zur Plattform"-Button.
  */
 export default function SSORedirect({ workerUrl }: { workerUrl: string }) {
   const [error, setError] = useState<string | null>(null)
+  const { theme } = useTheme()
 
   useEffect(() => {
     ;(async () => {
@@ -24,16 +27,21 @@ export default function SSORedirect({ workerUrl }: { workerUrl: string }) {
         if (!session?.access_token) {
           throw new Error('Keine aktive Session')
         }
+        // Back-URL = aktueller Origin (Staging oder Live), damit der User
+        // exakt zu dem Deployment zurückkommt, aus dem er gekommen ist.
+        const back = `${window.location.origin}/dashboard/ki-toolbox`
         const hash = new URLSearchParams({
           at: session.access_token,
           rt: session.refresh_token ?? '',
+          theme: theme,
+          back,
         }).toString()
         window.location.replace(`${workerUrl.replace(/\/$/, '')}/sso?next=/projects#${hash}`)
       } catch (e) {
         setError(e instanceof Error ? e.message : String(e))
       }
     })()
-  }, [workerUrl])
+  }, [workerUrl, theme])
 
   return (
     <div className="max-w-xl mx-auto px-4 sm:px-6 py-10">
