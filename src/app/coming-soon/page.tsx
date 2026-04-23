@@ -15,7 +15,7 @@ export default function ComingSoonPage() {
         </header>
 
         <main className="flex-1 flex items-center justify-center px-6 sm:px-10 py-12">
-          <div className="w-full max-w-2xl">
+          <div className="w-full max-w-3xl">
             <p className="text-xs sm:text-sm font-semibold tracking-[0.2em] uppercase text-primary mb-6">
               Early Access · Bald live
             </p>
