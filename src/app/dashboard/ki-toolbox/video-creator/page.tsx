@@ -2,8 +2,8 @@ import { redirect } from 'next/navigation'
 import { cookies } from 'next/headers'
 import { createClient } from '@/lib/supabase/server'
 import { computeEffectiveAccess, VIEW_AS_COOKIE } from '@/lib/access'
-import VideoCreatorHome from './VideoCreatorHome'
 import PremiumGate from './PremiumGate'
+import SSORedirect from './SSORedirect'
 
 export default async function VideoCreatorPage() {
   const supabase = await createClient()
@@ -23,6 +23,6 @@ export default async function VideoCreatorPage() {
   const hasAccess = access.isAdmin || access.tier === 'premium'
   if (!hasAccess) return <PremiumGate currentTier={access.tier} />
 
-  const configured = !!process.env.VIDEO_CREATOR_INTERNAL_URL
-  return <VideoCreatorHome configured={configured} />
+  const workerUrl = process.env.VIDEO_CREATOR_PUBLIC_URL || 'https://vc.herr.tech'
+  return <SSORedirect workerUrl={workerUrl} />
 }
