@@ -130,7 +130,7 @@ Der **Video Creator ist eine eigenständige App** auf `vc.herr.tech` (Hetzner VP
 | SSH (root) | `ssh -i ~/.ssh/hetzner_ed25519 -o IdentitiesOnly=yes root@178.104.27.49` |
 | SSH (deploy) | `ssh -i ~/.ssh/hetzner_ed25519 -o IdentitiesOnly=yes deploy@178.104.27.49` |
 | App-Verzeichnis | `/opt/video-creator-worker` |
-| Container-Namen | `video-creator-worker-worker-1`, `video-creator-worker-caddy-1` |
+| Container-Namen | `video-creator-worker-worker-1`, `video-creator-worker-caddy-1`, `video-creator-worker-cobalt-api-1` |
 | Volumes (persistent) | `worker-projects` → `/app/data/projects`, `worker-uploads` → `/app/uploads`, `worker-out` → `/app/out` |
 
 ### Deploy-Befehle
@@ -263,6 +263,13 @@ curl -sS https://vc.herr.tech/api/check-env   # API-Keys sichtbar? (Keys werden 
 ### „Light-Mode sieht falsch aus"
 - Accent muss `#B598E2` sein, nicht `#8b51e0` oder `#a855f7` (Tailwind-Purple). Check `src/app/globals.css` im Worker-Repo.
 - Hardcoded-Farben in Pages: sollten auf `T.xxx` umgestellt sein (z.B. `T.card`, `T.border`, `T.muted`). Inline-Hex-Codes in Pages sind Tech-Debt.
+
+### „ECONNREFUSED 127.0.0.1:9000" beim URL-Import
+yt-dlp wurde geblockt (Instagram/YouTube rate-limit) und Fallback auf cobalt scheitert. Prüfen:
+- `docker compose ps` — läuft `cobalt-api`?
+- Falls nicht: `docker compose up -d cobalt-api` bzw. kompletter Rebuild `docker compose up -d --build`
+- Worker muss `COBALT_HOST=cobalt-api` + `COBALT_PORT=9000` als ENV haben (steht in `docker-compose.yml`, nicht in `.env`)
+- Direkt-Test: `docker compose exec worker curl -X POST -H "Content-Type: application/json" -H "Accept: application/json" --data '{"url":"<video-url>"}' http://cobalt-api:9000/`
 
 ### „Projekt-Daten nach Rebuild weg"
 **Darf nicht mehr passieren** seit PR #1/#2 im Worker-Repo. Falls doch: check `docker-compose.yml` — `worker-projects:/app/data/projects` MUSS so stehen (nicht `/app/tmp/projects`!).
