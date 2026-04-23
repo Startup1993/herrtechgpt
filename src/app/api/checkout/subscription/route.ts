@@ -46,11 +46,11 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: 'Invalid cycle' }, { status: 400 })
   }
 
-  // Access + Preisband
+  // Access + Preisband (email/name kommen aus auth.users, nicht profiles)
   const [{ data: profile }, cookieStore] = await Promise.all([
     supabase
       .from('profiles')
-      .select('role, access_tier, email, full_name')
+      .select('role, access_tier')
       .eq('id', user.id)
       .single(),
     cookies(),
@@ -106,11 +106,16 @@ export async function POST(req: Request) {
     )
   }
 
-  // Stripe Customer sicherstellen
+  // Stripe Customer sicherstellen. Email kommt aus Supabase-Auth (immer verfügbar),
+  // Name aus user_metadata (optional, vom OAuth-Provider oder bei Signup gesetzt).
+  const customerName =
+    (user.user_metadata?.full_name as string | undefined) ??
+    (user.user_metadata?.name as string | undefined) ??
+    undefined
   const customerId = await ensureStripeCustomer({
     userId: user.id,
-    email: user.email ?? profile?.email ?? '',
-    name: profile?.full_name ?? undefined,
+    email: user.email ?? '',
+    name: customerName,
   })
 
   // Checkout-Session erstellen

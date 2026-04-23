@@ -33,11 +33,7 @@ export async function POST(req: Request) {
   }
 
   const [{ data: profile }, cookieStore] = await Promise.all([
-    supabase
-      .from('profiles')
-      .select('role, access_tier, email, full_name')
-      .eq('id', user.id)
-      .single(),
+    supabase.from('profiles').select('role, access_tier').eq('id', user.id).single(),
     cookies(),
   ])
   const access = computeEffectiveAccess(profile, cookieStore.get(VIEW_AS_COOKIE)?.value)
@@ -65,10 +61,14 @@ export async function POST(req: Request) {
     )
   }
 
+  const customerName =
+    (user.user_metadata?.full_name as string | undefined) ??
+    (user.user_metadata?.name as string | undefined) ??
+    undefined
   const customerId = await ensureStripeCustomer({
     userId: user.id,
-    email: user.email ?? profile?.email ?? '',
-    name: profile?.full_name ?? undefined,
+    email: user.email ?? '',
+    name: customerName,
   })
 
   const stripe = getStripe()

@@ -61,12 +61,22 @@ export default function BillingClient({
   const total = monthly + purchased
   const allowance = wallet?.monthly_allowance ?? 0
 
+  async function safeJson(res: Response): Promise<{ url?: string; error?: string }> {
+    const text = await res.text()
+    if (!text) return {}
+    try {
+      return JSON.parse(text)
+    } catch {
+      return { error: `Server-Fehler (${res.status}). Nochmal probieren.` }
+    }
+  }
+
   async function openPortal() {
     setLoading('portal')
     setError(null)
     try {
       const res = await fetch('/api/billing/portal', { method: 'POST' })
-      const data = await res.json()
+      const data = await safeJson(res)
       if (!res.ok || !data.url) throw new Error(data.error || 'Portal konnte nicht geöffnet werden')
       window.location.href = data.url
     } catch (err) {
@@ -80,7 +90,7 @@ export default function BillingClient({
     setError(null)
     try {
       const res = await fetch('/api/subscriptions/cancel', { method: 'POST' })
-      const data = await res.json()
+      const data = await safeJson(res)
       if (!res.ok) throw new Error(data.error || 'Kündigung fehlgeschlagen')
       router.refresh()
       setConfirming(false)
@@ -96,7 +106,7 @@ export default function BillingClient({
     setError(null)
     try {
       const res = await fetch('/api/subscriptions/reactivate', { method: 'POST' })
-      const data = await res.json()
+      const data = await safeJson(res)
       if (!res.ok) throw new Error(data.error || 'Reaktivierung fehlgeschlagen')
       router.refresh()
     } catch (err) {
