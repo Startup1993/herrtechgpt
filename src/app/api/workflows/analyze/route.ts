@@ -2,6 +2,7 @@ import { createClient } from '@/lib/supabase/server'
 import { NextResponse } from 'next/server'
 import { createAnthropic } from '@ai-sdk/anthropic'
 import { generateText } from 'ai'
+import { hasActionAccess } from '@/lib/monetization'
 
 export const maxDuration = 60
 
@@ -9,6 +10,13 @@ export async function POST(request: Request) {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+
+  if (!(await hasActionAccess(supabase, user.id))) {
+    return NextResponse.json(
+      { error: 'Kein aktives Abo. Bitte Plan abschließen.' },
+      { status: 402 }
+    )
+  }
 
   const { transcript, context } = await request.json()
   if (!transcript) return NextResponse.json({ error: 'Kein Transkript' }, { status: 400 })

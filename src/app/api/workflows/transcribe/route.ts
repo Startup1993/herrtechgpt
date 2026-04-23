@@ -1,6 +1,7 @@
 import { createClient } from '@/lib/supabase/server'
 import { NextResponse } from 'next/server'
 import OpenAI from 'openai'
+import { hasActionAccess } from '@/lib/monetization'
 
 export const maxDuration = 60
 
@@ -8,6 +9,13 @@ export async function POST(request: Request) {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+
+  if (!(await hasActionAccess(supabase, user.id))) {
+    return NextResponse.json(
+      { error: 'Kein aktives Abo. Bitte Plan abschließen.' },
+      { status: 402 }
+    )
+  }
 
   const apiKey = process.env.OPENAI_API_KEY
   if (!apiKey) return NextResponse.json({ error: 'OpenAI API Key nicht konfiguriert' }, { status: 500 })

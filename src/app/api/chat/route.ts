@@ -17,6 +17,25 @@ export async function POST(req: Request) {
     return new Response('Unauthorized', { status: 401 })
   }
 
+  // Subscription-Gate: ohne aktives Abo kein Chat.
+  // (Admins bypassen via role-check für Support/Tests.)
+  const [{ data: roleRow }, { data: sub }] = await Promise.all([
+    supabase.from('profiles').select('role').eq('id', user.id).single(),
+    supabase
+      .from('subscriptions')
+      .select('status')
+      .eq('user_id', user.id)
+      .in('status', ['active', 'trialing'])
+      .maybeSingle(),
+  ])
+
+  if (roleRow?.role !== 'admin' && !sub) {
+    return new Response(
+      JSON.stringify({ error: 'Kein aktives Abo. Bitte Plan abschließen.' }),
+      { status: 402, headers: { 'Content-Type': 'application/json' } }
+    )
+  }
+
   const body = await req.json()
 
   // AI SDK v6 TextStreamChatTransport sends: { messages, ...body }
