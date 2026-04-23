@@ -1,6 +1,9 @@
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { NextResponse } from 'next/server'
+import { handleAccessTierChange } from '@/lib/monetization'
+import { notifyCommunityDowngrade } from '@/lib/email'
+import type { AccessTier } from '@/lib/access'
 
 const VALID_ROLES = ['user', 'admin'] as const
 const VALID_TIERS = ['basic', 'alumni', 'premium'] as const
@@ -64,6 +67,18 @@ export async function PATCH(request: Request) {
 
   const admin = createAdminClient()
 
+  // Alten access_tier-Wert holen, damit wir bei premium→alumni/basic den
+  // Downgrade-Flow (Abo kündigen + Mail) auslösen können.
+  let oldTier: AccessTier | null = null
+  if (access_tier !== undefined) {
+    const { data: currentProfile } = await admin
+      .from('profiles')
+      .select('access_tier')
+      .eq('id', userId)
+      .single()
+    oldTier = (currentProfile?.access_tier as AccessTier) ?? null
+  }
+
   if (email !== undefined) {
     if (typeof email !== 'string' || !email.includes('@')) {
       return NextResponse.json({ error: 'Invalid email' }, { status: 400 })
@@ -90,6 +105,29 @@ export async function PATCH(request: Request) {
     .single()
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+
+  // Post-Update-Hook: bei Community-Verlust Abo kündigen + Mail senden.
+  // Läuft fire-and-forget — Fehler blockieren das UPDATE nicht, werden nur
+  // geloggt. Admin kann notfalls manuell in Stripe nachfassen.
+  if (
+    oldTier &&
+    access_tier !== undefined &&
+    oldTier !== access_tier
+  ) {
+    try {
+      const result = await handleAccessTierChange({
+        userId,
+        oldTier,
+        newTier: access_tier as AccessTier,
+      })
+      if (result.subscriptionCancelled && result.periodEnd) {
+        await notifyCommunityDowngrade({ userId, periodEnd: result.periodEnd })
+      }
+    } catch (err) {
+      console.error('[admin/users] tier-change hook failed:', err)
+    }
+  }
+
   return NextResponse.json(data)
 }
 

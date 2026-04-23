@@ -13,6 +13,60 @@ function fromAddress(): string {
   return process.env.RESEND_FROM_EMAIL ?? 'Herr Tech <onboarding@resend.dev>'
 }
 
+/**
+ * Benachrichtigt einen User darüber, dass er seinen Community-Status verloren
+ * hat und sein Abo am Periodenende ausläuft. Enthält Link zum Re-Abschluss
+ * zu den neuen (Alumni/Basic-)Preisen.
+ */
+export async function notifyCommunityDowngrade({
+  userId,
+  periodEnd,
+}: {
+  userId: string
+  periodEnd: string
+}): Promise<void> {
+  const resend = getResend()
+  if (!resend) {
+    console.log('[email] RESEND_API_KEY nicht gesetzt — Skip community-downgrade mail')
+    return
+  }
+
+  const admin = createAdminClient()
+  const { data: authUser } = await admin.auth.admin.getUserById(userId)
+  const email = authUser?.user?.email
+  if (!email) {
+    console.warn('[email] community-downgrade: keine Email für user', userId)
+    return
+  }
+
+  const endDate = new Date(periodEnd).toLocaleDateString('de-DE', {
+    day: '2-digit',
+    month: 'long',
+    year: 'numeric',
+  })
+
+  const html = renderEmail({
+    heading: 'Deine Community-Mitgliedschaft ist beendet',
+    intro: `Hey,<br><br>dein Zugang zum KI Marketing Club wurde beendet.<br><br>Dein bestehendes Abo läuft noch bis zum <strong>${endDate}</strong> weiter — bis dahin hast du vollen Zugriff auf Herr Tech GPT und die KI Toolbox.<br><br>Danach endet das Abo automatisch. Du kannst jederzeit zu den regulären Alumni-Preisen neu abschließen. Dein Classroom-Zugang bleibt als Alumni lebenslang erhalten.`,
+    cta: {
+      label: 'Neuen Plan wählen',
+      href: `${PRODUCTION_URL}/dashboard/pricing`,
+    },
+    footerNote: 'Keine Sorge — du verlierst keine Daten. Wir freuen uns, wenn du dabei bleibst.',
+  })
+
+  try {
+    await resend.emails.send({
+      from: fromAddress(),
+      to: email,
+      subject: 'Deine Community-Mitgliedschaft ist beendet',
+      html,
+    })
+  } catch (err) {
+    console.error('[email] community-downgrade send failed:', err)
+  }
+}
+
 // Sendet eine Benachrichtigung an alle Admins über ein neues Support-Ticket.
 // Läuft still durch, wenn keine Config vorhanden ist.
 export async function notifyAdminsNewTicket({

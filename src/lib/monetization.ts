@@ -55,6 +55,76 @@ export interface MonetizationState {
   hasActiveSubscription: boolean
 }
 
+// ─── Access-Tier-Change Hook ───────────────────────────────────────────
+
+/**
+ * Wird aufgerufen wenn ein Admin die access_tier eines Users ändert.
+ *
+ * Haupt-Fall: User verliert `premium` (Community-Mitgliedschaft) → Alumni
+ * oder Basic. Wir kündigen dann das laufende Abo, falls es auf Community-
+ * Preisen läuft, zum Ende der Abrechnungsperiode + verschicken eine E-Mail
+ * mit Hinweis auf die neuen (Alumni/Basic-)Preise.
+ *
+ * Kein Sofort-Lock: User behält Zugang bis Periodenende, kann dann neu
+ * abschließen zu den für ihn gültigen Preisen. Das ist fair + verringert
+ * negative UX-Überraschungen.
+ */
+export async function handleAccessTierChange(params: {
+  userId: string
+  oldTier: AccessTier
+  newTier: AccessTier
+}): Promise<{ subscriptionCancelled: boolean; periodEnd?: string }> {
+  // Nur relevant wenn User Community-Status verliert
+  if (params.oldTier !== 'premium' || params.newTier === 'premium') {
+    return { subscriptionCancelled: false }
+  }
+
+  const admin = createAdminClient()
+
+  // Aktives Abo mit Community-Preisband finden
+  const { data: sub } = await admin
+    .from('subscriptions')
+    .select('id, stripe_subscription_id, price_band, current_period_end, cancel_at_period_end')
+    .eq('user_id', params.userId)
+    .in('status', ['active', 'trialing', 'past_due'])
+    .order('created_at', { ascending: false })
+    .limit(1)
+    .maybeSingle()
+
+  // Nur kündigen wenn Abo auf Community-Preis läuft (also jetzt nicht mehr fair)
+  if (!sub || sub.price_band !== 'community' || sub.cancel_at_period_end) {
+    return { subscriptionCancelled: false }
+  }
+
+  // Stripe: cancel_at_period_end = true (User behält Zugang bis Ende)
+  if (sub.stripe_subscription_id) {
+    const { getStripe } = await import('./stripe')
+    const stripe = getStripe()
+    try {
+      await stripe.subscriptions.update(sub.stripe_subscription_id, {
+        cancel_at_period_end: true,
+      })
+    } catch (err) {
+      console.error('[access-tier-change] Stripe cancel failed:', err)
+      // Trotzdem lokal markieren — Webhook wird finalen State korrigieren
+    }
+  }
+
+  // Lokaler DB-Update: cancel_at_period_end + cancelled_at
+  await admin
+    .from('subscriptions')
+    .update({
+      cancel_at_period_end: true,
+      cancelled_at: new Date().toISOString(),
+    })
+    .eq('id', sub.id)
+
+  return {
+    subscriptionCancelled: true,
+    periodEnd: sub.current_period_end,
+  }
+}
+
 // ─── Server-side Access Check ───────────────────────────────────────────
 
 /**
