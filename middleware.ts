@@ -51,6 +51,13 @@ export async function middleware(request: NextRequest) {
     return NextResponse.redirect(url)
   }
 
+  // ── /welcome benötigt Login (sonst kann man Screen als Gast sehen) ─────
+  if (!user && pathname.startsWith('/welcome')) {
+    const url = request.nextUrl.clone()
+    url.pathname = '/login'
+    return NextResponse.redirect(url)
+  }
+
   // ── Alte /assistants Routen → Redirect auf neue /dashboard Routen ──────
   if (user && pathname.startsWith('/assistants')) {
     const url = request.nextUrl.clone()

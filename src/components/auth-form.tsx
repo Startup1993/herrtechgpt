@@ -30,7 +30,7 @@ export function AuthForm() {
     setLoading(true)
 
     const supabase = createClient()
-    const emailRedirectTo = `${window.location.origin}/auth/callback`
+    const emailRedirectTo = `${window.location.origin}/auth/callback?next=/welcome`
 
     const { error } = await supabase.auth.signInWithOtp({
       email,
