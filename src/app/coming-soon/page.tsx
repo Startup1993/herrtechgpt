@@ -45,14 +45,14 @@ export default function ComingSoonPage() {
                 text="Du tippst. Die KI dreht. Fertiger Video-Content aus Text."
               />
               <FeatureCard
-                emoji="✂️"
-                title="KI Video Editor"
-                text="Lad dein Video hoch, die KI schneidet. Du postest."
-              />
-              <FeatureCard
                 emoji="🎨"
                 title="Karussell-Generator"
                 text="Ein Klick, fertiger Instagram-Post in deinen Brand-Farben."
+              />
+              <FeatureCard
+                emoji="🤖"
+                title="6 KI-Coaches"
+                text="Trainiert auf Herr Techs Inhalten. Für Content, Funnel, Mindset & mehr."
               />
             </div>
           </div>

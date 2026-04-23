@@ -172,11 +172,6 @@ export function renderNewsletterInviteEmail(opts: NewsletterInviteOptions): stri
                   </tr>
                   <tr>
                     <td style="padding:8px 0; font-size:15px; line-height:1.5; color:#333;">
-                      ✂️&nbsp;&nbsp;<strong>KI Video Editor</strong> — hochladen, schneiden lassen, posten.
-                    </td>
-                  </tr>
-                  <tr>
-                    <td style="padding:8px 0; font-size:15px; line-height:1.5; color:#333;">
                       🎨&nbsp;&nbsp;<strong>Karussell-Generator</strong> — ein Klick, Instagram-Post fertig.
                     </td>
                   </tr>

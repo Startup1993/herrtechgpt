@@ -45,7 +45,7 @@ export function WelcomeScreen() {
               <FeatureCard
                 emoji="🎬"
                 title="KI Toolbox"
-                text="Video Creator, Editor & Karussell-Generator. Spart dir Stunden."
+                text="Video Creator & Karussell-Generator. Spart dir Stunden."
               />
               <FeatureCard
                 emoji="🤖"
