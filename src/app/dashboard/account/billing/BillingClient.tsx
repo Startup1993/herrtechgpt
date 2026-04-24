@@ -146,6 +146,38 @@ export default function BillingClient({
         </div>
       )}
 
+      {/* Past-Due Banner — Zahlung fehlgeschlagen */}
+      {subscription?.status === 'past_due' && (
+        <div className="flex items-start gap-3 p-4 rounded-xl bg-red-500/10 border border-red-500/40">
+          <AlertTriangle className="text-red-600 shrink-0 mt-0.5" size={20} />
+          <div className="flex-1 min-w-0">
+            <div className="font-semibold text-foreground">
+              Zahlung konnte nicht verarbeitet werden
+            </div>
+            <div className="text-sm text-muted mt-1">
+              Deine letzte Abrechnung ist fehlgeschlagen. Das passiert meist, wenn die
+              Kreditkarte abgelaufen ist oder das Limit erreicht wurde. Stripe versucht
+              es automatisch erneut — du kannst aber auch jetzt schon die Zahlungsmethode
+              aktualisieren, damit dein Zugriff nicht unterbrochen wird.
+            </div>
+            {hasStripeCustomer && (
+              <button
+                onClick={openPortal}
+                disabled={loading === 'portal'}
+                className="mt-3 inline-flex items-center gap-2 px-4 py-2 bg-red-600 hover:bg-red-700 text-white font-medium rounded-xl text-sm transition-colors disabled:opacity-50"
+              >
+                {loading === 'portal' ? (
+                  <Loader2 size={14} className="animate-spin" />
+                ) : (
+                  <FileText size={14} />
+                )}
+                Zahlungsmethode aktualisieren
+              </button>
+            )}
+          </div>
+        </div>
+      )}
+
       {/* Plan-Karte */}
       <div className="rounded-2xl border border-border bg-surface p-6">
         <div className="flex items-start justify-between gap-4 flex-wrap">
