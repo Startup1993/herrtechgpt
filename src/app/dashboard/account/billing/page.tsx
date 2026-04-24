@@ -50,6 +50,28 @@ export default async function BillingPage({
     .order('created_at', { ascending: false })
     .limit(10)
 
+  // Geplanter Plan-Wechsel (Downgrade zum Periodenende)
+  let scheduledPlanName: string | null = null
+  let scheduledChangeAt: string | null = null
+  let scheduledCycle: 'monthly' | 'yearly' | null = null
+  if (state.subscription?.id) {
+    const { data: sched } = await supabase
+      .from('subscriptions')
+      .select('scheduled_plan_id, scheduled_billing_cycle, scheduled_change_at')
+      .eq('id', state.subscription.id)
+      .maybeSingle()
+    if (sched?.scheduled_plan_id && sched.scheduled_change_at) {
+      const { data: schedPlan } = await supabase
+        .from('plans')
+        .select('name')
+        .eq('id', sched.scheduled_plan_id)
+        .maybeSingle()
+      scheduledPlanName = schedPlan?.name ?? sched.scheduled_plan_id
+      scheduledChangeAt = sched.scheduled_change_at
+      scheduledCycle = (sched.scheduled_billing_cycle as 'monthly' | 'yearly' | null) ?? null
+    }
+  }
+
   return (
     <BillingClient
       subscription={state.subscription}
@@ -59,6 +81,9 @@ export default async function BillingPage({
       transactions={transactions ?? []}
       checkoutStatus={checkout ?? null}
       hasStripeCustomer={!!profile?.stripe_customer_id || !!state.subscription}
+      scheduledPlanName={scheduledPlanName}
+      scheduledChangeAt={scheduledChangeAt}
+      scheduledCycle={scheduledCycle}
     />
   )
 }

@@ -22,6 +22,7 @@ import { NextResponse } from 'next/server'
 import { getStripe, verifyWebhook } from '@/lib/stripe'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { grantMonthlyCredits, grantPurchasedCredits } from '@/lib/monetization'
+import { tryHandleSkoolCheckout } from '@/lib/skool-sync'
 import type Stripe from 'stripe'
 
 export const runtime = 'nodejs' // 'edge' kann keine Stripe-Signatur-Verifikation
@@ -80,6 +81,10 @@ export async function POST(req: Request) {
       case 'customer.subscription.deleted':
         await handleSubscriptionDeleted(event.data.object as Stripe.Subscription)
         break
+      case 'subscription_schedule.released':
+      case 'subscription_schedule.canceled':
+        await handleScheduleCleared(event.data.object as Stripe.SubscriptionSchedule)
+        break
       case 'invoice.payment_succeeded':
         await handleInvoicePaid(event.data.object as Stripe.Invoice)
         break
@@ -120,6 +125,13 @@ export async function POST(req: Request) {
  */
 async function handleCheckoutCompleted(session: Stripe.Checkout.Session) {
   const admin = createAdminClient()
+
+  // Skool-Kauf? (Einmal-Zahlung für KI Marketing Club, nicht aus unserem Checkout)
+  // Muss VOR der user_id-Prüfung laufen, weil Skool-Checkouts außerhalb unserer
+  // App passieren und daher kein user_id im Metadata tragen.
+  const handled = await tryHandleSkoolCheckout(admin, session)
+  if (handled) return
+
   const userId = session.metadata?.user_id
   if (!userId) {
     throw new Error(`checkout.session.completed ohne user_id in metadata (session ${session.id})`)
@@ -231,6 +243,26 @@ async function handleSubscriptionUpsert(sub: Stripe.Subscription) {
 
   const { periodStart, periodEnd } = extractSubscriptionPeriod(sub)
 
+  // Gab es einen geplanten Downgrade, der jetzt eingelöst wurde?
+  // → scheduled_* leeren, damit UI-Banner verschwindet.
+  const { data: existingRow } = await admin
+    .from('subscriptions')
+    .select('scheduled_plan_id, scheduled_billing_cycle, stripe_schedule_id')
+    .eq('stripe_subscription_id', sub.id)
+    .maybeSingle()
+
+  const scheduledFulfilled =
+    existingRow?.scheduled_plan_id === plan.id &&
+    existingRow?.scheduled_billing_cycle === (cycle ?? 'monthly')
+
+  const subSchedule = (sub as unknown as { schedule?: string | { id: string } | null }).schedule
+  const stripeScheduleId =
+    typeof subSchedule === 'string'
+      ? subSchedule
+      : subSchedule && 'id' in subSchedule
+        ? subSchedule.id
+        : null
+
   await admin.from('subscriptions').upsert(
     {
       user_id: userId,
@@ -245,6 +277,17 @@ async function handleSubscriptionUpsert(sub: Stripe.Subscription) {
       cancel_at_period_end: sub.cancel_at_period_end,
       cancelled_at: sub.canceled_at ? new Date(sub.canceled_at * 1000).toISOString() : null,
       ended_at: sub.ended_at ? new Date(sub.ended_at * 1000).toISOString() : null,
+      ...(scheduledFulfilled
+        ? {
+            scheduled_plan_id: null,
+            scheduled_price_id: null,
+            scheduled_billing_cycle: null,
+            scheduled_change_at: null,
+            stripe_schedule_id: null,
+          }
+        : {
+            stripe_schedule_id: stripeScheduleId,
+          }),
     },
     { onConflict: 'stripe_subscription_id' }
   )
@@ -287,6 +330,25 @@ function extractSubscriptionPeriod(sub: Stripe.Subscription): {
     )
   }
   return { periodStart, periodEnd }
+}
+
+/**
+ * subscription_schedule.released / .canceled — Schedule wurde freigegeben
+ * (entweder wegen Upgrade das den Downgrade überschreibt, oder manuell
+ * storniert). Scheduled-Felder in DB leeren, damit der Banner verschwindet.
+ */
+async function handleScheduleCleared(schedule: Stripe.SubscriptionSchedule) {
+  const admin = createAdminClient()
+  await admin
+    .from('subscriptions')
+    .update({
+      scheduled_plan_id: null,
+      scheduled_price_id: null,
+      scheduled_billing_cycle: null,
+      scheduled_change_at: null,
+      stripe_schedule_id: null,
+    })
+    .eq('stripe_schedule_id', schedule.id)
 }
 
 /**

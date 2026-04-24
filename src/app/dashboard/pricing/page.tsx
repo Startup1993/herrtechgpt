@@ -29,6 +29,15 @@ export default async function PricingPage() {
 
   const state = await getMonetizationState(supabase, user.id, access.tier)
 
+  // scheduled_plan_id / scheduled_change_at für Downgrade-Banner laden
+  const { data: schedInfo } = state.subscription
+    ? await supabase
+        .from('subscriptions')
+        .select('scheduled_plan_id, scheduled_billing_cycle, scheduled_change_at')
+        .eq('id', state.subscription.id)
+        .maybeSingle()
+    : { data: null }
+
   return (
     <PricingClient
       plans={plans as Plan[]}
@@ -37,7 +46,11 @@ export default async function PricingPage() {
       accessTier={access.tier}
       currentPlanId={state.subscription?.plan_id ?? null}
       currentCycle={state.subscription?.billing_cycle ?? null}
+      currentPeriodEnd={state.subscription?.current_period_end ?? null}
       subscriptionActive={state.hasActiveSubscription}
+      scheduledPlanId={schedInfo?.scheduled_plan_id ?? null}
+      scheduledCycle={(schedInfo?.scheduled_billing_cycle as 'monthly' | 'yearly' | null) ?? null}
+      scheduledChangeAt={schedInfo?.scheduled_change_at ?? null}
     />
   )
 }

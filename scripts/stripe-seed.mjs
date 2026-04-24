@@ -35,6 +35,8 @@ const PLANS = [
     prices: [
       { band: 'basic', cycle: 'monthly', amount: 1900 },
       { band: 'community', cycle: 'monthly', amount: 0 },
+      { band: 'basic', cycle: 'yearly', amount: 19900 },
+      { band: 'community', cycle: 'yearly', amount: 0 },
     ],
   },
   {
@@ -48,6 +50,8 @@ const PLANS = [
     prices: [
       { band: 'basic', cycle: 'monthly', amount: 4900 },
       { band: 'community', cycle: 'monthly', amount: 2900 },
+      { band: 'basic', cycle: 'yearly', amount: 53900 },
+      { band: 'community', cycle: 'yearly', amount: 31900 },
     ],
   },
   {
@@ -61,6 +65,8 @@ const PLANS = [
     prices: [
       { band: 'basic', cycle: 'monthly', amount: 9900 },
       { band: 'community', cycle: 'monthly', amount: 6900 },
+      { band: 'basic', cycle: 'yearly', amount: 108900 },
+      { band: 'community', cycle: 'yearly', amount: 75900 },
     ],
   },
 ]
@@ -293,9 +299,11 @@ async function main() {
   console.log('## Abo-Pläne\n')
   for (const r of results.plans) {
     console.log(`**Plan ${r.tier}** (DB-ID: \`${r.dbPlanId}\`)`)
-    console.log(`  Stripe Product-ID:          ${r.productId}`)
-    console.log(`  Price Basic — monatlich:    ${r.prices.basic_monthly}`)
-    console.log(`  Price Community — monatlich:${r.prices.community_monthly}`)
+    console.log(`  Stripe Product-ID:           ${r.productId}`)
+    console.log(`  Price Basic — monatlich:     ${r.prices.basic_monthly}`)
+    console.log(`  Price Community — monatlich: ${r.prices.community_monthly}`)
+    console.log(`  Price Basic — jährlich:      ${r.prices.basic_yearly}`)
+    console.log(`  Price Community — jährlich:  ${r.prices.community_yearly}`)
     console.log()
   }
 
@@ -315,7 +323,9 @@ async function main() {
     console.log(
       `UPDATE plans SET stripe_product_id='${r.productId}', ` +
         `stripe_price_basic_monthly='${r.prices.basic_monthly}', ` +
-        `stripe_price_community_monthly='${r.prices.community_monthly}' ` +
+        `stripe_price_community_monthly='${r.prices.community_monthly}', ` +
+        `stripe_price_basic_yearly='${r.prices.basic_yearly}', ` +
+        `stripe_price_community_yearly='${r.prices.community_yearly}' ` +
         `WHERE id='${r.dbPlanId}';`
     )
   }
