@@ -571,6 +571,135 @@ function UpgradeHintCard({
 }
 
 // ═══════════════════════════════════════════════════════════
+// UPGRADE + CLUB CARD — Zweigeteilt (wie SubscriptionUpsellCard),
+// aber links "Upgrade" statt "Abo abschließen"
+// ═══════════════════════════════════════════════════════════
+
+function UpgradeAndClubCard({
+  currentTier,
+  isCommunity,
+  upsell,
+  onOpenPricing,
+}: {
+  currentTier: 'S' | 'M'
+  isCommunity: boolean
+  upsell: UpsellCopy
+  onOpenPricing: () => void
+}) {
+  const nextTier = currentTier === 'S' ? 'M' : 'L'
+  const nextCredits = nextTier === 'M' ? '1.500' : '5.000'
+  const currentCredits = currentTier === 'S' ? '200' : '1.500'
+
+  const comingSoon = upsell.cta_coming_soon || !upsell.cta_url
+  const communityButtonLabel = upsell.cta_label || 'Jetzt beitreten'
+
+  return (
+    <div className="mb-8 rounded-[var(--radius-2xl)] border border-border bg-surface overflow-hidden">
+      <div className="grid grid-cols-1 lg:grid-cols-2 divide-y lg:divide-y-0 lg:divide-x divide-border">
+        {/* ── Links: Upgrade ─────────────────────────────────────── */}
+        <div className="p-5 sm:p-6 flex flex-col">
+          <div className="flex items-center gap-2 mb-2">
+            <div className="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center">
+              <Rocket size={16} className="text-primary" />
+            </div>
+            <span className="text-[11px] font-semibold uppercase tracking-wider text-primary">
+              Plan upgraden
+            </span>
+          </div>
+          <h3 className="text-lg font-bold text-foreground mb-1">
+            Reicht dir Plan {currentTier} nicht?
+          </h3>
+          <p className="text-sm text-muted mb-3 leading-snug">
+            Mit Plan {nextTier} bekommst du {nextCredits} Credits statt {currentCredits} pro Monat
+            {isCommunity ? ' — zu deinem Community-Preis' : ''}.
+          </p>
+
+          <ul className="space-y-1 mb-4 flex-1">
+            {[
+              `${nextCredits} Credits pro Monat`,
+              'Alle KI-Toolbox-Funktionen',
+              'Jederzeit kündbar',
+            ].map((b) => (
+              <li key={b} className="flex items-start gap-2 text-sm text-foreground">
+                <Check size={14} className="text-primary shrink-0 mt-0.5" />
+                <span>{b}</span>
+              </li>
+            ))}
+          </ul>
+
+          <div className="flex items-center justify-between gap-3 pt-3 border-t border-border">
+            <div className="text-xs text-muted">
+              Aktuell: Plan {currentTier}
+            </div>
+            <button
+              onClick={onOpenPricing}
+              className="shrink-0 inline-flex items-center gap-2 px-4 py-2.5 bg-primary hover:bg-primary-hover text-primary-foreground font-semibold rounded-xl text-sm transition-colors"
+            >
+              Auf {nextTier} upgraden
+              <ArrowRight size={14} />
+            </button>
+          </div>
+        </div>
+
+        {/* ── Rechts: KI Marketing Club ──────────────────────────── */}
+        <div className="p-5 sm:p-6 bg-gradient-to-br from-primary/5 to-primary/10 flex flex-col">
+          <div className="flex items-center gap-2 mb-2">
+            <div className="w-8 h-8 rounded-lg bg-primary/15 flex items-center justify-center">
+              <Users size={16} className="text-primary" />
+            </div>
+            <span className="text-[11px] font-semibold uppercase tracking-wider text-primary">
+              KI Marketing Club
+            </span>
+            {upsell.cta_coming_soon && (
+              <span className="inline-flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wider px-1.5 py-0.5 rounded-full bg-amber-100 text-amber-700 dark:bg-amber-950/30 dark:text-amber-400">
+                <Clock size={10} /> Soon
+              </span>
+            )}
+          </div>
+          <h3 className="text-lg font-bold text-foreground mb-1">{upsell.heading}</h3>
+          <p className="text-sm text-muted mb-3 leading-snug">{upsell.intro}</p>
+
+          {upsell.benefits.length > 0 && (
+            <ul className="space-y-1 mb-4 flex-1">
+              {upsell.benefits.slice(0, 3).map((b) => (
+                <li key={b} className="flex items-start gap-2 text-sm text-foreground">
+                  <Check size={14} className="text-primary shrink-0 mt-0.5" />
+                  <span>{b}</span>
+                </li>
+              ))}
+            </ul>
+          )}
+
+          <div className="flex items-center justify-between gap-3 pt-3 border-t border-primary/15">
+            <div className="text-xs text-muted">
+              {upsell.cta_coming_soon ? 'Anmeldung startet bald' : 'Community + Live-Calls'}
+            </div>
+            {comingSoon ? (
+              <button
+                disabled
+                className="shrink-0 inline-flex items-center gap-2 px-4 py-2.5 bg-primary/40 text-white font-semibold rounded-xl text-sm cursor-not-allowed"
+              >
+                {communityButtonLabel}
+              </button>
+            ) : (
+              <a
+                href={upsell.cta_url!}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="shrink-0 inline-flex items-center gap-2 px-4 py-2.5 bg-primary hover:bg-primary-hover text-primary-foreground font-semibold rounded-xl text-sm transition-colors"
+              >
+                {communityButtonLabel}
+                <ArrowRight size={14} />
+              </a>
+            )}
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ═══════════════════════════════════════════════════════════
 // MAIN DASHBOARD PAGE
 // ═══════════════════════════════════════════════════════════
 
@@ -663,17 +792,31 @@ export default function DashboardView({
         />
       )}
 
-      {/* Upgrade-Hinweis — wenn Abo S oder M aktiv */}
-      {showUpgradeHint && (currentPlanTier === 'S' || currentPlanTier === 'M') && (
-        <UpgradeHintCard
-          currentTier={currentPlanTier}
-          isCommunity={isCommunity}
-          onOpenPricing={() => setPricingOpen(true)}
-        />
-      )}
+      {/* Upgrade + Club — zweigeteilt, wenn beides angezeigt werden soll */}
+      {showUpgradeHint &&
+        showFullUpsell &&
+        (currentPlanTier === 'S' || currentPlanTier === 'M') && (
+          <UpgradeAndClubCard
+            currentTier={currentPlanTier}
+            isCommunity={isCommunity}
+            upsell={upsell}
+            onOpenPricing={() => setPricingOpen(true)}
+          />
+        )}
 
-      {/* Community Upsell — wenn Abo aktiv aber nicht community */}
-      {showFullUpsell && <MarketingClubFull upsell={upsell} />}
+      {/* Nur Upgrade-Hinweis (z.B. Community-Mitglied mit Plan S/M) */}
+      {showUpgradeHint &&
+        !showFullUpsell &&
+        (currentPlanTier === 'S' || currentPlanTier === 'M') && (
+          <UpgradeHintCard
+            currentTier={currentPlanTier}
+            isCommunity={isCommunity}
+            onOpenPricing={() => setPricingOpen(true)}
+          />
+        )}
+
+      {/* Nur Community-Upsell (z.B. Plan L ohne Upgrade-Hinweis) */}
+      {showFullUpsell && !showUpgradeHint && <MarketingClubFull upsell={upsell} />}
 
       {/* Main Tiles */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5 mb-10">
