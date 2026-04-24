@@ -40,7 +40,7 @@ export default async function DashboardLayout({
   const access = computeEffectiveAccess(profile, viewAsRaw)
   const states = matrix[access.tier]
 
-  // Neue Tickets z\u00e4hlen — nur f\u00fcr echte Admins (nicht impersonating)
+  // Neue Tickets zählen — nur für echte Admins (nicht impersonating)
   let newTicketCount = 0
   if (access.realIsAdmin) {
     const { count } = await supabase
