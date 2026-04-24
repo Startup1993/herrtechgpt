@@ -256,6 +256,8 @@ export async function ensureStripeCustomer(params: {
   name?: string
 }): Promise<string> {
   const admin = createAdminClient()
+  const { getStripe } = await import('./stripe')
+  const stripe = getStripe()
 
   const { data: profile } = await admin
     .from('profiles')
@@ -263,10 +265,30 @@ export async function ensureStripeCustomer(params: {
     .eq('id', params.userId)
     .single()
 
-  if (profile?.stripe_customer_id) return profile.stripe_customer_id
+  // Gespeicherte Customer-ID gegen Stripe verifizieren — falls in Stripe
+  // manuell gelöscht, müssen wir einen neuen Customer anlegen, sonst
+  // scheitert jeder Checkout mit "No such customer" (resource_missing).
+  if (profile?.stripe_customer_id) {
+    try {
+      const existing = await stripe.customers.retrieve(profile.stripe_customer_id)
+      if (!('deleted' in existing) || !existing.deleted) {
+        return profile.stripe_customer_id
+      }
+      // Customer existiert aber ist als deleted markiert → null'en und neu anlegen
+    } catch (err) {
+      const code = (err as { code?: string })?.code
+      if (code !== 'resource_missing') {
+        // Anderer Fehler (Auth, Netzwerk) — nicht schlucken, sonst stumme Fehler
+        throw err
+      }
+      // resource_missing = komplett aus Stripe entfernt → frisch anlegen
+    }
 
-  const { getStripe } = await import('./stripe')
-  const stripe = getStripe()
+    await admin
+      .from('profiles')
+      .update({ stripe_customer_id: null })
+      .eq('id', params.userId)
+  }
 
   const customer = await stripe.customers.create({
     email: params.email,

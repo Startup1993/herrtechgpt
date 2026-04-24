@@ -4,16 +4,18 @@ import { redirect } from 'next/navigation'
 import { computeEffectiveAccess, VIEW_AS_COOKIE } from '@/lib/access'
 import { getPermissionMatrix, getUpsellCopy } from '@/lib/permissions'
 import { getActivePlans, getMonetizationState } from '@/lib/monetization'
+import { getAuthedUser, getProfileCached } from '@/lib/server-cache'
 import type { Plan } from '@/lib/types'
 import DashboardView from './DashboardView'
 
 export default async function DashboardPage() {
-  const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
+  const user = await getAuthedUser()
   if (!user) redirect('/login')
 
-  const [{ data: profile }, cookieStore, matrix] = await Promise.all([
-    supabase.from('profiles').select('role, access_tier').eq('id', user.id).single(),
+  const supabase = await createClient()
+
+  const [profile, cookieStore, matrix] = await Promise.all([
+    getProfileCached(),
     cookies(),
     getPermissionMatrix(supabase),
   ])

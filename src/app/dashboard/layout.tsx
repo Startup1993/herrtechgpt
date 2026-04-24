@@ -4,22 +4,20 @@ import { cookies } from 'next/headers'
 import { AppShell } from '@/components/app-shell'
 import { computeEffectiveAccess, VIEW_AS_COOKIE } from '@/lib/access'
 import { getPermissionMatrix } from '@/lib/permissions'
+import { getAuthedUser, getProfileCached } from '@/lib/server-cache'
 
 export default async function DashboardLayout({
   children,
 }: {
   children: React.ReactNode
 }) {
-  const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
+  const user = await getAuthedUser()
   if (!user) redirect('/login')
 
-  const [{ data: profile }, { data: conversations }, cookieStore, matrix, { count: helpUnreadCount }] = await Promise.all([
-    supabase
-      .from('profiles')
-      .select('role, access_tier, background, market, target_audience, offer')
-      .eq('id', user.id)
-      .single(),
+  const supabase = await createClient()
+
+  const [profile, { data: conversations }, cookieStore, matrix, { count: helpUnreadCount }] = await Promise.all([
+    getProfileCached(),
     supabase
       .from('conversations')
       .select('id, user_id, agent_id, title, created_at, updated_at, user_has_unread')
