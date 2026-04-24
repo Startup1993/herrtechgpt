@@ -3,6 +3,8 @@
 import { useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { CsvImportModal } from './CsvImportModal'
+import { CreateUserModal } from './CreateUserModal'
+import { Plus } from 'lucide-react'
 
 type AccessTier = 'basic' | 'alumni' | 'premium'
 type UserStatus = 'active' | 'invited' | 'added'
@@ -95,6 +97,7 @@ export default function UsersTable({ users }: { users: UserRow[] }) {
   const [sortKey, setSortKey] = useState<SortKey>('created_at')
   const [sortDir, setSortDir] = useState<SortDir>('desc')
   const [importOpen, setImportOpen] = useState(false)
+  const [createOpen, setCreateOpen] = useState(false)
 
   const withStatus = useMemo(
     () => users.map((u) => ({ ...u, _status: computeStatus(u) as UserStatus })),
@@ -245,8 +248,15 @@ export default function UsersTable({ users }: { users: UserRow[] }) {
           />
         </div>
         <button
+          onClick={() => setCreateOpen(true)}
+          className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium bg-primary text-white hover:bg-primary-hover transition-colors whitespace-nowrap"
+        >
+          <Plus size={15} />
+          Nutzer hinzufügen
+        </button>
+        <button
           onClick={() => setImportOpen(true)}
-          className="px-3 py-2 rounded-lg text-sm font-medium bg-primary text-white hover:bg-primary-hover transition-colors whitespace-nowrap"
+          className="px-3 py-2 rounded-lg text-sm font-medium border border-border bg-surface text-foreground hover:bg-surface-secondary transition-colors whitespace-nowrap"
         >
           CSV importieren
         </button>
@@ -337,6 +347,15 @@ export default function UsersTable({ users }: { users: UserRow[] }) {
         onClose={() => setImportOpen(false)}
         onDone={() => {
           setImportOpen(false)
+          router.refresh()
+        }}
+      />
+
+      <CreateUserModal
+        open={createOpen}
+        onClose={() => setCreateOpen(false)}
+        onDone={() => {
+          setCreateOpen(false)
           router.refresh()
         }}
       />
