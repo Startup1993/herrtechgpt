@@ -377,16 +377,16 @@ function SubscriptionUpsellCard({
               Abo abschließen
             </span>
           </div>
-          <h3 className="text-lg font-bold text-foreground mb-1">Schalte alles frei</h3>
+          <h3 className="text-lg font-bold text-foreground mb-1">KI-Tools freischalten</h3>
           <p className="text-sm text-muted mb-3 leading-snug">
-            Herr Tech GPT + KI Toolbox nutzen. S, M oder L — du wählst die passenden Credits.
+            Voller Zugriff auf Herr Tech GPT und die KI Toolbox. S, M oder L — du wählst die passenden Credits.
           </p>
 
           <ul className="space-y-1 mb-4 flex-1">
             {[
               'Herr Tech GPT — 6 Experten-Agenten',
-              'KI Toolbox — Carousel, Video-Creator, mehr',
-              'Monatliche Credits für die KI Toolbox',
+              'KI Toolbox — Carousel, Video-Creator & mehr',
+              'Monatliche Credits, die mit dir wachsen',
             ].map((b) => (
               <li key={b} className="flex items-start gap-2 text-sm text-foreground">
                 <Check size={14} className="text-primary shrink-0 mt-0.5" />
