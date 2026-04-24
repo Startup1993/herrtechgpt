@@ -1,8 +1,40 @@
 import { NextRequest, NextResponse } from 'next/server'
 import Anthropic from '@anthropic-ai/sdk'
 import type { TranscriptSegment, SceneAnalysis } from '@/lib/video/types'
+import { createClient } from '@/lib/supabase/server'
+import { chargeCredits, hasActionAccess, refundCredits } from '@/lib/monetization'
 
 export async function POST(req: NextRequest) {
+  // Auth + Subscription-Gate
+  const supabase = await createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  if (!(await hasActionAccess(supabase, user.id))) {
+    return NextResponse.json(
+      { error: 'Kein aktives Abo. Bitte Plan abschließen.' },
+      { status: 402 }
+    )
+  }
+
+  // Credit-Charge vor dem teuren Claude-Call
+  const feature = 'video_editor_cut'
+  const chargeResult = await chargeCredits({
+    userId: user.id,
+    feature,
+    units: 1,
+    note: 'Video-Editor Analyse',
+  })
+  if (!chargeResult.ok) {
+    return NextResponse.json(
+      {
+        error: 'Nicht genug Credits',
+        needed: chargeResult.needed,
+        available: chargeResult.available,
+      },
+      { status: 402 }
+    )
+  }
+
   try {
     const { segments, videoTitle } = await req.json() as {
       segments: TranscriptSegment[]
@@ -70,12 +102,24 @@ NUR das JSON-Array, kein Markdown, kein Text drumherum.`,
       }
     } catch {
       console.error('JSON parse error:', text.substring(0, 200))
+      await refundCredits({
+        userId: user.id,
+        amount: chargeResult.charged,
+        feature,
+        note: 'JSON-Parse-Error',
+      })
       return NextResponse.json({ error: 'KI-Antwort konnte nicht geparst werden' }, { status: 500 })
     }
 
     return NextResponse.json({ scenes })
   } catch (error) {
     console.error('Analyse-Fehler:', error)
+    await refundCredits({
+      userId: user.id,
+      amount: chargeResult.charged,
+      feature,
+      note: error instanceof Error ? error.message : 'Analyse fehlgeschlagen',
+    })
     return NextResponse.json(
       { error: error instanceof Error ? error.message : 'Analyse fehlgeschlagen' },
       { status: 500 }

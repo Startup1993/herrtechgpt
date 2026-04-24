@@ -579,7 +579,10 @@ function stateToLock(state: FeatureState, isAdmin: boolean): string | undefined 
   if (state === 'open') return undefined
   if (state === 'coming_soon') return 'Coming Soon'
   if (state === 'community') return 'KI Marketing Club'
-  if (state === 'paid') return 'Kostenpflichtig'
+  // 'paid' (Abo-Zugriff) → KEIN Lock-Overlay.
+  // User soll reinklicken, lesen, ausprobieren können. Die Aktions-Sperre
+  // (Send/Generate) passiert erst im Zielscreen via Paywall-Popup. Zusätzlich
+  // zeigt die SubscriptionUpsellCard oben im Dashboard den Hinweis aufs Abo.
   return undefined
 }
 

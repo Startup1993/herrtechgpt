@@ -19,7 +19,7 @@ import { getAppUrl } from '@/lib/urls'
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
 
-export async function POST() {
+export async function POST(req: Request) {
   const supabase = await createClient()
   const {
     data: { user },
@@ -44,7 +44,7 @@ export async function POST() {
   const stripe = getStripe()
   const session = await stripe.billingPortal.sessions.create({
     customer: profile.stripe_customer_id,
-    return_url: `${getAppUrl()}/dashboard/account/billing`,
+    return_url: `${getAppUrl(req)}/dashboard/account/billing`,
     locale: 'de',
   })
 

@@ -55,6 +55,102 @@ export interface MonetizationState {
   hasActiveSubscription: boolean
 }
 
+// ─── Access-Tier-Change Hook ───────────────────────────────────────────
+
+/**
+ * Wird aufgerufen wenn ein Admin die access_tier eines Users ändert.
+ *
+ * Haupt-Fall: User verliert `premium` (Community-Mitgliedschaft) → Alumni
+ * oder Basic. Wir kündigen dann das laufende Abo, falls es auf Community-
+ * Preisen läuft, zum Ende der Abrechnungsperiode + verschicken eine E-Mail
+ * mit Hinweis auf die neuen (Alumni/Basic-)Preise.
+ *
+ * Kein Sofort-Lock: User behält Zugang bis Periodenende, kann dann neu
+ * abschließen zu den für ihn gültigen Preisen. Das ist fair + verringert
+ * negative UX-Überraschungen.
+ */
+export async function handleAccessTierChange(params: {
+  userId: string
+  oldTier: AccessTier
+  newTier: AccessTier
+}): Promise<{ subscriptionCancelled: boolean; periodEnd?: string }> {
+  // Nur relevant wenn User Community-Status verliert
+  if (params.oldTier !== 'premium' || params.newTier === 'premium') {
+    return { subscriptionCancelled: false }
+  }
+
+  const admin = createAdminClient()
+
+  // Aktives Abo mit Community-Preisband finden
+  const { data: sub } = await admin
+    .from('subscriptions')
+    .select('id, stripe_subscription_id, price_band, current_period_end, cancel_at_period_end')
+    .eq('user_id', params.userId)
+    .in('status', ['active', 'trialing', 'past_due'])
+    .order('created_at', { ascending: false })
+    .limit(1)
+    .maybeSingle()
+
+  // Nur kündigen wenn Abo auf Community-Preis läuft (also jetzt nicht mehr fair)
+  if (!sub || sub.price_band !== 'community' || sub.cancel_at_period_end) {
+    return { subscriptionCancelled: false }
+  }
+
+  // Stripe: cancel_at_period_end = true (User behält Zugang bis Ende)
+  if (sub.stripe_subscription_id) {
+    const { getStripe } = await import('./stripe')
+    const stripe = getStripe()
+    try {
+      await stripe.subscriptions.update(sub.stripe_subscription_id, {
+        cancel_at_period_end: true,
+      })
+    } catch (err) {
+      console.error('[access-tier-change] Stripe cancel failed:', err)
+      // Trotzdem lokal markieren — Webhook wird finalen State korrigieren
+    }
+  }
+
+  // Lokaler DB-Update: cancel_at_period_end + cancelled_at
+  await admin
+    .from('subscriptions')
+    .update({
+      cancel_at_period_end: true,
+      cancelled_at: new Date().toISOString(),
+    })
+    .eq('id', sub.id)
+
+  return {
+    subscriptionCancelled: true,
+    periodEnd: sub.current_period_end,
+  }
+}
+
+// ─── Server-side Access Check ───────────────────────────────────────────
+
+/**
+ * Prüft serverseitig ob ein User Aktions-Zugriff hat (aktives Abo oder Admin).
+ * Wird in API-Routes aufgerufen, bevor teure Claude/Stripe/Fal-Calls laufen,
+ * damit niemand per curl die UI-Paywall umgeht.
+ *
+ * Gibt true/false zurück. Admin-Check per role='admin' in profiles.
+ */
+export async function hasActionAccess(
+  supabase: SupabaseClient,
+  userId: string
+): Promise<boolean> {
+  const [{ data: profile }, { data: sub }] = await Promise.all([
+    supabase.from('profiles').select('role').eq('id', userId).single(),
+    supabase
+      .from('subscriptions')
+      .select('status')
+      .eq('user_id', userId)
+      .in('status', ['active', 'trialing'])
+      .maybeSingle(),
+  ])
+  if (profile?.role === 'admin') return true
+  return !!sub
+}
+
 // ─── Price Band ─────────────────────────────────────────────────────────
 
 /**
@@ -393,20 +489,25 @@ export async function grantMonthlyCredits(params: {
 
 /**
  * Schreibt einem User gekaufte Credits gut (Top-up via Stripe Checkout).
- * Rolliert `expiry_months` (aus credit_pack konfigurierbar, Default 12).
+ *
+ * Gekaufte Credits rollieren **unbegrenzt** — der Wert bleibt erhalten bis
+ * er aufgebraucht ist (besser für den User, einfacher im Code). Die
+ * credit_purchases.expires_at-Spalte setzen wir trotzdem (auf 100 Jahre
+ * in der Zukunft), damit das DB-Schema intakt bleibt und wir bei Bedarf
+ * später wieder Ablauf einführen können.
  */
 export async function grantPurchasedCredits(params: {
   userId: string
   amount: number
   packId?: string
-  expiryMonths?: number
+  expiryMonths?: number // wird ignoriert — Credits rollieren unbegrenzt
   stripeCheckoutSessionId?: string
   stripePaymentIntentId?: string
 }) {
   const admin = createAdminClient()
-  const expiryMonths = params.expiryMonths ?? 12
+  // 100 Jahre in die Zukunft → effektiv unbegrenzt
   const expiresAt = new Date()
-  expiresAt.setMonth(expiresAt.getMonth() + expiryMonths)
+  expiresAt.setFullYear(expiresAt.getFullYear() + 100)
 
   // 1) credit_purchases anlegen (FIFO-Tracking für spätere Ablauf-Logik)
   await admin.from('credit_purchases').insert({
@@ -446,7 +547,7 @@ export async function grantPurchasedCredits(params: {
     balance_after_purchased: newPurchased,
     reason: 'topup',
     reference_id: params.stripeCheckoutSessionId ?? null,
-    note: `Top-up +${params.amount} Credits (gültig bis ${expiresAt.toISOString()})`,
+    note: `Top-up +${params.amount} Credits (rolliert unbegrenzt)`,
   })
 
   return { ok: true as const, newBalance: newPurchased }

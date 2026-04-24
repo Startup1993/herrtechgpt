@@ -65,42 +65,63 @@ export async function POST(req: Request) {
     (user.user_metadata?.full_name as string | undefined) ??
     (user.user_metadata?.name as string | undefined) ??
     undefined
-  const customerId = await ensureStripeCustomer({
-    userId: user.id,
-    email: user.email ?? '',
-    name: customerName,
-  })
+  try {
+    const customerId = await ensureStripeCustomer({
+      userId: user.id,
+      email: user.email ?? '',
+      name: customerName,
+    })
 
-  const stripe = getStripe()
-  const origin = getAppUrl()
+    const stripe = getStripe()
+    const origin = getAppUrl(req)
 
-  const session = await stripe.checkout.sessions.create({
-    mode: 'payment',
-    customer: customerId,
-    line_items: [{ price: priceId, quantity: 1 }],
-    allow_promotion_codes: true,
-    billing_address_collection: 'required',
-    tax_id_collection: { enabled: true },
-    automatic_tax: { enabled: true },
-    invoice_creation: { enabled: true }, // Bei Einmalkäufen Rechnung explizit anlegen
-    success_url: `${origin}/dashboard/credits?checkout=success&session_id={CHECKOUT_SESSION_ID}`,
-    cancel_url: `${origin}/dashboard/credits?checkout=cancelled`,
-    metadata: {
-      user_id: user.id,
-      pack_id: packId,
-      credits: String(pack.credits),
-      expiry_months: String(pack.expiry_months ?? 12),
-      price_band: priceBand,
-    },
-    payment_intent_data: {
+    const session = await stripe.checkout.sessions.create({
+      mode: 'payment',
+      customer: customerId,
+      // Siehe Subscription-Route: nötig für tax_id_collection bei bestehenden Customern
+      customer_update: { name: 'auto', address: 'auto' },
+      line_items: [{ price: priceId, quantity: 1 }],
+      allow_promotion_codes: true,
+      billing_address_collection: 'required',
+      tax_id_collection: { enabled: true },
+      automatic_tax: { enabled: process.env.STRIPE_AUTOMATIC_TAX === 'true' },
+      invoice_creation: { enabled: true },
+      success_url: `${origin}/dashboard/credits?checkout=success&session_id={CHECKOUT_SESSION_ID}`,
+      cancel_url: `${origin}/dashboard/credits?checkout=cancelled`,
       metadata: {
         user_id: user.id,
         pack_id: packId,
         credits: String(pack.credits),
+        expiry_months: String(pack.expiry_months ?? 12),
+        price_band: priceBand,
       },
-    },
-    locale: 'de',
-  })
+      payment_intent_data: {
+        metadata: {
+          user_id: user.id,
+          pack_id: packId,
+          credits: String(pack.credits),
+        },
+      },
+      locale: 'de',
+    })
 
-  return NextResponse.json({ url: session.url })
+    return NextResponse.json({ url: session.url })
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err)
+    const stripeCode = (err as { code?: string })?.code
+    console.error('[checkout/credits] Fehler:', {
+      message: msg,
+      code: stripeCode,
+      packId,
+      priceBand,
+      priceId,
+      userId: user.id,
+    })
+    return NextResponse.json(
+      {
+        error: `Checkout-Fehler: ${msg}${stripeCode ? ` (${stripeCode})` : ''}`,
+      },
+      { status: 500 }
+    )
+  }
 }

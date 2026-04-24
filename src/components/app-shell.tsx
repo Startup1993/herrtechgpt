@@ -5,6 +5,7 @@ import { usePathname, useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { Eye, X } from 'lucide-react'
 import { Sidebar } from './sidebar'
+import { CreditBadge } from './credit-badge'
 import type { Conversation } from '@/lib/types'
 import type { AccessTier, ViewAsMode } from '@/lib/access'
 import type { FeatureKey, FeatureState } from '@/lib/permissions'
@@ -110,8 +111,9 @@ export function AppShell({ conversations, userEmail, userName, isAdmin, realIsAd
         )}
 
         <main className="flex-1 min-h-0 overflow-y-auto relative">
-          {/* Übersicht-Button — oben rechts */}
-          <div className="absolute top-4 right-4 z-10">
+          {/* Header-Buttons — oben rechts */}
+          <div className="absolute top-4 right-4 z-10 flex items-center gap-2">
+            <CreditBadge />
             <Link
               href="/dashboard"
               className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium text-muted hover:text-foreground bg-surface/80 hover:bg-surface-secondary border border-border backdrop-blur-sm transition-colors shadow-sm"

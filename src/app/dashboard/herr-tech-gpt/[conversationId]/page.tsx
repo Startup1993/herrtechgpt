@@ -1,8 +1,17 @@
 import { createClient } from '@/lib/supabase/server'
-import { redirect, notFound } from 'next/navigation'
+import { cookies } from 'next/headers'
+import { redirect } from 'next/navigation'
 import { getAgent } from '@/lib/agents'
 import { ChatInterface } from '@/components/chat-interface'
+import { computeEffectiveAccess, VIEW_AS_COOKIE } from '@/lib/access'
+import {
+  getActivePacks,
+  getActivePlans,
+  getMonetizationState,
+} from '@/lib/monetization'
+import type { Plan, CreditPack } from '@/lib/types'
 import type { AgentDefinition } from '@/lib/agents'
+import type { SubscriptionGateState } from '@/components/subscription-gate'
 
 const generalAgent: AgentDefinition = {
   id: 'general',
@@ -58,6 +67,29 @@ export default async function ConversationPage({
     content: msg.content,
   }))
 
+  // Subscription-Gate-State: für Paywall-Banner + Send-Button-Gating
+  const [{ data: profile }, plans, packs, cookieStore] = await Promise.all([
+    supabase.from('profiles').select('role, access_tier').eq('id', user.id).single(),
+    getActivePlans(supabase),
+    getActivePacks(supabase),
+    cookies(),
+  ])
+  const access = computeEffectiveAccess(profile, cookieStore.get(VIEW_AS_COOKIE)?.value)
+  const monetization = await getMonetizationState(supabase, user.id, access.tier)
+
+  // Admins können immer senden (View-As schaltet das für Tests korrekt durch)
+  const gateState: SubscriptionGateState = {
+    hasActiveSubscription: access.isAdmin || monetization.hasActiveSubscription,
+    currentPlanId: monetization.planId,
+    currentPlanTier: monetization.planTier,
+    currentCycle: monetization.subscription?.billing_cycle ?? null,
+    priceBand: monetization.priceBand,
+    isCommunity: access.tier === 'premium',
+    credits: monetization.totalCredits,
+    plans: plans as Plan[],
+    packs: packs as CreditPack[],
+  }
+
   return (
     <div className="flex flex-col h-full">
       {/* Header */}
@@ -78,6 +110,7 @@ export default async function ConversationPage({
           conversationId={conversationId}
           initialMessages={initialMessages}
           autoSend={init}
+          gateState={gateState}
         />
       </div>
     </div>

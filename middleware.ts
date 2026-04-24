@@ -103,7 +103,10 @@ export async function middleware(request: NextRequest) {
     }
   }
 
-  // ── Tier-Gating: DB-gesteuert via feature_permissions, respektiert View-As ──
+  // ── Tier-Gating via feature_permissions-Matrix ──
+  //    'community' → Redirect auf /upgrade (Tier reicht nicht)
+  //    'paid' (Abo-Zugriff) + 'open' + 'coming_soon' → durchlassen,
+  //      UI-Gate übernimmt die Aktions-Sperre bei fehlender Subscription
   const gatedFeature: FeatureKey | null =
     pathname.startsWith('/dashboard/herr-tech-gpt') ? 'chat' :
     pathname.startsWith('/dashboard/ki-toolbox')   ? 'toolbox' :

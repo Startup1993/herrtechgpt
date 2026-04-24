@@ -8,10 +8,18 @@ export default async function AdminUsersPage() {
     { data: profiles },
     { data: { users: authUsers } },
     { data: convStats },
+    { data: subs },
+    { data: plans },
   ] = await Promise.all([
     admin.from('profiles').select('id, role, access_tier, created_at, invitation_sent_count').order('created_at', { ascending: false }),
     admin.auth.admin.listUsers({ perPage: 1000 }),
     admin.from('conversations').select('user_id, updated_at'),
+    admin
+      .from('subscriptions')
+      .select('user_id, plan_id, status, billing_cycle, cancel_at_period_end, current_period_end, created_at')
+      .in('status', ['active', 'trialing', 'past_due'])
+      .order('created_at', { ascending: false }),
+    admin.from('plans').select('id, tier, name'),
   ])
 
   const emailMap: Record<string, string> = {}
@@ -34,6 +42,37 @@ export default async function AdminUsersPage() {
     }
   })
 
+  const planMap: Record<string, { tier: 'S' | 'M' | 'L'; name: string }> = {}
+  plans?.forEach((p) => {
+    planMap[p.id] = { tier: p.tier as 'S' | 'M' | 'L', name: p.name as string }
+  })
+
+  // subs ist bereits nach created_at DESC sortiert → erster Treffer pro User = aktuellstes Abo
+  type SubInfo = {
+    plan_id: string
+    plan_tier: 'S' | 'M' | 'L'
+    plan_name: string
+    status: 'active' | 'trialing' | 'past_due' | 'cancelled' | 'ended'
+    billing_cycle: 'monthly' | 'yearly'
+    cancel_at_period_end: boolean
+    current_period_end: string | null
+  }
+  const subMap: Record<string, SubInfo> = {}
+  subs?.forEach((s) => {
+    if (subMap[s.user_id]) return
+    const plan = planMap[s.plan_id]
+    if (!plan) return
+    subMap[s.user_id] = {
+      plan_id: s.plan_id,
+      plan_tier: plan.tier,
+      plan_name: plan.name,
+      status: s.status as 'active' | 'trialing' | 'past_due' | 'cancelled' | 'ended',
+      billing_cycle: s.billing_cycle as 'monthly' | 'yearly',
+      cancel_at_period_end: !!s.cancel_at_period_end,
+      current_period_end: s.current_period_end as string | null,
+    }
+  })
+
   const users = (profiles ?? []).map((p) => ({
     id: p.id,
     email: emailMap[p.id] ?? '—',
@@ -44,6 +83,7 @@ export default async function AdminUsersPage() {
     conversation_count: convCountMap[p.id] ?? 0,
     has_logged_in: !!hasLoggedInMap[p.id],
     invitation_sent_count: (p as { invitation_sent_count?: number }).invitation_sent_count ?? 0,
+    subscription: subMap[p.id] ?? null,
   }))
 
   return (
