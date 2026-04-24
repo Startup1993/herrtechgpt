@@ -36,15 +36,6 @@ Wenn User von `premium` → `alumni` wechselt (Skool-Kündigung synct), soll:
 
 Trigger-Optionen: DB-Trigger on profiles.access_tier change, oder separater Cron-Job der täglich diffed.
 
-### Past-Due-UI auf Billing-Seite
-Wenn Stripe `status=past_due` setzt (Kreditkarte abgelehnt), sieht User aktuell nur den Badge.
-Besser: Banner mit Erklärung + Link ins Customer Portal zum Karten-Update.
-
-### Credit-Badge im Header
-Neben dem User-Avatar oben rechts: aktuelle Credits zeigen.
-Klick → `/dashboard/credits` zum Nachkaufen.
-Drückt User in Top-ups.
-
 ### Failed-Payment-Dunning monitoren
 Stripe retried automatisch (Smart Retries). Aber wir sollten eigenes Monitoring:
 - Stripe-Dashboard regelmäßig auf `past_due`-Subscriptions checken
