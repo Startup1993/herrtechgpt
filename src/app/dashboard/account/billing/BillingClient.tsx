@@ -3,7 +3,7 @@
 import { useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
-import { CheckCircle2, FileText, AlertTriangle, Loader2, Coins, XCircle } from 'lucide-react'
+import { CheckCircle2, FileText, AlertTriangle, Loader2, Coins, XCircle, Clock } from 'lucide-react'
 import type { Subscription, CreditWallet } from '@/lib/monetization'
 
 interface Transaction {
@@ -23,6 +23,9 @@ interface Props {
   transactions: Transaction[]
   checkoutStatus: string | null
   hasStripeCustomer: boolean
+  scheduledPlanName: string | null
+  scheduledChangeAt: string | null
+  scheduledCycle: 'monthly' | 'yearly' | null
 }
 
 function formatDate(iso: string): string {
@@ -50,10 +53,13 @@ export default function BillingClient({
   transactions,
   checkoutStatus,
   hasStripeCustomer,
+  scheduledPlanName,
+  scheduledChangeAt,
+  scheduledCycle,
 }: Props) {
   const router = useRouter()
   const [confirming, setConfirming] = useState(false)
-  const [loading, setLoading] = useState<'cancel' | 'reactivate' | 'portal' | null>(null)
+  const [loading, setLoading] = useState<'cancel' | 'reactivate' | 'portal' | 'cancel_scheduled' | null>(null)
   const [error, setError] = useState<string | null>(null)
 
   const monthly = wallet?.monthly_balance ?? 0
@@ -116,6 +122,29 @@ export default function BillingClient({
     }
   }
 
+  async function cancelScheduledChange() {
+    if (!subscription) return
+    setLoading('cancel_scheduled')
+    setError(null)
+    try {
+      const res = await fetch('/api/subscriptions/change', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          planId: subscription.plan_id,
+          cycle: subscription.billing_cycle,
+        }),
+      })
+      const data = await safeJson(res)
+      if (!res.ok) throw new Error(data.error || 'Aufheben fehlgeschlagen')
+      router.refresh()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err))
+    } finally {
+      setLoading(null)
+    }
+  }
+
   return (
     <div className="max-w-4xl mx-auto px-4 sm:px-6 py-10 space-y-6">
       <div>
@@ -143,6 +172,33 @@ export default function BillingClient({
         <div className="flex items-start gap-3 p-4 rounded-xl bg-red-500/10 border border-red-500/30">
           <XCircle className="text-red-600 shrink-0" size={20} />
           <div className="text-sm text-foreground">{error}</div>
+        </div>
+      )}
+
+      {/* Geplanter Plan-Wechsel (Downgrade zum Periodenende) */}
+      {scheduledPlanName && scheduledChangeAt && (
+        <div className="flex items-start gap-3 p-4 rounded-xl bg-amber-500/10 border border-amber-500/30">
+          <Clock className="text-amber-600 shrink-0 mt-0.5" size={20} />
+          <div className="flex-1 min-w-0">
+            <div className="font-semibold text-foreground">
+              Geplanter Wechsel am {formatDate(scheduledChangeAt)}
+            </div>
+            <div className="text-sm text-muted mt-1">
+              Ab dem{' '}
+              <strong>{formatDate(scheduledChangeAt)}</strong> wechselt dein Abo
+              automatisch zu <strong>{scheduledPlanName}</strong>
+              {scheduledCycle ? ` (${scheduledCycle === 'yearly' ? 'jährlich' : 'monatlich'})` : ''}
+              . Bis dahin behältst du deinen aktuellen Plan und alle Credits.
+            </div>
+            <button
+              onClick={cancelScheduledChange}
+              disabled={loading === 'cancel_scheduled'}
+              className="mt-3 inline-flex items-center gap-2 px-3 py-1.5 border border-amber-500/40 hover:bg-amber-500/10 text-amber-700 dark:text-amber-400 font-medium rounded-lg text-xs transition-colors disabled:opacity-50"
+            >
+              {loading === 'cancel_scheduled' && <Loader2 size={12} className="animate-spin" />}
+              Wechsel aufheben
+            </button>
+          </div>
         </div>
       )}
 
