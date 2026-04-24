@@ -229,10 +229,7 @@ async function handleSubscriptionUpsert(sub: Stripe.Subscription) {
   }
   const dbStatus = statusMap[sub.status] ?? 'past_due'
 
-  const subRow = sub as unknown as {
-    current_period_start: number
-    current_period_end: number
-  }
+  const { periodStart, periodEnd } = extractSubscriptionPeriod(sub)
 
   await admin.from('subscriptions').upsert(
     {
@@ -243,8 +240,8 @@ async function handleSubscriptionUpsert(sub: Stripe.Subscription) {
       billing_cycle: cycle ?? 'monthly',
       stripe_subscription_id: sub.id,
       stripe_price_id: price.id,
-      current_period_start: new Date(subRow.current_period_start * 1000).toISOString(),
-      current_period_end: new Date(subRow.current_period_end * 1000).toISOString(),
+      current_period_start: new Date(periodStart * 1000).toISOString(),
+      current_period_end: new Date(periodEnd * 1000).toISOString(),
       cancel_at_period_end: sub.cancel_at_period_end,
       cancelled_at: sub.canceled_at ? new Date(sub.canceled_at * 1000).toISOString() : null,
       ended_at: sub.ended_at ? new Date(sub.ended_at * 1000).toISOString() : null,
@@ -257,10 +254,39 @@ async function handleSubscriptionUpsert(sub: Stripe.Subscription) {
     await grantMonthlyCredits({
       userId,
       amount: plan.credits_per_month,
-      resetAt: new Date(subRow.current_period_end * 1000),
+      resetAt: new Date(periodEnd * 1000),
       reason: 'monthly_grant',
     })
   }
+}
+
+/**
+ * Seit Stripe API 2026-03 (dahlia) liegen `current_period_start/end` auf dem
+ * Subscription-Item, nicht mehr auf der Subscription selbst. Wir lesen beide
+ * Stellen defensiv und fallen auf das jeweils andere zurück.
+ */
+function extractSubscriptionPeriod(sub: Stripe.Subscription): {
+  periodStart: number
+  periodEnd: number
+} {
+  const subRaw = sub as unknown as {
+    current_period_start?: number
+    current_period_end?: number
+  }
+  const itemRaw = sub.items.data[0] as unknown as {
+    current_period_start?: number
+    current_period_end?: number
+  }
+
+  const periodStart = itemRaw?.current_period_start ?? subRaw.current_period_start
+  const periodEnd = itemRaw?.current_period_end ?? subRaw.current_period_end
+
+  if (!periodStart || !periodEnd) {
+    throw new Error(
+      `Subscription ${sub.id}: current_period_start/end weder auf Subscription noch auf Item`
+    )
+  }
+  return { periodStart, periodEnd }
 }
 
 /**

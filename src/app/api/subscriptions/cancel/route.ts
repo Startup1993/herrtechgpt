@@ -67,9 +67,13 @@ export async function POST() {
     })
     .eq('id', sub.id)
 
-  const subData = updated as unknown as { current_period_end: number }
+  // Seit Stripe API 2026-03 liegt current_period_end auf dem Item, nicht auf sub.
+  const subRaw = updated as unknown as { current_period_end?: number }
+  const itemRaw = updated.items.data[0] as unknown as { current_period_end?: number }
+  const periodEnd = itemRaw?.current_period_end ?? subRaw.current_period_end
+
   return NextResponse.json({
     ok: true,
-    periodEnd: new Date(subData.current_period_end * 1000).toISOString(),
+    periodEnd: periodEnd ? new Date(periodEnd * 1000).toISOString() : null,
   })
 }
