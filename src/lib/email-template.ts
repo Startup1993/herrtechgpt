@@ -238,3 +238,270 @@ export function renderNewsletterInviteEmail(opts: NewsletterInviteOptions): stri
   </body>
 </html>`
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Admin-Einladung (Magic Link): wenn ein Admin einen User manuell hinzufügt.
+// Hero-Layout wie die Newsletter-Launch-Mail — warmer, persönlicher Ton.
+// ─────────────────────────────────────────────────────────────────────────────
+
+export interface InviteEmailOptions {
+  loginLink: string
+  firstName?: string | null
+}
+
+export function renderInviteEmail(opts: InviteEmailOptions): string {
+  const siteUrl = PRODUCTION_URL
+  const greeting = opts.firstName ? `Hey ${escapeHtml(opts.firstName)}!` : 'Hey!'
+  const preheader = 'Deine Herr Tech World ist offen — ein Klick und du bist drin.'
+
+  return `<!DOCTYPE html>
+<html lang="de">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Willkommen in der Herr Tech World</title>
+  </head>
+  <body style="margin:0; padding:0; background:#F5F0EB; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;">
+    <span style="display:none; max-height:0; overflow:hidden; color:transparent;">
+      ${escapeHtml(preheader)}
+    </span>
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background:#F5F0EB;">
+      <tr>
+        <td align="center" style="padding:32px 16px;">
+          <table role="presentation" width="560" cellpadding="0" cellspacing="0" border="0" style="max-width:560px; width:100%; background:#FFFFFF; border-radius:16px; overflow:hidden; box-shadow:0 1px 3px rgba(0,0,0,0.04);">
+            <tr>
+              <td align="center" style="padding:24px 32px; background:#FDFBF7; border-bottom:1px solid #EEE8E0;">
+                <a href="${siteUrl}" style="text-decoration:none;">
+                  <img src="${LOGO_URL}" alt="Herr Tech World" height="26" style="display:block; height:26px; width:auto; margin:0 auto;">
+                </a>
+              </td>
+            </tr>
+
+            <tr>
+              <td align="left" style="padding:36px 36px 8px;">
+                <div style="font-size:12px; letter-spacing:0.18em; text-transform:uppercase; color:#B598E2; font-weight:700; margin-bottom:16px;">
+                  Willkommen an Bord
+                </div>
+                <h1 style="margin:0 0 16px; font-size:30px; line-height:1.15; color:#0F0F13; font-weight:800; letter-spacing:-0.01em;">
+                  Deine Herr Tech World<br>
+                  <span style="color:#B598E2;">ist offen für dich.</span>
+                </h1>
+                <p style="margin:0 0 14px; font-size:16px; line-height:1.6; color:#333;">
+                  ${greeting}
+                </p>
+                <p style="margin:0 0 14px; font-size:16px; line-height:1.6; color:#333;">
+                  Schön, dass du da bist. Dein Zugang zur <strong>Herr Tech World</strong> —
+                  deiner KI-Plattform für Content, Business &amp; Wachstum — ist ab jetzt
+                  freigeschaltet.
+                </p>
+                <p style="margin:0 0 8px; font-size:16px; line-height:1.6; color:#333;">
+                  Was dich erwartet:
+                </p>
+              </td>
+            </tr>
+
+            <tr>
+              <td style="padding:4px 36px 24px;">
+                <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+                  <tr>
+                    <td style="padding:8px 0; font-size:15px; line-height:1.5; color:#333;">
+                      🎬&nbsp;&nbsp;<strong>KI Video Creator</strong> — du tippst, die KI dreht.
+                    </td>
+                  </tr>
+                  <tr>
+                    <td style="padding:8px 0; font-size:15px; line-height:1.5; color:#333;">
+                      🎨&nbsp;&nbsp;<strong>Karussell-Generator</strong> — ein Klick, Instagram-Post fertig.
+                    </td>
+                  </tr>
+                  <tr>
+                    <td style="padding:8px 0; font-size:15px; line-height:1.5; color:#333;">
+                      🤖&nbsp;&nbsp;<strong>6 KI-Coaches</strong> trainiert auf Herr Techs Inhalten.
+                    </td>
+                  </tr>
+                  <tr>
+                    <td style="padding:8px 0; font-size:15px; line-height:1.5; color:#333;">
+                      🎓&nbsp;&nbsp;<strong>Classroom</strong> mit über 170 h Lernmaterial.
+                    </td>
+                  </tr>
+                </table>
+              </td>
+            </tr>
+
+            <tr>
+              <td align="center" style="padding:8px 36px 12px;">
+                <a href="${opts.loginLink}"
+                   style="display:inline-block; background:#B598E2; color:#FFFFFF; padding:16px 40px;
+                          border-radius:12px; text-decoration:none; font-weight:700; font-size:16px;">
+                  Jetzt einloggen
+                </a>
+                <div style="font-size:13px; color:#999; margin-top:12px;">
+                  Ein Klick, und du bist drin. Kein Passwort, kein Formular.
+                </div>
+              </td>
+            </tr>
+
+            <tr>
+              <td style="padding:20px 36px 8px;">
+                <p style="margin:0 0 12px; font-size:15px; line-height:1.6; color:#333;">
+                  Dein Flo
+                </p>
+                <p style="margin:0; font-size:13px; line-height:1.55; color:#666; font-style:italic;">
+                  P.S.: Fragen oder Feedback? Schreib einfach im Hilfe-Chat
+                  in der Plattform — wir sind für dich da.
+                </p>
+              </td>
+            </tr>
+
+            <tr>
+              <td align="center" style="padding:24px 32px 16px; margin-top:12px; border-top:1px solid #EEE8E0;">
+                <div style="font-size:11px; line-height:1.5; color:#999; text-align:center;">
+                  Falls der Button nicht funktioniert, kopiere diesen Link:<br>
+                  <span style="word-break:break-all; color:#999;">${opts.loginLink}</span><br><br>
+                  Der Link ist zeitlich begrenzt gültig und kann nur einmal verwendet werden.
+                </div>
+              </td>
+            </tr>
+            <tr>
+              <td align="center" style="padding:16px 32px 24px; border-top:1px solid #EEE8E0;">
+                <div style="font-size:12px; line-height:1.5; color:#999; text-align:center;">
+                  Herr Tech World — Deine KI-Plattform für Content, Business &amp; Wachstum.<br>
+                  <a href="${siteUrl}" style="color:#B598E2; text-decoration:none;">${siteUrl.replace(/^https?:\/\//, '')}</a>
+                </div>
+              </td>
+            </tr>
+          </table>
+        </td>
+      </tr>
+    </table>
+  </body>
+</html>`
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Skool-Mitglieder-Einladung: exklusiv für aktive KI Marketing Club Teilnehmer.
+// ─────────────────────────────────────────────────────────────────────────────
+
+export interface SkoolInviteOptions {
+  claimLink: string
+  firstName?: string | null
+}
+
+export function renderSkoolInviteEmail(opts: SkoolInviteOptions): string {
+  const siteUrl = PRODUCTION_URL
+  const greeting = opts.firstName ? `Hey ${escapeHtml(opts.firstName)}!` : 'Hey!'
+  const preheader = 'Dein Zugang zur Herr Tech World als KI Marketing Club Mitglied'
+
+  return `<!DOCTYPE html>
+<html lang="de">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Dein Zugang zur Herr Tech World</title>
+  </head>
+  <body style="margin:0; padding:0; background:#F5F0EB; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;">
+    <span style="display:none; max-height:0; overflow:hidden; color:transparent;">
+      ${escapeHtml(preheader)}
+    </span>
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background:#F5F0EB;">
+      <tr>
+        <td align="center" style="padding:32px 16px;">
+          <table role="presentation" width="560" cellpadding="0" cellspacing="0" border="0" style="max-width:560px; width:100%; background:#FFFFFF; border-radius:16px; overflow:hidden; box-shadow:0 1px 3px rgba(0,0,0,0.04);">
+            <tr>
+              <td align="center" style="padding:24px 32px; background:#FDFBF7; border-bottom:1px solid #EEE8E0;">
+                <a href="${siteUrl}" style="text-decoration:none;">
+                  <img src="${LOGO_URL}" alt="Herr Tech World" height="26" style="display:block; height:26px; width:auto; margin:0 auto;">
+                </a>
+              </td>
+            </tr>
+
+            <tr>
+              <td align="left" style="padding:36px 36px 8px;">
+                <div style="font-size:12px; letter-spacing:0.18em; text-transform:uppercase; color:#B598E2; font-weight:700; margin-bottom:16px;">
+                  Exklusiv für Club-Mitglieder
+                </div>
+                <h1 style="margin:0 0 16px; font-size:28px; line-height:1.2; color:#0F0F13; font-weight:800; letter-spacing:-0.01em;">
+                  Deine Herr Tech World<br>
+                  <span style="color:#B598E2;">wartet auf dich.</span>
+                </h1>
+                <p style="margin:0 0 14px; font-size:16px; line-height:1.6; color:#333;">
+                  ${greeting}
+                </p>
+                <p style="margin:0 0 14px; font-size:16px; line-height:1.6; color:#333;">
+                  Als Mitglied im <strong>KI Marketing Club</strong> hast du ab sofort
+                  kostenlosen Zugriff auf die <strong>Herr Tech World</strong> — unsere
+                  KI-Plattform mit Classroom, Chat-Agenten und der kompletten Toolbox.
+                </p>
+                <p style="margin:0 0 14px; font-size:16px; line-height:1.6; color:#333;">
+                  Der Zugang ist für dich <strong>gratis</strong>, solange du im Club bist.
+                </p>
+              </td>
+            </tr>
+
+            <tr>
+              <td style="padding:4px 36px 24px;">
+                <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+                  <tr>
+                    <td style="padding:8px 0; font-size:15px; line-height:1.5; color:#333;">
+                      🎓&nbsp;&nbsp;<strong>Classroom</strong> — alle Lern-Module, alle Videos.
+                    </td>
+                  </tr>
+                  <tr>
+                    <td style="padding:8px 0; font-size:15px; line-height:1.5; color:#333;">
+                      🤖&nbsp;&nbsp;<strong>6 KI-Coaches</strong>, trainiert auf Florians Inhalten.
+                    </td>
+                  </tr>
+                  <tr>
+                    <td style="padding:8px 0; font-size:15px; line-height:1.5; color:#333;">
+                      🎨&nbsp;&nbsp;<strong>Toolbox</strong> — Karussells, Video-Editor, Video-Creator.
+                    </td>
+                  </tr>
+                </table>
+              </td>
+            </tr>
+
+            <tr>
+              <td align="center" style="padding:8px 36px 12px;">
+                <a href="${opts.claimLink}"
+                   style="display:inline-block; background:#B598E2; color:#FFFFFF; padding:16px 40px;
+                          border-radius:12px; text-decoration:none; font-weight:700; font-size:16px;">
+                  Jetzt Zugang aktivieren
+                </a>
+                <div style="font-size:13px; color:#999; margin-top:12px;">
+                  Einmal klicken, Account erstellen, fertig.
+                </div>
+              </td>
+            </tr>
+
+            <tr>
+              <td style="padding:20px 36px 8px;">
+                <p style="margin:0; font-size:13px; line-height:1.55; color:#666; font-style:italic;">
+                  Gut zu wissen: Wenn du den Club später verlässt, bleibt dir dein Classroom-
+                  Zugang als Alumni erhalten. Abo S endet automatisch.
+                </p>
+              </td>
+            </tr>
+
+            <tr>
+              <td align="center" style="padding:24px 32px 16px; margin-top:12px; border-top:1px solid #EEE8E0;">
+                <div style="font-size:11px; line-height:1.5; color:#999; text-align:center;">
+                  Falls der Button nicht funktioniert, kopiere diesen Link:<br>
+                  <span style="word-break:break-all; color:#999;">${opts.claimLink}</span><br><br>
+                  Der Link ist 30 Tage gültig.
+                </div>
+              </td>
+            </tr>
+            <tr>
+              <td align="center" style="padding:16px 32px 24px; border-top:1px solid #EEE8E0;">
+                <div style="font-size:12px; line-height:1.5; color:#999; text-align:center;">
+                  Herr Tech World — Deine KI-Plattform für Content, Business &amp; Wachstum.<br>
+                  <a href="${siteUrl}" style="color:#B598E2; text-decoration:none;">${siteUrl.replace(/^https?:\/\//, '')}</a>
+                </div>
+              </td>
+            </tr>
+          </table>
+        </td>
+      </tr>
+    </table>
+  </body>
+</html>`
+}

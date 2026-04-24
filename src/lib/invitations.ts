@@ -1,6 +1,6 @@
 import { Resend } from 'resend'
 import type { SupabaseClient } from '@supabase/supabase-js'
-import { renderEmail, renderNewsletterInviteEmail } from './email-template'
+import { renderInviteEmail, renderNewsletterInviteEmail, renderSkoolInviteEmail } from './email-template'
 import { PRODUCTION_URL } from './urls'
 
 function getResend(): Resend | null {
@@ -44,20 +44,7 @@ export async function sendInvitationEmail(
     return { ok: false, error: 'RESEND_API_KEY nicht konfiguriert' }
   }
 
-  const html = renderEmail({
-    heading: 'Willkommen in der Herr Tech World',
-    intro: `
-      <p style="margin:0 0 10px;">Du wurdest in die Herr Tech World eingeladen — deiner KI-Plattform für Content, Business &amp; Wachstum.</p>
-      <p style="margin:0;">Klick auf den Button unten, um dich einzuloggen. Kein Passwort nötig.</p>
-    `,
-    cta: { label: 'Jetzt einloggen', href: loginLink },
-    footerNote: `
-      Falls der Button nicht funktioniert, kopiere diesen Link in deinen Browser:<br>
-      <span style="word-break:break-all; color:#666;">${loginLink}</span><br><br>
-      Der Link ist zeitlich begrenzt gültig und kann nur einmal verwendet werden.
-    `,
-    preheader: 'Dein persönlicher Login-Link für Herr Tech World',
-  })
+  const html = renderInviteEmail({ loginLink })
 
   try {
     await resend.emails.send({
@@ -107,6 +94,35 @@ export async function sendNewsletterInviteEmail(
       from: fromAddress(),
       to: email,
       subject: '🚀 Die Herr Tech World ist offen für dich.',
+      html,
+    })
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message : 'Versand fehlgeschlagen' }
+  }
+
+  return { ok: true }
+}
+
+// Skool-Community-Einladung: eigener Claim-Link (kein Magic-Login),
+// User muss ein Passwort setzen. Link ist 30 Tage gültig (DB-getrackt).
+export async function sendSkoolInviteEmail(
+  email: string,
+  params: { token: string; firstName?: string | null }
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  const claimLink = `${PRODUCTION_URL}/invite/skool/${encodeURIComponent(params.token)}`
+
+  const resend = getResend()
+  if (!resend) {
+    return { ok: false, error: 'RESEND_API_KEY nicht konfiguriert' }
+  }
+
+  const html = renderSkoolInviteEmail({ claimLink, firstName: params.firstName })
+
+  try {
+    await resend.emails.send({
+      from: fromAddress(),
+      to: email,
+      subject: 'Dein Zugang zur Herr Tech World — KI Marketing Club',
       html,
     })
   } catch (err) {
