@@ -342,8 +342,8 @@ export default function UsersTable({ users }: { users: UserRow[] }) {
       />
 
       {/* Tabelle */}
-      <div className="bg-surface border border-border rounded-xl overflow-hidden">
-        <table className="w-full text-sm">
+      <div className="bg-surface border border-border rounded-xl overflow-x-auto">
+        <table className="w-full min-w-[900px] text-sm">
           <thead>
             <tr className="border-b border-border bg-surface-secondary">
               <SortableTh label="E-Mail" sortKey="email" current={sortKey} dir={sortDir} onClick={toggleSort} align="left" />
@@ -373,24 +373,24 @@ export default function UsersTable({ users }: { users: UserRow[] }) {
                   className="hover:bg-surface-secondary/50 transition-colors cursor-pointer"
                   onClick={() => router.push(`/admin/users/${u.id}`)}
                 >
-                  <td className="px-5 py-3.5">
+                  <td className="px-5 py-3.5 whitespace-nowrap">
                     <span className="font-medium text-foreground underline decoration-transparent hover:decoration-primary transition-colors">{u.email}</span>
                   </td>
-                  <td className="px-4 py-3.5">
-                    <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium ${tier.className}`}>
+                  <td className="px-4 py-3.5 whitespace-nowrap">
+                    <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium whitespace-nowrap ${tier.className}`}>
                       {tier.label}
                     </span>
                   </td>
-                  <td className="px-4 py-3.5">
+                  <td className="px-4 py-3.5 whitespace-nowrap">
                     <SubscriptionBadge sub={u.subscription} />
                   </td>
-                  <td className="px-4 py-3.5 text-xs text-muted">{formatDate(u.created_at)}</td>
-                  <td className="px-4 py-3.5">
+                  <td className="px-4 py-3.5 whitespace-nowrap text-xs text-muted">{formatDate(u.created_at)}</td>
+                  <td className="px-4 py-3.5 whitespace-nowrap">
                     <div className="flex items-center gap-2">
                       <span className={`w-2 h-2 rounded-full shrink-0 ${status.dot}`} />
                       <div className="flex flex-col min-w-0">
                         <span className={`text-xs font-medium ${status.text}`}>{status.label}</span>
-                        <span className="text-[11px] text-muted truncate">
+                        <span className="text-[11px] text-muted">
                           {u._status === 'active'
                             ? timeAgo(u.last_active)
                             : u._status === 'invited'
@@ -400,11 +400,11 @@ export default function UsersTable({ users }: { users: UserRow[] }) {
                       </div>
                     </div>
                   </td>
-                  <td className="px-4 py-3.5 text-center">
+                  <td className="px-4 py-3.5 text-center whitespace-nowrap">
                     <span className="text-sm font-medium text-foreground">{u.conversation_count}</span>
                   </td>
-                  <td className="px-4 py-3.5">
-                    <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${
+                  <td className="px-4 py-3.5 whitespace-nowrap">
+                    <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium whitespace-nowrap ${
                       u.role === 'admin' ? 'bg-primary/10 text-primary' : 'bg-surface-secondary text-muted'
                     }`}>
                       {u.role === 'admin' ? 'Admin' : 'Nutzer'}
@@ -563,7 +563,7 @@ function SubscriptionBadge({ sub }: { sub: SubscriptionInfo | null }) {
   if (sub.status === 'past_due') {
     return (
       <div className="flex flex-col gap-0.5">
-        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-700 dark:bg-red-950/30 dark:text-red-400 w-fit">
+        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-700 dark:bg-red-950/30 dark:text-red-400 w-fit whitespace-nowrap">
           {tierLabel} · Zahlung offen
         </span>
         <span className="text-[10px] text-muted">{cycle}</span>
@@ -574,7 +574,7 @@ function SubscriptionBadge({ sub }: { sub: SubscriptionInfo | null }) {
   if (sub.cancel_at_period_end) {
     return (
       <div className="flex flex-col gap-0.5">
-        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-amber-100 text-amber-700 dark:bg-amber-950/30 dark:text-amber-400 w-fit">
+        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-amber-100 text-amber-700 dark:bg-amber-950/30 dark:text-amber-400 w-fit whitespace-nowrap">
           {tierLabel} · läuft aus
         </span>
         <span className="text-[10px] text-muted">
@@ -588,7 +588,7 @@ function SubscriptionBadge({ sub }: { sub: SubscriptionInfo | null }) {
   const isTrialing = sub.status === 'trialing'
   return (
     <div className="flex flex-col gap-0.5">
-      <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium w-fit ${
+      <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium w-fit whitespace-nowrap ${
         isTrialing
           ? 'bg-blue-100 text-blue-700 dark:bg-blue-950/30 dark:text-blue-400'
           : 'bg-primary/10 text-primary'
