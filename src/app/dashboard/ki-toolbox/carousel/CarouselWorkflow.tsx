@@ -226,7 +226,7 @@ function CISection({
       <div className="px-5 pb-5">
         {mode === 'preset' && (
           <div className="space-y-4">
-            <div className="grid grid-cols-4 gap-3">
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
               {STYLE_PRESETS.map((p) => (
                 <StylePresetTile
                   key={p.id}
@@ -598,7 +598,7 @@ export default function CarouselWorkflow({ gateState }: { gateState?: Subscripti
   // ─── Input Step ────────────────────────────────────────────────────────────
   if (step === 'input') {
     return (
-      <div className="max-w-2xl mx-auto px-8 pt-8 pb-24">
+      <div className="max-w-2xl mx-auto px-4 sm:px-6 md:px-8 pt-8 pb-24">
         <div className="mb-6">
           <h1 className="text-2xl font-bold text-foreground mb-1">🎠 Karussell-Generator</h1>
           <p className="text-muted text-sm">
@@ -627,7 +627,7 @@ export default function CarouselWorkflow({ gateState }: { gateState?: Subscripti
 
         <CISection ci={ci} setCi={setCi} />
 
-        <div className="grid grid-cols-3 gap-4 mb-6">
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
           <div>
             <label className="block text-xs text-muted mb-1.5">Brand-Name (Logo)</label>
             <input
@@ -687,7 +687,7 @@ export default function CarouselWorkflow({ gateState }: { gateState?: Subscripti
 
   // ─── Preview Step ──────────────────────────────────────────────────────────
   return (
-    <div className="px-6 pt-8 pb-24 max-w-6xl mx-auto">
+    <div className="px-4 sm:px-6 pt-8 pb-24 max-w-6xl mx-auto">
       <div className="flex items-center justify-between mb-5 flex-wrap gap-3">
         <div>
           <h1 className="text-xl font-bold text-foreground">Vorschau & Bearbeitung</h1>
@@ -735,11 +735,10 @@ export default function CarouselWorkflow({ gateState }: { gateState?: Subscripti
         </div>
       </div>
 
-      <div className="flex gap-6 items-start">
+      <div className="flex flex-col lg:flex-row gap-6 items-start">
         {/* Chat-style refine panel */}
         <div
-          className="w-72 shrink-0 flex flex-col border border-border rounded-xl bg-surface overflow-hidden"
-          style={{ height: SLIDE_HEIGHT + 60 }}
+          className="w-full lg:w-72 lg:shrink-0 lg:h-[585px] flex flex-col border border-border rounded-xl bg-surface overflow-hidden max-h-80 lg:max-h-none"
         >
           <div className="px-4 py-3 border-b border-border shrink-0">
             <p className="text-xs font-semibold text-foreground">✏️ Slides anpassen</p>
@@ -814,9 +813,9 @@ export default function CarouselWorkflow({ gateState }: { gateState?: Subscripti
         </div>
 
         {/* Slide preview + navigation */}
-        <div className="flex-1 flex flex-col items-center gap-3">
+        <div className="flex-1 min-w-0 flex flex-col items-center gap-3 w-full overflow-x-auto">
           <div
-            className="rounded-2xl overflow-hidden shadow-xl border border-border"
+            className="rounded-2xl overflow-hidden shadow-xl border border-border mx-auto"
             style={{ width: SLIDE_WIDTH, height: SLIDE_HEIGHT }}
           >
             {slides[activeSlide] && (
@@ -836,7 +835,7 @@ export default function CarouselWorkflow({ gateState }: { gateState?: Subscripti
               />
             )}
           </div>
-          <div className="flex gap-2 flex-wrap justify-center" style={{ width: SLIDE_WIDTH }}>
+          <div className="flex gap-2 flex-wrap justify-center w-full max-w-full">
             {slides.map((s, i) => (
               <button
                 key={i}
