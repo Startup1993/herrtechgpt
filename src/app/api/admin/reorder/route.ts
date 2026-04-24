@@ -2,8 +2,8 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { createClient } from '@/lib/supabase/server'
 
-type Table = 'module_videos' | 'module_chapters' | 'module_video_resources' | 'course_modules'
-const ALLOWED: Table[] = ['module_videos', 'module_chapters', 'module_video_resources', 'course_modules']
+type Table = 'module_videos' | 'module_chapters' | 'module_video_resources' | 'course_modules' | 'toolbox_tools'
+const ALLOWED: Table[] = ['module_videos', 'module_chapters', 'module_video_resources', 'course_modules', 'toolbox_tools']
 
 async function requireAdmin() {
   const supabase = await createClient()

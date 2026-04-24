@@ -32,8 +32,7 @@ import {
   Sun,
   Moon,
   MoreVertical,
-  Palette,
-  Video,
+  Clock,
   Search,
   Play,
   Eye,
@@ -43,6 +42,7 @@ import {
   Coins,
   Mail,
 } from 'lucide-react'
+import { resolveToolboxIcon, type ToolboxTool } from '@/lib/toolbox-icons'
 
 // ═══════════════════════════════════════════════════════════
 // TYPES
@@ -1014,6 +1014,13 @@ function AdminSidebar({
             isActive={pathname.startsWith('/admin/content/tools')}
           />
           <NavItem
+            href="/admin/content/toolbox"
+            icon={Wrench}
+            label="KI Toolbox"
+            description="Reihenfolge + Coming-Soon"
+            isActive={pathname.startsWith('/admin/content/toolbox')}
+          />
+          <NavItem
             href="/admin/content/videos"
             icon={Film}
             label="Video-Sync"
@@ -1153,6 +1160,53 @@ function ClassroomSidebar({
 // TOOLBOX SIDEBAR (Drill-Down Modus 5)
 // ═══════════════════════════════════════════════════════════
 
+function ToolboxNavItem({
+  tool,
+  isActive,
+}: {
+  tool: ToolboxTool
+  isActive: boolean
+}) {
+  const Icon = resolveToolboxIcon(tool.icon_name)
+  const disabled = tool.coming_soon || !tool.href
+
+  const content = (
+    <>
+      <Icon size={18} className={isActive ? 'text-primary' : 'text-muted-light'} />
+      <div className="flex-1 min-w-0">
+        <span className="truncate block">{tool.title}</span>
+        {tool.coming_soon ? (
+          <span className="inline-flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wider mt-0.5 text-amber-600 dark:text-amber-400">
+            <Clock size={9} /> Coming Soon
+          </span>
+        ) : tool.subtitle ? (
+          <span className="text-xs text-muted truncate block mt-0.5">{tool.subtitle}</span>
+        ) : null}
+      </div>
+    </>
+  )
+
+  const baseClass = `flex items-center gap-3 px-3 py-2.5 rounded-[var(--radius-lg)] text-sm transition-all w-full text-left ${
+    isActive
+      ? 'bg-primary/12 text-primary font-medium'
+      : 'text-muted hover:bg-surface-hover hover:text-foreground'
+  } ${disabled ? 'opacity-60 cursor-not-allowed hover:bg-transparent hover:text-muted' : ''}`
+
+  if (disabled) {
+    return (
+      <div className={baseClass} aria-disabled="true">
+        {content}
+      </div>
+    )
+  }
+
+  return (
+    <Link href={tool.href!} className={baseClass}>
+      {content}
+    </Link>
+  )
+}
+
 function ToolboxSidebar({
   pathname,
   onBack,
@@ -1164,6 +1218,20 @@ function ToolboxSidebar({
   isAdmin?: boolean
   onDrillDown: (mode: SidebarMode) => void
 }) {
+  const [tools, setTools] = useState<ToolboxTool[]>([])
+
+  useEffect(() => {
+    const supabase = createClient()
+    supabase
+      .from('toolbox_tools')
+      .select('*')
+      .eq('published', true)
+      .order('sort_order', { ascending: true })
+      .then(({ data }) => {
+        if (data) setTools(data as ToolboxTool[])
+      })
+  }, [])
+
   return (
     <div className="flex-1 overflow-y-auto">
       <button
@@ -1177,27 +1245,13 @@ function ToolboxSidebar({
       <nav className="px-3 py-4">
         <SectionHeader label="Verfügbare Tools" />
         <div className="space-y-1">
-          <NavItem
-            href="/dashboard/ki-toolbox/carousel"
-            icon={Palette}
-            label="Karussell-Generator"
-            description="Text → Instagram-Slides"
-            isActive={pathname.startsWith('/dashboard/ki-toolbox/carousel')}
-          />
-          <NavItem
-            href="/dashboard/ki-toolbox/video-editor"
-            icon={Film}
-            label="KI Video Editor"
-            description="Upload → Analyse → Schnitt"
-            isActive={pathname.startsWith('/dashboard/ki-toolbox/video-editor')}
-          />
-          <NavItem
-            href="/dashboard/ki-toolbox/video-creator"
-            icon={Video}
-            label="KI Video Creator"
-            description="Text-Prompt → KI-Video"
-            isActive={pathname.startsWith('/dashboard/ki-toolbox/video-creator')}
-          />
+          {tools.map((tool) => (
+            <ToolboxNavItem
+              key={tool.id}
+              tool={tool}
+              isActive={!!tool.href && pathname.startsWith(tool.href)}
+            />
+          ))}
         </div>
 
         <SectionHeader label="Übersicht" />
