@@ -237,18 +237,36 @@ export function CommunityTable({ members }: { members: MemberRow[] }) {
       if (!res.ok) {
         setMessage({ type: 'err', text: data?.error ?? 'Sync fehlgeschlagen' })
       } else {
-        const parts = [
-          `${data.scanned} Stripe-Sessions geprüft`,
+        const summary = [
+          `${data.scanned} Stripe-Items geprüft`,
           `${data.matched} davon waren Skool-Käufe`,
           `${data.upserted} Mitglieder synchronisiert`,
         ]
-        if (data.expired) parts.push(`${data.expired} auf Alumni gesetzt`)
-        if (data.errors?.length) parts.push(`${data.errors.length} Fehler`)
+        if (data.expired) summary.push(`${data.expired} auf Alumni gesetzt`)
+        if (data.errors?.length) summary.push(`${data.errors.length} Fehler`)
+
+        const phase = data.by_phase
+        const phaseLines: string[] = []
+        if (phase) {
+          const fmt = (label: string, p: { scanned: number; matched: number; capped: boolean }) =>
+            `${label}: ${p.scanned} geprüft / ${p.matched} matched${p.capped ? ' (Cap erreicht — nochmal Sync drücken!)' : ''}`
+          phaseLines.push(fmt('Sessions', phase.sessions))
+          phaseLines.push(fmt('Subscriptions', phase.subscriptions))
+          phaseLines.push(fmt('Invoices', phase.invoices))
+        }
+
         const hint =
           data.matched === 0 && data.scanned > 0
-            ? ' · Hinweis: keine Skool-Products getroffen — Product-IDs in Stripe checken oder weitere unter „Stripe-Produkte pflegen" hinzufügen.'
+            ? '\nHinweis: keine Skool-Products getroffen — Product-IDs in Stripe checken oder weitere unter „Stripe-Produkte pflegen" hinzufügen.'
+            : phase &&
+              (phase.sessions.capped || phase.subscriptions.capped || phase.invoices.capped)
+            ? '\nEine oder mehrere Phasen haben das Pagination-Cap erreicht. Sync nochmal drücken um den Rest zu importieren.'
             : ''
-        setMessage({ type: 'ok', text: parts.join(' · ') + hint })
+
+        setMessage({
+          type: 'ok',
+          text: summary.join(' · ') + (phaseLines.length ? '\n\n' + phaseLines.join('\n') : '') + hint,
+        })
         router.refresh()
       }
     } catch {
