@@ -27,6 +27,8 @@ export default async function AdminCommunityPage() {
       'id, email, name, skool_status, skool_access_expires_at, last_purchase_at, purchase_count, invitation_sent_count, last_invited_at, claimed_at, created_at'
     )
     .order('created_at', { ascending: false })
+    // PostgREST default ist 1000 — wir wollen aber alle Mitglieder
+    .limit(50000)
 
   const members = (data ?? []) as MemberRow[]
   const activeCount = members.filter((m) => m.skool_status === 'active').length

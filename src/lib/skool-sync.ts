@@ -466,10 +466,10 @@ export async function syncSkoolMembersFromStripe(
   const since = Math.floor(Date.now() / 1000) - days * 86400
   const stripe = getStripe()
 
-  // Pagination-Caps pro Phase. Sessions teurer (extra line-items-Call).
-  const SESSIONS_MAX_PAGES = 15 // 1.500 Sessions max (≈ 1500 line-items API-Calls)
-  const SUBS_MAX_PAGES = 50 // 5.000 Subscriptions max
-  const INVOICES_MAX_PAGES = 50 // 5.000 Invoices max
+  // Pagination-Caps pro Phase. Mit expand inline werden alle Quellen billig.
+  const SESSIONS_MAX_PAGES = 100 // 10.000 Sessions max (mit expand inline ~50ms/Page)
+  const SUBS_MAX_PAGES = 100 // 10.000 Subscriptions max
+  const INVOICES_MAX_PAGES = 100 // 10.000 Invoices max
 
   // Whitelist laden — beim manuellen Sync auch deaktivierte berücksichtigen,
   // damit Bestand nicht verloren geht
