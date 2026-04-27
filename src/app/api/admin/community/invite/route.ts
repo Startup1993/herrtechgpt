@@ -7,6 +7,14 @@ import {
   markInvitationSent,
 } from '@/lib/skool-sync'
 
+export const runtime = 'nodejs'
+export const dynamic = 'force-dynamic'
+// Server-Zeit pro Batch: ~50 Mails × 250ms ≈ 13s. Wir cappen die Batch-Größe
+// im Frontend bei 50, der Endpoint hat trotzdem Reserve für 100 (300ms each).
+export const maxDuration = 60
+
+const MAX_PER_REQUEST = 100
+
 async function requireAdmin() {
   const supabase = await createClient()
   const {
@@ -32,6 +40,14 @@ export async function POST(request: Request) {
     : []
   if (ids.length === 0) {
     return NextResponse.json({ error: 'ids required' }, { status: 400 })
+  }
+  if (ids.length > MAX_PER_REQUEST) {
+    return NextResponse.json(
+      {
+        error: `Maximal ${MAX_PER_REQUEST} Einladungen pro Request — bitte in kleineren Batches senden.`,
+      },
+      { status: 400 }
+    )
   }
 
   const admin = createAdminClient()

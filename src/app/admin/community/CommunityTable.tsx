@@ -1,6 +1,6 @@
 'use client'
 
-import { useMemo, useState, useEffect } from 'react'
+import { useMemo, useState, useEffect, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import {
   Loader2,
@@ -133,6 +133,15 @@ export function CommunityTable({ members }: { members: MemberRow[] }) {
   const [selectionMode, setSelectionMode] = useState(false)
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
   const [dedupeBusy, setDedupeBusy] = useState(false)
+
+  // Bulk-Invite-Progress (Chunking in 50er-Batches)
+  const [bulkProgress, setBulkProgress] = useState<{
+    total: number
+    sent: number
+    failed: number
+    skipped: number
+  } | null>(null)
+  const bulkAbortRef = useRef(false)
   const [message, setMessage] = useState<{ type: 'ok' | 'err'; text: string } | null>(null)
 
   const [sortKey, setSortKey] = useState<SortKey>('skool_access_expires_at')
@@ -527,32 +536,98 @@ export function CommunityTable({ members }: { members: MemberRow[] }) {
   async function inviteMany(ids: string[], confirmText?: string) {
     if (ids.length === 0) return
     if (confirmText && !confirm(confirmText)) return
-    setBulkBusy(ids.length > 1)
-    if (ids.length === 1) setLoading(ids[0])
-    setMessage(null)
-    try {
-      const res = await fetch('/api/admin/community/invite', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ids }),
-      })
-      const data = await res.json().catch(() => null)
-      if (!res.ok) {
-        setMessage({ type: 'err', text: data?.error ?? 'Einladung fehlgeschlagen' })
-      } else {
-        const parts: string[] = []
-        if (data.invited) parts.push(`${data.invited} verschickt`)
-        if (data.skipped) parts.push(`${data.skipped} übersprungen`)
-        if (data.failed) parts.push(`${data.failed} Fehler`)
-        setMessage({ type: 'ok', text: parts.join(' · ') || 'Fertig' })
-        router.refresh()
+
+    // Einzelne Einladung — Spinner direkt am Button, kein Progress-Modal
+    if (ids.length === 1) {
+      setLoading(ids[0])
+      setMessage(null)
+      try {
+        const res = await fetch('/api/admin/community/invite', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ ids }),
+        })
+        const data = await res.json().catch(() => null)
+        if (!res.ok) {
+          setMessage({ type: 'err', text: data?.error ?? 'Einladung fehlgeschlagen' })
+        } else {
+          setMessage({ type: 'ok', text: 'Einladung verschickt' })
+          router.refresh()
+        }
+      } catch {
+        setMessage({ type: 'err', text: 'Netzwerk-Fehler' })
+      } finally {
+        setLoading(null)
       }
-    } catch {
-      setMessage({ type: 'err', text: 'Netzwerk-Fehler' })
-    } finally {
-      setBulkBusy(false)
-      setLoading(null)
+      return
     }
+
+    // Bulk: Chunking in 50er-Batches mit Progress + Abbruch.
+    // Jeder Batch ist ein eigener API-Call → kein Vercel-Timeout-Risiko.
+    // Pause zwischen Batches (1s) gegen Resend-Rate-Limits.
+    const BATCH_SIZE = 50
+    const PAUSE_MS = 1000
+
+    setBulkBusy(true)
+    setMessage(null)
+    bulkAbortRef.current = false
+    setBulkProgress({ total: ids.length, sent: 0, failed: 0, skipped: 0 })
+
+    let sent = 0
+    let failed = 0
+    let skipped = 0
+    const errorSamples: string[] = []
+
+    for (let i = 0; i < ids.length; i += BATCH_SIZE) {
+      if (bulkAbortRef.current) break
+      const batch = ids.slice(i, i + BATCH_SIZE)
+      try {
+        const res = await fetch('/api/admin/community/invite', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ ids: batch }),
+        })
+        const data = await res.json().catch(() => null)
+        if (!res.ok) {
+          failed += batch.length
+          if (data?.error && errorSamples.length < 3) {
+            errorSamples.push(data.error)
+          }
+        } else {
+          sent += data.invited ?? 0
+          failed += data.failed ?? 0
+          skipped += data.skipped ?? 0
+        }
+      } catch {
+        failed += batch.length
+      }
+      setBulkProgress({ total: ids.length, sent, failed, skipped })
+
+      // Pause zwischen Batches (außer beim letzten)
+      if (i + BATCH_SIZE < ids.length && !bulkAbortRef.current) {
+        await new Promise((r) => setTimeout(r, PAUSE_MS))
+      }
+    }
+
+    setBulkBusy(false)
+    setBulkProgress(null)
+
+    const parts: string[] = []
+    if (sent) parts.push(`${sent} verschickt`)
+    if (skipped) parts.push(`${skipped} übersprungen`)
+    if (failed) parts.push(`${failed} Fehler`)
+    if (bulkAbortRef.current) parts.push('(abgebrochen)')
+    const summary = parts.join(' · ') || 'Nichts versendet'
+    const errorTail = errorSamples.length > 0 ? `\nFehler: ${errorSamples.join('; ')}` : ''
+    setMessage({
+      type: failed > 0 ? 'err' : 'ok',
+      text: summary + errorTail,
+    })
+    router.refresh()
+  }
+
+  function abortBulk() {
+    bulkAbortRef.current = true
   }
 
   return (
@@ -696,6 +771,46 @@ export function CommunityTable({ members }: { members: MemberRow[] }) {
           Alle einladbaren ({invitableIds.length})
         </button>
       </div>
+
+      {bulkProgress && (
+        <div className="px-4 py-3 rounded-lg bg-primary/10 border border-primary/30">
+          <div className="flex items-center justify-between mb-2">
+            <div className="text-sm font-medium text-foreground">
+              Einladungen werden verschickt …{' '}
+              <span className="text-muted">
+                {bulkProgress.sent + bulkProgress.failed + bulkProgress.skipped}/{bulkProgress.total}
+              </span>
+            </div>
+            <button
+              onClick={abortBulk}
+              className="text-xs px-2.5 py-1 rounded-md border border-border hover:bg-surface-hover transition"
+            >
+              Abbrechen
+            </button>
+          </div>
+          <div className="h-2 rounded-full bg-surface-secondary overflow-hidden">
+            <div
+              className="h-full bg-primary transition-[width] duration-300"
+              style={{
+                width: `${
+                  ((bulkProgress.sent + bulkProgress.failed + bulkProgress.skipped) /
+                    Math.max(bulkProgress.total, 1)) *
+                  100
+                }%`,
+              }}
+            />
+          </div>
+          <div className="flex gap-3 mt-2 text-xs text-muted">
+            <span>✓ {bulkProgress.sent} verschickt</span>
+            {bulkProgress.skipped > 0 && <span>↷ {bulkProgress.skipped} übersprungen</span>}
+            {bulkProgress.failed > 0 && (
+              <span className="text-red-600 dark:text-red-400">
+                ✗ {bulkProgress.failed} Fehler
+              </span>
+            )}
+          </div>
+        </div>
+      )}
 
       {message && (
         <div
