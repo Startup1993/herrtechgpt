@@ -781,7 +781,7 @@ export default function DashboardView({
         <LearningPathWidget />
       </div>
 
-      {/* Abo-Upsell — zweigeteilt, wenn kein aktives Abo */}
+      {/* Abo-Upsell — zweigeteilt, wenn kein aktives Abo (über den Tiles, da Hauptfokus) */}
       {showSubscriptionCard && (
         <SubscriptionUpsellCard
           plans={plans}
@@ -791,32 +791,6 @@ export default function DashboardView({
           onOpenPricing={() => setPricingOpen(true)}
         />
       )}
-
-      {/* Upgrade + Club — zweigeteilt, wenn beides angezeigt werden soll */}
-      {showUpgradeHint &&
-        showFullUpsell &&
-        (currentPlanTier === 'S' || currentPlanTier === 'M') && (
-          <UpgradeAndClubCard
-            currentTier={currentPlanTier}
-            isCommunity={isCommunity}
-            upsell={upsell}
-            onOpenPricing={() => setPricingOpen(true)}
-          />
-        )}
-
-      {/* Nur Upgrade-Hinweis (z.B. Community-Mitglied mit Plan S/M) */}
-      {showUpgradeHint &&
-        !showFullUpsell &&
-        (currentPlanTier === 'S' || currentPlanTier === 'M') && (
-          <UpgradeHintCard
-            currentTier={currentPlanTier}
-            isCommunity={isCommunity}
-            onOpenPricing={() => setPricingOpen(true)}
-          />
-        )}
-
-      {/* Nur Community-Upsell (z.B. Plan L ohne Upgrade-Hinweis) */}
-      {showFullUpsell && !showUpgradeHint && <MarketingClubFull upsell={upsell} />}
 
       {/* Main Tiles */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5 mb-10">
@@ -856,6 +830,34 @@ export default function DashboardView({
           lockLabel={toolboxLock}
         />
       </div>
+
+      {/* Abo-Karten bei aktivem Abo: UNTER den Tools, da der Fokus jetzt auf den Tools liegt */}
+
+      {/* Upgrade + Club — zweigeteilt, wenn beides angezeigt werden soll */}
+      {showUpgradeHint &&
+        showFullUpsell &&
+        (currentPlanTier === 'S' || currentPlanTier === 'M') && (
+          <UpgradeAndClubCard
+            currentTier={currentPlanTier}
+            isCommunity={isCommunity}
+            upsell={upsell}
+            onOpenPricing={() => setPricingOpen(true)}
+          />
+        )}
+
+      {/* Nur Upgrade-Hinweis (z.B. Community-Mitglied mit Plan S/M) */}
+      {showUpgradeHint &&
+        !showFullUpsell &&
+        (currentPlanTier === 'S' || currentPlanTier === 'M') && (
+          <UpgradeHintCard
+            currentTier={currentPlanTier}
+            isCommunity={isCommunity}
+            onOpenPricing={() => setPricingOpen(true)}
+          />
+        )}
+
+      {/* Nur Community-Upsell (z.B. Plan L ohne Upgrade-Hinweis) */}
+      {showFullUpsell && !showUpgradeHint && <MarketingClubFull upsell={upsell} />}
 
       {/* Footer */}
       <div className="card-static p-6 text-center">
