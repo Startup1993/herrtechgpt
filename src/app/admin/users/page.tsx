@@ -105,7 +105,7 @@ export default async function AdminUsersPage() {
   }))
 
   return (
-    <div className="p-4 sm:p-8 max-w-6xl mx-auto">
+    <div className="p-4 sm:p-8 max-w-screen-2xl mx-auto">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-6 gap-3">
         <div>
           <h1 className="text-2xl font-bold text-foreground">Nutzerverwaltung</h1>

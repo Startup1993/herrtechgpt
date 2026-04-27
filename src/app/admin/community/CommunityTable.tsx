@@ -16,6 +16,10 @@ import {
   ArrowUpDown,
   Trash2,
   Pencil,
+  CheckSquare,
+  Square,
+  X,
+  Layers,
 } from 'lucide-react'
 import { EditMemberModal, type EditMember } from './EditMemberModal'
 
@@ -96,6 +100,7 @@ type SortKey =
   | 'purchase_count'
   | 'invitation_sent_count'
   | 'claimed_at'
+  | 'created_at'
 type SortDir = 'asc' | 'desc'
 
 function compare<T>(a: T, b: T): number {
@@ -111,8 +116,13 @@ const PAGE_SIZE = 50
 export function CommunityTable({ members }: { members: MemberRow[] }) {
   const router = useRouter()
   const [search, setSearch] = useState('')
-  const [filter, setFilter] = useState<'all' | SkoolStatus | 'invitable' | 'claimed'>('all')
+  const [filter, setFilter] = useState<
+    'all' | SkoolStatus | 'invitable' | 'claimed' | 'not_invited'
+  >('all')
   const [sourceFilter, setSourceFilter] = useState<'all' | Exclude<MemberSource, null>>('all')
+  const [importedFilter, setImportedFilter] = useState<
+    'all' | 'today' | '7d' | '30d' | '90d'
+  >('all')
   const [loading, setLoading] = useState<string | null>(null)
   const [bulkBusy, setBulkBusy] = useState(false)
   const [syncBusy, setSyncBusy] = useState(false)
@@ -120,6 +130,9 @@ export function CommunityTable({ members }: { members: MemberRow[] }) {
   const [deleteBusy, setDeleteBusy] = useState<string | null>(null)
   const [syncDays, setSyncDays] = useState(90)
   const [editing, setEditing] = useState<EditMember | null>(null)
+  const [selectionMode, setSelectionMode] = useState(false)
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
+  const [dedupeBusy, setDedupeBusy] = useState(false)
   const [message, setMessage] = useState<{ type: 'ok' | 'err'; text: string } | null>(null)
 
   const [sortKey, setSortKey] = useState<SortKey>('skool_access_expires_at')
@@ -129,7 +142,7 @@ export function CommunityTable({ members }: { members: MemberRow[] }) {
   // Filter zurücksetzen → zurück zur ersten Seite
   useEffect(() => {
     setPage(1)
-  }, [search, filter, sourceFilter, sortKey, sortDir])
+  }, [search, filter, sourceFilter, importedFilter, sortKey, sortDir])
 
   const filtered = useMemo(
     () =>
@@ -150,13 +163,28 @@ export function CommunityTable({ members }: { members: MemberRow[] }) {
               !m.claimed_at
             )
           if (filter === 'claimed') return !!m.claimed_at
+          if (filter === 'not_invited')
+            return m.invitation_sent_count === 0 && !m.claimed_at
           return m.skool_status === filter
         })
         .filter((m) => {
           if (sourceFilter === 'all') return true
           return (m.source ?? 'stripe') === sourceFilter
+        })
+        .filter((m) => {
+          if (importedFilter === 'all') return true
+          const days =
+            importedFilter === 'today'
+              ? 1
+              : importedFilter === '7d'
+              ? 7
+              : importedFilter === '30d'
+              ? 30
+              : 90
+          const cutoff = Date.now() - days * 86400 * 1000
+          return new Date(m.created_at).getTime() >= cutoff
         }),
-    [members, search, filter, sourceFilter]
+    [members, search, filter, sourceFilter, importedFilter]
   )
 
   const sorted = useMemo(() => {
@@ -363,6 +391,114 @@ export function CommunityTable({ members }: { members: MemberRow[] }) {
     }
   }
 
+  function toggleSelectionMode() {
+    if (selectionMode) {
+      setSelectedIds(new Set())
+    }
+    setSelectionMode(!selectionMode)
+  }
+
+  function toggleSelected(id: string) {
+    setSelectedIds((prev) => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+  }
+
+  function toggleAllOnPage(rows: MemberRow[]) {
+    setSelectedIds((prev) => {
+      const next = new Set(prev)
+      const allOnPageSelected = rows.every((r) => next.has(r.id))
+      if (allOnPageSelected) {
+        rows.forEach((r) => next.delete(r.id))
+      } else {
+        rows.forEach((r) => next.add(r.id))
+      }
+      return next
+    })
+  }
+
+  function selectAllFiltered(rows: MemberRow[]) {
+    setSelectedIds(new Set(rows.map((r) => r.id)))
+  }
+
+  function clearSelection() {
+    setSelectedIds(new Set())
+  }
+
+  async function bulkDelete() {
+    const ids = [...selectedIds]
+    if (ids.length === 0) return
+    if (
+      !confirm(
+        `${ids.length} Mitglied${ids.length === 1 ? '' : 'er'} wirklich löschen?\n\nFalls registrierte User dabei sind: Plan S wird beendet, der User-Account bleibt aber bestehen.`
+      )
+    )
+      return
+    setBulkBusy(true)
+    setMessage(null)
+    try {
+      const res = await fetch('/api/admin/community/bulk-delete', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ids }),
+      })
+      const data = await res.json().catch(() => null)
+      if (!res.ok) {
+        setMessage({ type: 'err', text: data?.error ?? 'Bulk-Löschen fehlgeschlagen' })
+      } else {
+        setMessage({ type: 'ok', text: `${data.deleted ?? 0} Mitglieder gelöscht` })
+        clearSelection()
+        router.refresh()
+      }
+    } catch {
+      setMessage({ type: 'err', text: 'Netzwerk-Fehler' })
+    } finally {
+      setBulkBusy(false)
+    }
+  }
+
+  async function bulkInvite() {
+    const ids = [...selectedIds]
+    if (ids.length === 0) return
+    const warning =
+      ids.length > 100
+        ? `\n\n⚠️ Das sind ${ids.length} Mails — kann einige Minuten dauern und Resend-Rate-Limits triggern.`
+        : ''
+    await inviteMany(ids, `${ids.length} Einladungen verschicken?${warning}`)
+    clearSelection()
+  }
+
+  async function runDedupe() {
+    if (
+      !confirm(
+        'Doppelte Einträge zusammenführen?\n\nWenn die gleiche E-Mail mehrfach existiert, wird der Stripe-Eintrag bevorzugt behalten (sonst der jüngste). Andere werden gelöscht.'
+      )
+    )
+      return
+    setDedupeBusy(true)
+    setMessage(null)
+    try {
+      const res = await fetch('/api/admin/community/dedupe', { method: 'POST' })
+      const data = await res.json().catch(() => null)
+      if (!res.ok) {
+        setMessage({ type: 'err', text: data?.error ?? 'Dedupe fehlgeschlagen' })
+      } else {
+        setMessage({
+          type: 'ok',
+          text: `${data.duplicate_groups ?? 0} doppelte Gruppen gefunden, ${data.deleted ?? 0} Einträge entfernt`,
+        })
+        router.refresh()
+      }
+    } catch {
+      setMessage({ type: 'err', text: 'Netzwerk-Fehler' })
+    } finally {
+      setDedupeBusy(false)
+    }
+  }
+
   async function deleteMember(id: string, label: string) {
     if (
       !confirm(
@@ -462,6 +598,31 @@ export function CommunityTable({ members }: { members: MemberRow[] }) {
           )}
           Sync
         </button>
+        <button
+          onClick={runDedupe}
+          disabled={dedupeBusy}
+          className="inline-flex items-center gap-2 px-3 py-2 rounded-lg border border-border hover:bg-surface-hover text-foreground font-medium text-sm transition disabled:opacity-50"
+          title="Doppelte Einträge zusammenführen (Stripe-Quelle gewinnt)"
+        >
+          {dedupeBusy ? (
+            <Loader2 className="w-4 h-4 animate-spin" />
+          ) : (
+            <Layers className="w-4 h-4" />
+          )}
+          Duplikate
+        </button>
+        <button
+          onClick={toggleSelectionMode}
+          className={`inline-flex items-center gap-2 px-3 py-2 rounded-lg border text-sm font-medium transition ${
+            selectionMode
+              ? 'bg-primary text-white border-primary hover:bg-primary-hover'
+              : 'border-border hover:bg-surface-hover text-foreground'
+          }`}
+          title="Mehrere Einträge auswählen"
+        >
+          {selectionMode ? <CheckSquare className="w-4 h-4" /> : <Square className="w-4 h-4" />}
+          {selectionMode ? 'Auswahl beenden' : 'Bearbeiten'}
+        </button>
       </div>
 
       {/* Zeile 2: Filter + Bulk-Invite */}
@@ -484,6 +645,7 @@ export function CommunityTable({ members }: { members: MemberRow[] }) {
             <option value="alumni">Alumni</option>
             <option value="cancelled">Refunded</option>
             <option value="invitable">Einladbar (aktiv, nicht registriert)</option>
+            <option value="not_invited">Noch nicht eingeladen</option>
             <option value="claimed">Registriert</option>
           </select>
           <select
@@ -499,6 +661,20 @@ export function CommunityTable({ members }: { members: MemberRow[] }) {
             <option value="manual">Manuell</option>
             <option value="csv">CSV-Import</option>
             <option value="skool">Skool</option>
+          </select>
+          <select
+            value={importedFilter}
+            onChange={(e) =>
+              setImportedFilter(e.target.value as typeof importedFilter)
+            }
+            className="px-4 py-2 rounded-lg bg-surface border border-border text-foreground focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent"
+            title="Filter: wann hinzugefügt"
+          >
+            <option value="all">Importiert: Alle</option>
+            <option value="today">Heute</option>
+            <option value="7d">Letzte 7 Tage</option>
+            <option value="30d">Letzte 30 Tage</option>
+            <option value="90d">Letzte 90 Tage</option>
           </select>
         </div>
         <button
@@ -533,6 +709,53 @@ export function CommunityTable({ members }: { members: MemberRow[] }) {
         </div>
       )}
 
+      {selectionMode && (
+        <div className="flex flex-wrap items-center gap-3 px-4 py-3 rounded-lg bg-primary/10 border border-primary/30">
+          <div className="text-sm font-medium text-foreground">
+            {selectedIds.size} ausgewählt
+          </div>
+          <div className="flex flex-wrap items-center gap-2 ml-auto">
+            <button
+              onClick={() => selectAllFiltered(sorted)}
+              className="text-xs px-2.5 py-1.5 rounded-md border border-border hover:bg-surface-hover transition"
+              title="Alle aktuell gefilterten Einträge auswählen"
+            >
+              Alle ({sorted.length}) auswählen
+            </button>
+            <button
+              onClick={clearSelection}
+              disabled={selectedIds.size === 0}
+              className="text-xs px-2.5 py-1.5 rounded-md border border-border hover:bg-surface-hover transition disabled:opacity-40"
+            >
+              Auswahl leeren
+            </button>
+            <button
+              onClick={bulkInvite}
+              disabled={selectedIds.size === 0 || bulkBusy}
+              className="inline-flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-md bg-primary text-white hover:bg-primary-hover transition disabled:opacity-50"
+            >
+              {bulkBusy ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Send className="w-3.5 h-3.5" />}
+              Einladen
+            </button>
+            <button
+              onClick={bulkDelete}
+              disabled={selectedIds.size === 0 || bulkBusy}
+              className="inline-flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-md bg-red-600 text-white hover:bg-red-700 transition disabled:opacity-50"
+            >
+              {bulkBusy ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Trash2 className="w-3.5 h-3.5" />}
+              Löschen
+            </button>
+            <button
+              onClick={() => setSelectionMode(false)}
+              className="p-1.5 rounded-md hover:bg-surface-hover text-muted hover:text-foreground transition"
+              title="Auswahl-Modus beenden"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+        </div>
+      )}
+
       <div className="text-xs text-muted">
         {sorted.length === 0
           ? 'Keine Einträge'
@@ -547,6 +770,22 @@ export function CommunityTable({ members }: { members: MemberRow[] }) {
           <table className="w-full text-sm">
             <thead className="bg-surface-secondary border-b border-border">
               <tr className="text-left">
+                {selectionMode && (
+                  <th className="px-3 py-3 w-10">
+                    <button
+                      onClick={() => toggleAllOnPage(pageRows)}
+                      title="Alle auf dieser Seite auswählen"
+                      className="text-muted hover:text-foreground transition"
+                    >
+                      {pageRows.every((r) => selectedIds.has(r.id)) &&
+                      pageRows.length > 0 ? (
+                        <CheckSquare className="w-4 h-4 text-primary" />
+                      ) : (
+                        <Square className="w-4 h-4" />
+                      )}
+                    </button>
+                  </th>
+                )}
                 <th className="px-4 py-3">
                   <SortHeader column="name" label="Name / E-Mail" />
                 </th>
@@ -565,6 +804,9 @@ export function CommunityTable({ members }: { members: MemberRow[] }) {
                 <th className="px-4 py-3">
                   <SortHeader column="claimed_at" label="Registriert" />
                 </th>
+                <th className="px-4 py-3">
+                  <SortHeader column="created_at" label="Importiert" />
+                </th>
                 <th className="px-4 py-3 font-medium text-muted">Quelle</th>
                 <th className="px-4 py-3 font-medium text-right text-muted">Aktion</th>
               </tr>
@@ -572,7 +814,10 @@ export function CommunityTable({ members }: { members: MemberRow[] }) {
             <tbody>
               {pageRows.length === 0 ? (
                 <tr>
-                  <td colSpan={8} className="px-4 py-10 text-center text-muted">
+                  <td
+                    colSpan={selectionMode ? 10 : 9}
+                    className="px-4 py-10 text-center text-muted"
+                  >
                     Keine Einträge.
                   </td>
                 </tr>
@@ -582,11 +827,28 @@ export function CommunityTable({ members }: { members: MemberRow[] }) {
                   const canInvite =
                     (m.skool_status === 'active' || m.skool_status === 'alumni') &&
                     !m.claimed_at
+                  const isSelected = selectedIds.has(m.id)
                   return (
                     <tr
                       key={m.id}
-                      className="border-b border-border last:border-0 hover:bg-surface-hover"
+                      className={`border-b border-border last:border-0 hover:bg-surface-hover ${
+                        isSelected ? 'bg-primary/5' : ''
+                      }`}
                     >
+                      {selectionMode && (
+                        <td className="px-3 py-3 w-10">
+                          <button
+                            onClick={() => toggleSelected(m.id)}
+                            className="text-muted hover:text-foreground transition"
+                          >
+                            {isSelected ? (
+                              <CheckSquare className="w-4 h-4 text-primary" />
+                            ) : (
+                              <Square className="w-4 h-4" />
+                            )}
+                          </button>
+                        </td>
+                      )}
                       <td className="px-4 py-3">
                         <div className="text-foreground font-medium">
                           {m.name ?? '—'}
@@ -619,6 +881,9 @@ export function CommunityTable({ members }: { members: MemberRow[] }) {
                         ) : (
                           '—'
                         )}
+                      </td>
+                      <td className="px-4 py-3 text-muted text-xs">
+                        {formatDate(m.created_at)}
                       </td>
                       <td className="px-4 py-3">
                         {(() => {
