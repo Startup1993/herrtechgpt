@@ -107,7 +107,11 @@ export async function sendNewsletterInviteEmail(
 // User muss ein Passwort setzen. Link ist 30 Tage gültig (DB-getrackt).
 export async function sendSkoolInviteEmail(
   email: string,
-  params: { token: string; firstName?: string | null }
+  params: {
+    token: string
+    firstName?: string | null
+    creditsPerMonth?: number | null
+  }
 ): Promise<{ ok: true } | { ok: false; error: string }> {
   const claimLink = `${PRODUCTION_URL}/invite/skool/${encodeURIComponent(params.token)}`
 
@@ -116,7 +120,11 @@ export async function sendSkoolInviteEmail(
     return { ok: false, error: 'RESEND_API_KEY nicht konfiguriert' }
   }
 
-  const html = renderSkoolInviteEmail({ claimLink, firstName: params.firstName })
+  const html = renderSkoolInviteEmail({
+    claimLink,
+    firstName: params.firstName,
+    creditsPerMonth: params.creditsPerMonth,
+  })
 
   try {
     await resend.emails.send({
