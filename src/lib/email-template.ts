@@ -252,7 +252,7 @@ export interface InviteEmailOptions {
 export function renderInviteEmail(opts: InviteEmailOptions): string {
   const siteUrl = PRODUCTION_URL
   const greeting = opts.firstName ? `Hey ${escapeHtml(opts.firstName)}!` : 'Hey!'
-  const preheader = 'Deine Herr Tech World ist offen — ein Klick und du bist drin.'
+  const preheader = 'Deine Einladung in die Herr Tech World — ein Klick und du bist drin.'
 
   return `<!DOCTYPE html>
 <html lang="de">
@@ -283,16 +283,16 @@ export function renderInviteEmail(opts: InviteEmailOptions): string {
                   Willkommen an Bord
                 </div>
                 <h1 style="margin:0 0 16px; font-size:30px; line-height:1.15; color:#0F0F13; font-weight:800; letter-spacing:-0.01em;">
-                  Deine Herr Tech World<br>
-                  <span style="color:#B598E2;">ist offen für dich.</span>
+                  Deine Einladung in die<br>
+                  <span style="color:#B598E2;">Herr Tech World.</span>
                 </h1>
                 <p style="margin:0 0 14px; font-size:16px; line-height:1.6; color:#333;">
                   ${greeting}
                 </p>
                 <p style="margin:0 0 14px; font-size:16px; line-height:1.6; color:#333;">
-                  Schön, dass du da bist. Dein Zugang zur <strong>Herr Tech World</strong> —
-                  deiner KI-Plattform für Content, Business &amp; Wachstum — ist ab jetzt
-                  freigeschaltet.
+                  Schön, dass du da bist. Du bist eingeladen in die
+                  <strong>Herr Tech World</strong> — deine KI-Plattform für Content,
+                  Business &amp; Wachstum.
                 </p>
                 <p style="margin:0 0 8px; font-size:16px; line-height:1.6; color:#333;">
                   Was dich erwartet:
