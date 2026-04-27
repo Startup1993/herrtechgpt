@@ -19,6 +19,7 @@ type MemberRow = {
   last_invited_at: string | null
   claimed_at: string | null
   created_at: string
+  source: 'stripe' | 'manual' | 'csv' | 'skool' | null
 }
 
 // Supabase/PostgREST hat einen Server-seitigen Hard-Cap auf 1000 Rows
@@ -33,7 +34,7 @@ async function fetchAllCommunityMembers(): Promise<MemberRow[]> {
     const { data, error } = await admin
       .from('community_members')
       .select(
-        'id, email, name, skool_status, skool_access_expires_at, last_purchase_at, purchase_count, invitation_sent_count, last_invited_at, claimed_at, created_at'
+        'id, email, name, skool_status, skool_access_expires_at, last_purchase_at, purchase_count, invitation_sent_count, last_invited_at, claimed_at, created_at, source'
       )
       .order('created_at', { ascending: false })
       .range(offset, offset + PAGE - 1)

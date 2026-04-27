@@ -21,6 +21,8 @@ interface SubscriptionInfo {
   current_period_end: string | null
 }
 
+type CommunitySource = 'stripe' | 'manual' | 'csv' | 'skool' | null
+
 interface UserRow {
   id: string
   email: string
@@ -33,6 +35,38 @@ interface UserRow {
   has_logged_in: boolean
   invitation_sent_count: number
   subscription: SubscriptionInfo | null
+  community_source: CommunitySource
+}
+
+const SOURCE_META: Record<
+  Exclude<CommunitySource, null> | 'unknown',
+  { label: string; className: string; title: string }
+> = {
+  stripe: {
+    label: 'Stripe',
+    className: 'bg-blue-50 text-blue-700 dark:bg-blue-950/30 dark:text-blue-400',
+    title: 'Aus KMC-Stripe-Sync importiert',
+  },
+  manual: {
+    label: 'Manuell',
+    className: 'bg-purple-50 text-purple-700 dark:bg-purple-950/30 dark:text-purple-400',
+    title: 'Vom Admin manuell hinzugefügt',
+  },
+  csv: {
+    label: 'CSV',
+    className: 'bg-amber-50 text-amber-700 dark:bg-amber-950/30 dark:text-amber-400',
+    title: 'Aus CSV-Datei importiert',
+  },
+  skool: {
+    label: 'Skool',
+    className: 'bg-green-50 text-green-700 dark:bg-green-950/30 dark:text-green-400',
+    title: 'Direkt aus Skool importiert',
+  },
+  unknown: {
+    label: 'Self-Signup',
+    className: 'bg-surface-secondary text-muted',
+    title: 'Direkt registriert (kein Skool-Eintrag)',
+  },
 }
 
 type TierFilter = 'all' | AccessTier
@@ -95,6 +129,9 @@ export default function UsersTable({ users }: { users: UserRow[] }) {
   const [filterStatus, setFilterStatus] = useState<StatusFilter>('all')
   const [filterRole, setFilterRole] = useState<RoleFilter>('all')
   const [filterSub, setFilterSub] = useState<SubFilter>('all')
+  const [filterSource, setFilterSource] = useState<
+    'all' | Exclude<CommunitySource, null> | 'self'
+  >('all')
   const [sortKey, setSortKey] = useState<SortKey>('created_at')
   const [sortDir, setSortDir] = useState<SortDir>('desc')
   const [importOpen, setImportOpen] = useState(false)
@@ -130,7 +167,12 @@ export default function UsersTable({ users }: { users: UserRow[] }) {
       .filter((u) => filterStatus === 'all' || u._status === filterStatus)
       .filter((u) => filterRole === 'all' || u.role === filterRole)
       .filter((u) => matchesSubFilter(u.subscription, filterSub))
-  }, [withStatus, search, filterTier, filterStatus, filterRole, filterSub])
+      .filter((u) => {
+        if (filterSource === 'all') return true
+        if (filterSource === 'self') return u.community_source == null
+        return u.community_source === filterSource
+      })
+  }, [withStatus, search, filterTier, filterStatus, filterRole, filterSub, filterSource])
 
   const sorted = useMemo(() => {
     const tierRank: Record<AccessTier, number> = { basic: 0, alumni: 1, premium: 2 }
@@ -177,12 +219,14 @@ export default function UsersTable({ users }: { users: UserRow[] }) {
     setFilterStatus('all')
     setFilterRole('all')
     setFilterSub('all')
+    setFilterSource('all')
   }
 
   const filtersActive =
     search !== '' ||
     filterTier !== 'all' ||
     filterStatus !== 'all' ||
+    filterSource !== 'all' ||
     filterRole !== 'all' ||
     filterSub !== 'all'
 
@@ -317,6 +361,23 @@ export default function UsersTable({ users }: { users: UserRow[] }) {
           ]}
         />
         <FilterSelect
+          label="Quelle"
+          value={filterSource}
+          onChange={(v) =>
+            setFilterSource(
+              v as 'all' | Exclude<CommunitySource, null> | 'self'
+            )
+          }
+          options={[
+            { value: 'all', label: 'Alle' },
+            { value: 'stripe', label: 'Stripe-Sync' },
+            { value: 'manual', label: 'Manuell' },
+            { value: 'csv', label: 'CSV-Import' },
+            { value: 'skool', label: 'Skool' },
+            { value: 'self', label: 'Self-Signup (kein KMC)' },
+          ]}
+        />
+        <FilterSelect
           label="Sortierung"
           value={`${sortKey}:${sortDir}`}
           onChange={(v) => {
@@ -377,13 +438,14 @@ export default function UsersTable({ users }: { users: UserRow[] }) {
               <SortableTh label="Status" sortKey="last_active" current={sortKey} dir={sortDir} onClick={toggleSort} align="left" />
               <SortableTh label="Chats" sortKey="conversation_count" current={sortKey} dir={sortDir} onClick={toggleSort} align="center" />
               <th className="text-left px-4 py-3 text-xs font-semibold text-muted uppercase tracking-wider">Rolle</th>
+              <th className="text-left px-4 py-3 text-xs font-semibold text-muted uppercase tracking-wider">Quelle</th>
               <th className="px-4 py-3" />
             </tr>
           </thead>
           <tbody className="divide-y divide-border">
             {sorted.length === 0 && (
               <tr>
-                <td colSpan={8} className="px-5 py-8 text-center text-sm text-muted">
+                <td colSpan={9} className="px-5 py-8 text-center text-sm text-muted">
                   Keine Nutzer gefunden.
                 </td>
               </tr>
@@ -444,6 +506,21 @@ export default function UsersTable({ users }: { users: UserRow[] }) {
                     }`}>
                       {u.role === 'admin' ? 'Admin' : 'Nutzer'}
                     </span>
+                  </td>
+                  <td className="px-4 py-3.5 whitespace-nowrap">
+                    {(() => {
+                      const meta =
+                        SOURCE_META[u.community_source ?? 'unknown'] ??
+                        SOURCE_META.unknown
+                      return (
+                        <span
+                          title={meta.title}
+                          className={`inline-flex items-center px-2 py-0.5 rounded-md text-xs font-medium ${meta.className}`}
+                        >
+                          {meta.label}
+                        </span>
+                      )
+                    })()}
                   </td>
                   <td className="px-4 py-3.5">
                     <div className="flex items-center gap-2 justify-end" onClick={(e) => e.stopPropagation()}>
