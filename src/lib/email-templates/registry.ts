@@ -159,7 +159,7 @@ export const TEMPLATES: TemplateDefinition[] = [
     label: 'Skool — aktives Mitglied',
     group: 'invites',
     trigger:
-      'Bulk-Einladung an aktive KI Marketing Club Mitglieder via /admin/community. Eigener Claim-Link (kein Magic-Login), Token 30 Tage gültig.',
+      'Bulk-Einladung an aktive KI Marketing Club Mitglieder via /admin/community. Nach Klick auf den Link wird der Account aktiviert und der User automatisch eingeloggt (Magic-Login integriert). Token 30 Tage gültig.',
     preview: {
       firstName: 'Maria',
       claimLink: 'https://world.herr.tech/invite/skool/abcd1234',
@@ -212,7 +212,7 @@ export const TEMPLATES: TemplateDefinition[] = [
     label: 'Skool — Alumni',
     group: 'invites',
     trigger:
-      'Einladung für Ex-Club-Mitglieder via /admin/community (Status "alumni"). Nur lebenslanger Classroom-Zugang, kein Plan S.',
+      'Einladung für Ex-Club-Mitglieder via /admin/community (Status "alumni"). Nur lebenslanger Classroom-Zugang, kein Plan S. Nach Klick auf den Link wird der Account aktiviert und der User automatisch eingeloggt (Magic-Login integriert). Token 30 Tage gültig.',
     preview: {
       firstName: 'Maria',
       claimLink: 'https://world.herr.tech/invite/skool/abcd1234',
@@ -263,15 +263,13 @@ export const TEMPLATES: TemplateDefinition[] = [
     label: 'Community-Downgrade',
     group: 'system',
     trigger:
-      'Wird automatisch versendet, wenn ein User von premium → alumni/basic herabgestuft wird (z.B. Skool-Cancel). Enthält Datum bis wann das Abo weiterläuft.',
-    preview: { endDate: '15. Mai 2026' },
-    variables: [
-      { key: '{endDate}', description: 'Datum, bis zu dem das Abo noch läuft (formatiert)' },
-    ],
+      'Wird automatisch versendet, wenn ein User von premium → alumni/basic herabgestuft wird (z.B. Skool-Cancel oder Refund). Downgrade ist sofort wirksam — Zugriff auf Toolbox + Chat endet unmittelbar, Classroom bleibt als Alumni lebenslang erhalten.',
+    preview: {},
+    variables: [],
     fields: [
       { key: 'subject', label: 'Betreff', kind: 'text' },
       { key: 'heading', label: 'Hauptüberschrift', kind: 'text' },
-      { key: 'intro', label: 'Intro-Text (HTML erlaubt, mit {endDate})', kind: 'textarea' },
+      { key: 'intro', label: 'Intro-Text (HTML erlaubt)', kind: 'textarea' },
       { key: 'cta_label', label: 'Button-Text', kind: 'text' },
       { key: 'footer_note', label: 'Hinweis am Ende', kind: 'textarea' },
     ],
@@ -280,9 +278,9 @@ export const TEMPLATES: TemplateDefinition[] = [
       data: {
         heading: 'Deine Community-Mitgliedschaft ist beendet',
         intro:
-          'Hey,<br><br>dein Zugang zum KI Marketing Club wurde beendet.<br><br>Dein bestehendes Abo läuft noch bis zum <strong>{endDate}</strong> weiter — bis dahin hast du vollen Zugriff auf Herr Tech GPT und die KI Toolbox.<br><br>Danach endet das Abo automatisch. Du kannst jederzeit zu den regulären Alumni-Preisen neu abschließen. Dein Classroom-Zugang bleibt als Alumni lebenslang erhalten.',
+          'Hey,<br><br>dein Zugang zum KI Marketing Club wurde beendet — der Zugriff auf Herr Tech GPT und die KI Toolbox endet damit sofort.<br><br>Dein <strong>Classroom-Zugang bleibt dir als Alumni lebenslang erhalten</strong>. Du kannst jederzeit zu den regulären Preisen neu abschließen, wenn du wieder vollen Zugriff willst.',
         cta_label: 'Neuen Plan wählen',
-        footer_note: 'Keine Sorge — du verlierst keine Daten. Wir freuen uns, wenn du dabei bleibst.',
+        footer_note: 'Keine Sorge — du verlierst keine Daten. Wir freuen uns, wenn du wiederkommst.',
       },
     },
   },
