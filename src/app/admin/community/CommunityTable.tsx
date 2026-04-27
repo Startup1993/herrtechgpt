@@ -421,14 +421,58 @@ export function CommunityTable({ members }: { members: MemberRow[] }) {
 
   return (
     <div className="space-y-4">
-      <div className="flex flex-col sm:flex-row gap-3 sm:items-center sm:justify-between">
-        <div className="flex flex-col sm:flex-row gap-3 flex-1">
+      {/* Zeile 1: Stripe-Sync-Tools — gehören thematisch zu den Admin-Tools im Page-Header */}
+      <div className="flex flex-wrap items-center justify-end gap-2">
+        <select
+          value={syncDays}
+          onChange={(e) => setSyncDays(parseInt(e.target.value, 10))}
+          disabled={syncBusy}
+          className="px-3 py-2 rounded-lg bg-surface border border-border text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-primary"
+          title="Wie weit zurück soll Stripe geprüft werden?"
+        >
+          <option value={30}>30 Tage</option>
+          <option value={90}>90 Tage</option>
+          <option value={180}>180 Tage</option>
+          <option value={365}>1 Jahr</option>
+          <option value={730}>2 Jahre</option>
+        </select>
+        <button
+          onClick={runDiagnose}
+          disabled={diagBusy || syncBusy}
+          className="inline-flex items-center gap-2 px-3 py-2 rounded-lg border border-border hover:bg-surface-hover text-foreground font-medium text-sm transition disabled:opacity-50"
+          title="Zählt Stripe-Sessions/Invoices/Subscriptions im Live-Account"
+        >
+          {diagBusy ? (
+            <Loader2 className="w-4 h-4 animate-spin" />
+          ) : (
+            <Stethoscope className="w-4 h-4" />
+          )}
+          Diagnose
+        </button>
+        <button
+          onClick={runSync}
+          disabled={syncBusy || diagBusy}
+          className="inline-flex items-center gap-2 px-3 py-2 rounded-lg border border-border hover:bg-surface-hover text-foreground font-medium text-sm transition disabled:opacity-50"
+          title="Pullt Stripe-Käufe (Sessions + Subs + Invoices) und cleant abgelaufene Mitglieder"
+        >
+          {syncBusy ? (
+            <Loader2 className="w-4 h-4 animate-spin" />
+          ) : (
+            <RefreshCw className="w-4 h-4" />
+          )}
+          Sync
+        </button>
+      </div>
+
+      {/* Zeile 2: Filter + Bulk-Invite */}
+      <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+        <div className="flex flex-col sm:flex-row gap-3 flex-1 flex-wrap">
           <input
             type="text"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             placeholder="E-Mail oder Name suchen…"
-            className="flex-1 px-4 py-2 rounded-lg bg-surface border border-border text-foreground placeholder:text-muted-light focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent"
+            className="flex-1 min-w-[180px] px-4 py-2 rounded-lg bg-surface border border-border text-foreground placeholder:text-muted-light focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent"
           />
           <select
             value={filter}
@@ -457,65 +501,24 @@ export function CommunityTable({ members }: { members: MemberRow[] }) {
             <option value="skool">Skool</option>
           </select>
         </div>
-        <div className="flex items-center gap-2">
-          <select
-            value={syncDays}
-            onChange={(e) => setSyncDays(parseInt(e.target.value, 10))}
-            disabled={syncBusy}
-            className="px-2 py-2 rounded-lg bg-surface border border-border text-foreground text-xs focus:outline-none focus:ring-2 focus:ring-primary"
-            title="Wie weit zurück soll Stripe geprüft werden?"
-          >
-            <option value={30}>30 Tage</option>
-            <option value={90}>90 Tage</option>
-            <option value={180}>180 Tage</option>
-            <option value={365}>1 Jahr</option>
-            <option value={730}>2 Jahre</option>
-          </select>
-          <button
-            onClick={runDiagnose}
-            disabled={diagBusy || syncBusy}
-            className="flex items-center gap-2 px-3 py-2 rounded-lg border border-border hover:bg-surface-hover text-foreground font-medium text-sm transition disabled:opacity-50"
-            title="Zählt Stripe-Sessions/Invoices/Subscriptions im Live-Account"
-          >
-            {diagBusy ? (
-              <Loader2 className="w-4 h-4 animate-spin" />
-            ) : (
-              <Stethoscope className="w-4 h-4" />
-            )}
-            Diagnose
-          </button>
-          <button
-            onClick={runSync}
-            disabled={syncBusy || diagBusy}
-            className="flex items-center gap-2 px-3 py-2 rounded-lg border border-border hover:bg-surface-hover text-foreground font-medium text-sm transition disabled:opacity-50"
-            title="Pullt Stripe-Käufe (Sessions + Subs + Invoices) und cleant abgelaufene Mitglieder"
-          >
-            {syncBusy ? (
-              <Loader2 className="w-4 h-4 animate-spin" />
-            ) : (
-              <RefreshCw className="w-4 h-4" />
-            )}
-            Sync
-          </button>
-          <button
-            onClick={() => {
-              const count = invitableIds.length
-              const warning =
-                count > 100
-                  ? `\n\n⚠️ Das sind ${count} Mails — das könnte einige Minuten dauern und kann Resend-Rate-Limits triggern.`
-                  : ''
-              inviteMany(
-                invitableIds,
-                `${count} Einladungen verschicken?${warning}`
-              )
-            }}
-            disabled={invitableIds.length === 0 || bulkBusy}
-            className="flex items-center gap-2 px-4 py-2 rounded-lg bg-primary hover:bg-primary-hover text-white font-medium text-sm transition disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            {bulkBusy ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
-            Alle einladbaren ({invitableIds.length})
-          </button>
-        </div>
+        <button
+          onClick={() => {
+            const count = invitableIds.length
+            const warning =
+              count > 100
+                ? `\n\n⚠️ Das sind ${count} Mails — das könnte einige Minuten dauern und kann Resend-Rate-Limits triggern.`
+                : ''
+            inviteMany(
+              invitableIds,
+              `${count} Einladungen verschicken?${warning}`
+            )
+          }}
+          disabled={invitableIds.length === 0 || bulkBusy}
+          className="inline-flex items-center justify-center gap-2 px-4 py-2 rounded-lg bg-primary hover:bg-primary-hover text-white font-medium text-sm transition disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap"
+        >
+          {bulkBusy ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
+          Alle einladbaren ({invitableIds.length})
+        </button>
       </div>
 
       {message && (
