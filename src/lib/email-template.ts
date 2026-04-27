@@ -384,6 +384,11 @@ export function renderInviteEmail(opts: InviteEmailOptions): string {
 export interface SkoolInviteOptions {
   claimLink: string
   firstName?: string | null
+  /**
+   * Credits-pro-Monat aus dem Plan-S (für die Toolbox-Bullet-Zeile).
+   * Optional — fällt auf 200 zurück, falls nicht übergeben.
+   */
+  creditsPerMonth?: number | null
 }
 
 export function renderSkoolInviteEmail(opts: SkoolInviteOptions): string {
@@ -420,7 +425,7 @@ export function renderSkoolInviteEmail(opts: SkoolInviteOptions): string {
                   Exklusiv für Club-Mitglieder
                 </div>
                 <h1 style="margin:0 0 16px; font-size:28px; line-height:1.2; color:#0F0F13; font-weight:800; letter-spacing:-0.01em;">
-                  Deine Herr Tech World<br>
+                  Die Herr Tech World<br>
                   <span style="color:#B598E2;">wartet auf dich.</span>
                 </h1>
                 <p style="margin:0 0 14px; font-size:16px; line-height:1.6; color:#333;">
@@ -428,8 +433,9 @@ export function renderSkoolInviteEmail(opts: SkoolInviteOptions): string {
                 </p>
                 <p style="margin:0 0 14px; font-size:16px; line-height:1.6; color:#333;">
                   Als Mitglied im <strong>KI Marketing Club</strong> hast du ab sofort
-                  kostenlosen Zugriff auf die <strong>Herr Tech World</strong> — unsere
-                  KI-Plattform mit Classroom, Chat-Agenten und der kompletten Toolbox.
+                  kostenlosen Zugriff auf die <strong>Herr Tech World</strong> — deine
+                  KI-Plattform mit Classroom, Chat-Agenten und der kompletten Toolbox
+                  (inkl. ${opts.creditsPerMonth ?? 200} Credits/Monat).
                 </p>
                 <p style="margin:0 0 14px; font-size:16px; line-height:1.6; color:#333;">
                   Der Zugang ist für dich <strong>gratis</strong>, solange du im Club bist.
@@ -447,7 +453,7 @@ export function renderSkoolInviteEmail(opts: SkoolInviteOptions): string {
                   </tr>
                   <tr>
                     <td style="padding:8px 0; font-size:15px; line-height:1.5; color:#333;">
-                      🤖&nbsp;&nbsp;<strong>6 KI-Coaches</strong>, trainiert auf Florians Inhalten.
+                      🤖&nbsp;&nbsp;<strong>6 KI-Coaches</strong>, trainiert auf Herr Techs Inhalten.
                     </td>
                   </tr>
                   <tr>
@@ -475,8 +481,8 @@ export function renderSkoolInviteEmail(opts: SkoolInviteOptions): string {
             <tr>
               <td style="padding:20px 36px 8px;">
                 <p style="margin:0; font-size:13px; line-height:1.55; color:#666; font-style:italic;">
-                  Gut zu wissen: Wenn du den Club später verlässt, bleibt dir dein Classroom-
-                  Zugang als Alumni erhalten. Abo S endet automatisch.
+                  Gut zu wissen: Wenn du den Club später verlässt, bleibt dir dein
+                  Classroom-Zugang als Alumni lebenslang erhalten.
                 </p>
               </td>
             </tr>

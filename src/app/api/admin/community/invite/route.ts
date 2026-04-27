@@ -47,6 +47,15 @@ export async function POST(request: Request) {
     )
   }
 
+  // Credits-pro-Monat aus Plan S laden — wird in der Mail angezeigt.
+  // Fällt auf 200 zurück falls Plan-Eintrag fehlt.
+  const { data: planS } = await admin
+    .from('plans')
+    .select('credits_per_month')
+    .eq('id', 'plan_s')
+    .maybeSingle()
+  const creditsPerMonth = planS?.credits_per_month ?? 200
+
   let invited = 0
   let failed = 0
   let skipped = 0
@@ -61,7 +70,11 @@ export async function POST(request: Request) {
 
       const { token } = await generateInvitationToken(admin, member.id)
       const firstName = member.name?.split(' ')[0] ?? null
-      const res = await sendSkoolInviteEmail(member.email, { token, firstName })
+      const res = await sendSkoolInviteEmail(member.email, {
+        token,
+        firstName,
+        creditsPerMonth,
+      })
       if (!res.ok) {
         failed += 1
         errors.push({ email: member.email, error: res.error })
