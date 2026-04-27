@@ -11,7 +11,7 @@ export default async function AdminUsersPage() {
     { data: subs },
     { data: plans },
   ] = await Promise.all([
-    admin.from('profiles').select('id, role, access_tier, created_at, invitation_sent_count').order('created_at', { ascending: false }),
+    admin.from('profiles').select('id, role, access_tier, full_name, created_at, invitation_sent_count').order('created_at', { ascending: false }),
     admin.auth.admin.listUsers({ perPage: 1000 }),
     admin.from('conversations').select('user_id, updated_at'),
     admin
@@ -76,6 +76,7 @@ export default async function AdminUsersPage() {
   const users = (profiles ?? []).map((p) => ({
     id: p.id,
     email: emailMap[p.id] ?? '—',
+    full_name: (p as { full_name?: string | null }).full_name ?? null,
     role: p.role as 'user' | 'admin',
     access_tier: (p.access_tier ?? 'basic') as 'basic' | 'alumni' | 'premium',
     created_at: p.created_at,

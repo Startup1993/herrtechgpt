@@ -67,13 +67,21 @@ export async function POST(request: Request) {
         skipped += 1
         continue
       }
+      // Refunded / cancelled werden nie eingeladen — die wollten raus
+      if (member.skool_status === 'cancelled') {
+        skipped += 1
+        continue
+      }
 
       const { token } = await generateInvitationToken(admin, member.id)
       const firstName = member.name?.split(' ')[0] ?? null
+      const mode: 'active' | 'alumni' =
+        member.skool_status === 'alumni' ? 'alumni' : 'active'
       const res = await sendSkoolInviteEmail(member.email, {
         token,
         firstName,
         creditsPerMonth,
+        mode,
       })
       if (!res.ok) {
         failed += 1
