@@ -5,8 +5,10 @@
  *
  * 1. Token validieren (nicht abgelaufen, vorhanden)
  * 2. Auth-User finden oder anlegen (mit email_confirm)
- * 3. Community-Member claimen + Plan S aktivieren (via claimCommunityMember)
- * 4. Magic-Link per Mail an User schicken (so kommt er rein)
+ * 3. Community-Member claimen + Plan S / alumni-Tier aktivieren
+ * 4. Magic-Link generieren und als redirect-URL zurückgeben →
+ *    Frontend redirected sofort dorthin → User ist direkt eingeloggt.
+ *    (Keine zweite Mail nötig.)
  */
 
 import { NextResponse } from 'next/server'
@@ -15,7 +17,7 @@ import {
   claimCommunityMember,
   getCommunityMemberByToken,
 } from '@/lib/skool-sync'
-import { sendInvitationEmail } from '@/lib/invitations'
+import { PRODUCTION_URL } from '@/lib/urls'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -87,11 +89,28 @@ export async function POST(req: Request) {
     )
   }
 
-  // 3. Magic-Login-Link per Mail schicken
-  const emailRes = await sendInvitationEmail(admin, email)
-  if (!emailRes.ok) {
-    return NextResponse.json({ error: emailRes.error }, { status: 500 })
+  // 3. Magic-Link generieren und als redirect-URL zurückgeben.
+  //    Frontend macht window.location.href = redirectTo → User ist sofort drin.
+  const { data: linkData, error: linkErr } = await admin.auth.admin.generateLink({
+    type: 'magiclink',
+    email,
+  })
+  const hashedToken = linkData?.properties?.hashed_token
+  if (linkErr || !hashedToken) {
+    // Sollte fast nie passieren — Fallback: schicke 'ok' ohne redirect,
+    // Frontend zeigt dann Hinweis "Einloggen über /login"
+    return NextResponse.json({
+      ok: true,
+      warning: linkErr?.message ?? 'Magic-Link konnte nicht generiert werden',
+    })
   }
 
-  return NextResponse.json({ ok: true })
+  const params = new URLSearchParams({
+    token_hash: hashedToken,
+    type: 'magiclink',
+    next: '/dashboard',
+  })
+  const redirectTo = `${PRODUCTION_URL}/auth/callback?${params.toString()}`
+
+  return NextResponse.json({ ok: true, redirectTo })
 }
