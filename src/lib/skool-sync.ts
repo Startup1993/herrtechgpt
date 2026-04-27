@@ -833,6 +833,7 @@ export async function syncSkoolMembersFromStripe(
         profile_id: string | null
         skool_access_expires_at: string | null
         purchase_count: number
+        source: string | null
       }
     >()
     // Supabase .in() mag Listen bis ~1000 — falls mehr, in Batches abrufen
@@ -841,7 +842,7 @@ export async function syncSkoolMembersFromStripe(
       const batch = customerIds.slice(i, i + READ_BATCH)
       const { data: rows } = await admin
         .from('community_members')
-        .select('id, stripe_customer_id, profile_id, skool_access_expires_at, purchase_count')
+        .select('id, stripe_customer_id, profile_id, skool_access_expires_at, purchase_count, source')
         .in('stripe_customer_id', batch)
       for (const row of rows ?? []) {
         existingMap.set(row.stripe_customer_id, row)
