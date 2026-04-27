@@ -436,32 +436,40 @@ export async function claimCommunityMember(
 }
 
 /**
- * Voll-Sync: alle Stripe-Checkout-Sessions der letzten N Tage durchgehen,
- * jede die zu einem aktiven Skool-Product passt, in community_members upserten,
- * und am Schluss expireSkoolMembership für alle abgelaufenen laufen lassen.
+ * Voll-Sync: durchsucht Stripe nach Skool-Käufen über drei Quellen
+ * (Checkout-Sessions, Subscriptions, Paid Invoices), aggregiert pro
+ * Customer und upsertet community_members. Anschließend expireSkoolMembership
+ * für alle abgelaufenen.
+ *
+ * Pagination-Limits sind großzügig (~50 Pages = 5000 Items pro Quelle).
+ * Sessions-Phase ist teurer (1 Extra-Call pro Session für line items),
+ * daher dort niedriger gecappt.
  *
  * Wird von Admin-UI „Sync"-Button und vom Initial-Import-Script aufgerufen.
- *
- * Sicher gegen lange Laufzeit:
- *  - max 1000 Sessions/Sync (≈ 10 Stripe-Pages)
- *  - default Lookback 90 Tage
- *  - berücksichtigt auch deaktivierte Products → so dass Bestandskäufe nicht
- *    verloren gehen wenn ein Product später deaktiviert wird
  */
 export async function syncSkoolMembersFromStripe(
   admin: SupabaseClient,
-  opts: { days?: number; maxSessions?: number; includeInactive?: boolean } = {}
+  opts: { days?: number; includeInactive?: boolean } = {}
 ): Promise<{
   scanned: number
   matched: number
   upserted: number
   expired: number
+  by_phase: {
+    sessions: { scanned: number; matched: number; capped: boolean }
+    subscriptions: { scanned: number; matched: number; capped: boolean }
+    invoices: { scanned: number; matched: number; capped: boolean }
+  }
   errors: Array<{ session?: string; member?: string; error: string }>
 }> {
   const days = opts.days ?? 90
-  const maxSessions = opts.maxSessions ?? 1000
   const since = Math.floor(Date.now() / 1000) - days * 86400
   const stripe = getStripe()
+
+  // Pagination-Caps pro Phase. Sessions teurer (extra line-items-Call).
+  const SESSIONS_MAX_PAGES = 15 // 1.500 Sessions max (≈ 1500 line-items API-Calls)
+  const SUBS_MAX_PAGES = 50 // 5.000 Subscriptions max
+  const INVOICES_MAX_PAGES = 50 // 5.000 Invoices max
 
   // Whitelist laden — beim manuellen Sync auch deaktivierte berücksichtigen,
   // damit Bestand nicht verloren geht
@@ -480,14 +488,28 @@ export async function syncSkoolMembersFromStripe(
       matched: 0,
       upserted: 0,
       expired: 0,
+      by_phase: {
+        sessions: { scanned: 0, matched: 0, capped: false },
+        subscriptions: { scanned: 0, matched: 0, capped: false },
+        invoices: { scanned: 0, matched: 0, capped: false },
+      },
       errors: [{ error: 'Keine Skool-Products in der Whitelist' }],
     }
   }
 
   const errors: Array<{ session?: string; member?: string; error: string }> = []
-  let scanned = 0
-  let matched = 0
   let upserted = 0
+
+  // Pro-Phase Tracking
+  let sessionsScanned = 0
+  let sessionsMatched = 0
+  let sessionsCapped = false
+  let subsScanned = 0
+  let subsMatched = 0
+  let subsCapped = false
+  let invScanned = 0
+  let invMatched = 0
+  let invCapped = false
 
   // Per Customer aggregieren — pro Customer nur einmal upserten (jüngster Kauf gewinnt)
   type Hit = {
@@ -503,18 +525,18 @@ export async function syncSkoolMembersFromStripe(
   }
   const perCustomer = new Map<string, Hit[]>()
 
-  let startingAfter: string | undefined = undefined
-  let pages = 0
-
-  while (scanned < maxSessions) {
-    const list = await stripe.checkout.sessions.list({
+  // ─── Phase 1: Checkout-Sessions ──────────────────────────────────────────
+  let sessionAfter: string | undefined = undefined
+  let sessionPages = 0
+  while (sessionPages < SESSIONS_MAX_PAGES) {
+    const sessionList = await stripe.checkout.sessions.list({
       limit: 100,
-      starting_after: startingAfter,
+      starting_after: sessionAfter,
       created: { gte: since },
     })
-    pages += 1
-    for (const s of list.data) {
-      scanned += 1
+    sessionPages += 1
+    for (const s of sessionList.data) {
+      sessionsScanned += 1
       if (s.status !== 'complete') continue
       if (s.mode !== 'payment') continue
 
@@ -551,9 +573,9 @@ export async function syncSkoolMembersFromStripe(
             ? s.payment_intent
             : s.payment_intent?.id ?? null
 
-        matched += 1
-        const list = perCustomer.get(customerId) ?? []
-        list.push({
+        sessionsMatched += 1
+        const arr = perCustomer.get(customerId) ?? []
+        arr.push({
           sessionId: s.id,
           paymentIntentId,
           email,
@@ -564,7 +586,7 @@ export async function syncSkoolMembersFromStripe(
           accessDays: hit.access_days,
           purchasedAt: new Date((s.created ?? Date.now() / 1000) * 1000),
         })
-        perCustomer.set(customerId, list)
+        perCustomer.set(customerId, arr)
       } catch (err) {
         errors.push({
           session: s.id,
@@ -572,9 +594,12 @@ export async function syncSkoolMembersFromStripe(
         })
       }
     }
-    if (!list.has_more) break
-    startingAfter = list.data[list.data.length - 1].id
-    if (pages > 20) break
+    if (!sessionList.has_more) break
+    sessionAfter = sessionList.data[sessionList.data.length - 1].id
+    if (sessionPages >= SESSIONS_MAX_PAGES) {
+      sessionsCapped = sessionList.has_more
+      break
+    }
   }
 
   // ─── Phase 2: Subscriptions (für monatliche KMC oder Subs aus Ablefy/Co.) ──
@@ -582,7 +607,7 @@ export async function syncSkoolMembersFromStripe(
   // Status='all' fängt aktive, past_due, canceled (= alumni) gleichermaßen.
   let subStartingAfter: string | undefined = undefined
   let subPages = 0
-  while (subPages < 20) {
+  while (subPages < SUBS_MAX_PAGES) {
     const subList = await stripe.subscriptions.list({
       limit: 100,
       starting_after: subStartingAfter,
@@ -591,7 +616,7 @@ export async function syncSkoolMembersFromStripe(
     })
     subPages += 1
     for (const sub of subList.data) {
-      scanned += 1
+      subsScanned += 1
       try {
         let hit: SkoolProduct | null = null
         let priceId: string | null = null
@@ -638,7 +663,7 @@ export async function syncSkoolMembersFromStripe(
 
         // purchasedAt = subscription.start_date (= erster Charge), als „Kaufdatum"
         const purchasedAt = new Date((sub.start_date ?? sub.created) * 1000)
-        matched += 1
+        subsMatched += 1
         const arr = perCustomer.get(customerId) ?? []
         arr.push({
           sessionId: sub.id,
@@ -661,6 +686,10 @@ export async function syncSkoolMembersFromStripe(
     }
     if (!subList.has_more) break
     subStartingAfter = subList.data[subList.data.length - 1].id
+    if (subPages >= SUBS_MAX_PAGES) {
+      subsCapped = subList.has_more
+      break
+    }
   }
 
   // ─── Phase 3: Paid Invoices (Ablefy / Hosted Invoices / direkt gerechnet) ──
@@ -668,7 +697,7 @@ export async function syncSkoolMembersFromStripe(
   // Rechnung erzeugt hat, unabhängig vom Verkaufsweg.
   let invStartingAfter: string | undefined = undefined
   let invPages = 0
-  while (invPages < 20) {
+  while (invPages < INVOICES_MAX_PAGES) {
     const invList = await stripe.invoices.list({
       limit: 100,
       starting_after: invStartingAfter,
@@ -677,7 +706,7 @@ export async function syncSkoolMembersFromStripe(
     })
     invPages += 1
     for (const inv of invList.data) {
-      scanned += 1
+      invScanned += 1
       try {
         let hit: SkoolProduct | null = null
         let priceId: string | null = null
@@ -720,7 +749,7 @@ export async function syncSkoolMembersFromStripe(
           Math.floor(Date.now() / 1000)
         const purchasedAt = new Date(paidAtUnix * 1000)
 
-        matched += 1
+        invMatched += 1
         const arr = perCustomer.get(customerId) ?? []
         arr.push({
           sessionId: inv.id ?? `inv_${Date.now()}`,
@@ -743,6 +772,10 @@ export async function syncSkoolMembersFromStripe(
     }
     if (!invList.has_more) break
     invStartingAfter = invList.data[invList.data.length - 1].id ?? undefined
+    if (invPages >= INVOICES_MAX_PAGES) {
+      invCapped = invList.has_more
+      break
+    }
   }
 
   // Pro Customer: jüngsten Kauf nehmen, expires basierend darauf, purchase_count = Anzahl
@@ -820,10 +853,15 @@ export async function syncSkoolMembersFromStripe(
   }
 
   return {
-    scanned,
-    matched,
+    scanned: sessionsScanned + subsScanned + invScanned,
+    matched: sessionsMatched + subsMatched + invMatched,
     upserted,
     expired: expiredCount,
+    by_phase: {
+      sessions: { scanned: sessionsScanned, matched: sessionsMatched, capped: sessionsCapped },
+      subscriptions: { scanned: subsScanned, matched: subsMatched, capped: subsCapped },
+      invoices: { scanned: invScanned, matched: invMatched, capped: invCapped },
+    },
     errors,
   }
 }
