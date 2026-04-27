@@ -84,19 +84,23 @@ export async function POST(req: Request) {
     })
   }
 
-  // 2) Existing emails laden (in 1000er-Batches)
+  // 2) ALLE bestehenden Emails laden (case-insensitiv vergleichen — sonst
+  //    werden Duplikate übersehen, wenn Stripe Mixed-Case und CSV
+  //    Lowercase liefert).
   const existingEmails = new Set<string>()
-  const allEmails = validRows.map((r) => r.email)
-  const READ_BATCH = 1000
-  for (let i = 0; i < allEmails.length; i += READ_BATCH) {
-    const batch = allEmails.slice(i, i + READ_BATCH)
+  const ALL_BATCH = 1000
+  let offset = 0
+  while (offset < 50000) {
     const { data: rows } = await admin
       .from('community_members')
       .select('email')
-      .in('email', batch)
-    for (const r of rows ?? []) {
+      .range(offset, offset + ALL_BATCH - 1)
+    if (!rows || rows.length === 0) break
+    for (const r of rows) {
       existingEmails.add((r.email as string).toLowerCase())
     }
+    if (rows.length < ALL_BATCH) break
+    offset += ALL_BATCH
   }
 
   // 3) Bulk-Insert in Batches
