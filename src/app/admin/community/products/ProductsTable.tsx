@@ -2,7 +2,7 @@
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { Loader2, Plus, Check, X } from 'lucide-react'
+import { Loader2, Plus, Check, X, Download } from 'lucide-react'
 
 type ProductRow = {
   stripe_product_id: string
@@ -22,6 +22,45 @@ export function ProductsTable({ products }: { products: ProductRow[] }) {
   const [newId, setNewId] = useState('')
   const [newLabel, setNewLabel] = useState('')
   const [newDays, setNewDays] = useState(365)
+
+  // Auto-Import
+  const [importPattern, setImportPattern] = useState('KI Marketing Club')
+
+  async function importFromStripe() {
+    if (
+      !confirm(
+        `Stripe nach Produkten durchsuchen, deren Name "${importPattern}" enthält?\n\nNeu gefundene Produkte werden hinzugefügt. Bestehende Einträge bleiben unverändert.`
+      )
+    )
+      return
+    setBusy('import')
+    setMessage(null)
+    try {
+      const res = await fetch('/api/admin/community/products/import', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name_pattern: importPattern }),
+      })
+      const data = await res.json().catch(() => null)
+      if (!res.ok) {
+        setMessage({ type: 'err', text: data?.error ?? 'Import fehlgeschlagen' })
+      } else {
+        const parts = [
+          `${data.total_stripe_products} Stripe-Produkte gescannt`,
+          `${data.matched} matched "${data.pattern}"`,
+          `${data.inserted} neu hinzugefügt`,
+        ]
+        if (data.already_in_db) parts.push(`${data.already_in_db} schon vorhanden`)
+        if (data.failures?.length) parts.push(`${data.failures.length} Fehler`)
+        setMessage({ type: 'ok', text: parts.join(' · ') })
+        router.refresh()
+      }
+    } catch {
+      setMessage({ type: 'err', text: 'Netzwerk-Fehler' })
+    } finally {
+      setBusy(null)
+    }
+  }
 
   async function addProduct(e: React.FormEvent) {
     e.preventDefault()
@@ -74,11 +113,43 @@ export function ProductsTable({ products }: { products: ProductRow[] }) {
 
   return (
     <div className="space-y-6">
+      <div className="bg-surface border border-border rounded-xl p-5 space-y-4">
+        <div>
+          <h2 className="font-semibold text-foreground">Aus Stripe importieren</h2>
+          <p className="text-xs text-muted mt-1">
+            Sucht in Stripe nach Produkten mit dem Pattern im Namen und legt neue an.
+            Bestehende Einträge werden nicht überschrieben.
+          </p>
+        </div>
+        <div className="flex flex-col sm:flex-row gap-3">
+          <input
+            type="text"
+            placeholder="Name-Pattern (z.B. KI Marketing Club)"
+            value={importPattern}
+            onChange={(e) => setImportPattern(e.target.value)}
+            className="flex-1 px-3 py-2 rounded-lg bg-background border border-border text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-primary"
+          />
+          <button
+            type="button"
+            onClick={importFromStripe}
+            disabled={busy === 'import' || !importPattern.trim()}
+            className="flex items-center justify-center gap-2 px-4 py-2 rounded-lg bg-primary hover:bg-primary-hover text-white text-sm font-medium transition disabled:opacity-50"
+          >
+            {busy === 'import' ? (
+              <Loader2 className="w-4 h-4 animate-spin" />
+            ) : (
+              <Download className="w-4 h-4" />
+            )}
+            Aus Stripe importieren
+          </button>
+        </div>
+      </div>
+
       <form
         onSubmit={addProduct}
         className="bg-surface border border-border rounded-xl p-5 space-y-4"
       >
-        <h2 className="font-semibold text-foreground">Neues Produkt hinzufügen</h2>
+        <h2 className="font-semibold text-foreground">Manuell hinzufügen</h2>
         <div className="grid sm:grid-cols-2 gap-3">
           <div>
             <label className="text-xs text-muted mb-1 block">Stripe Product-ID</label>
