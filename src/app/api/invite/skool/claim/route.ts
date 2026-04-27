@@ -38,7 +38,7 @@ export async function POST(req: Request) {
 
   const email = member.email.toLowerCase()
 
-  // 1. Auth-User finden oder anlegen
+  // 1. Auth-User finden oder anlegen (Name aus community_member übernehmen)
   let userId: string | null = member.profile_id
   if (!userId) {
     const { data: page } = await admin.auth.admin.listUsers({ perPage: 1000 })
@@ -49,6 +49,7 @@ export async function POST(req: Request) {
       const { data: created, error: createErr } = await admin.auth.admin.createUser({
         email,
         email_confirm: true,
+        user_metadata: member.name ? { full_name: member.name } : undefined,
       })
       if (createErr || !created.user) {
         return NextResponse.json(
@@ -64,7 +65,16 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: 'User-ID nicht ermittelbar' }, { status: 500 })
   }
 
-  // 2. Claim: profile_id setzen, Plan S aktivieren wenn Skool-Zugang noch läuft
+  // Profil mit Name befüllen, falls noch leer
+  if (member.name) {
+    await admin
+      .from('profiles')
+      .update({ full_name: member.name })
+      .eq('id', userId)
+      .is('full_name', null)
+  }
+
+  // 2. Claim: profile_id setzen, Plan S / alumni-Tier aktivieren
   try {
     await claimCommunityMember(admin, {
       communityMemberId: member.id,

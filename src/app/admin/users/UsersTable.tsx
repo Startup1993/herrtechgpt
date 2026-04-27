@@ -24,6 +24,7 @@ interface SubscriptionInfo {
 interface UserRow {
   id: string
   email: string
+  full_name: string | null
   role: 'user' | 'admin'
   access_tier: AccessTier
   created_at: string
@@ -120,7 +121,11 @@ export default function UsersTable({ users }: { users: UserRow[] }) {
   const filtered = useMemo(() => {
     const q = search.toLowerCase()
     return withStatus
-      .filter((u) => u.email.toLowerCase().includes(q))
+      .filter(
+        (u) =>
+          u.email.toLowerCase().includes(q) ||
+          (u.full_name ?? '').toLowerCase().includes(q)
+      )
       .filter((u) => filterTier === 'all' || u.access_tier === filterTier)
       .filter((u) => filterStatus === 'all' || u._status === filterStatus)
       .filter((u) => filterRole === 'all' || u.role === filterRole)
@@ -365,7 +370,7 @@ export default function UsersTable({ users }: { users: UserRow[] }) {
         <table className="w-full min-w-[900px] text-sm">
           <thead>
             <tr className="border-b border-border bg-surface-secondary">
-              <SortableTh label="E-Mail" sortKey="email" current={sortKey} dir={sortDir} onClick={toggleSort} align="left" />
+              <SortableTh label="Name / E-Mail" sortKey="email" current={sortKey} dir={sortDir} onClick={toggleSort} align="left" />
               <SortableTh label="Zugang" sortKey="access_tier" current={sortKey} dir={sortDir} onClick={toggleSort} align="left" />
               <SortableTh label="Abo" sortKey="subscription" current={sortKey} dir={sortDir} onClick={toggleSort} align="left" />
               <SortableTh label="Registriert" sortKey="created_at" current={sortKey} dir={sortDir} onClick={toggleSort} align="left" />
@@ -393,7 +398,18 @@ export default function UsersTable({ users }: { users: UserRow[] }) {
                   onClick={() => router.push(`/admin/users/${u.id}`)}
                 >
                   <td className="px-5 py-3.5 whitespace-nowrap">
-                    <span className="font-medium text-foreground underline decoration-transparent hover:decoration-primary transition-colors">{u.email}</span>
+                    {u.full_name ? (
+                      <>
+                        <div className="font-medium text-foreground underline decoration-transparent hover:decoration-primary transition-colors">
+                          {u.full_name}
+                        </div>
+                        <div className="text-xs text-muted">{u.email}</div>
+                      </>
+                    ) : (
+                      <span className="font-medium text-foreground underline decoration-transparent hover:decoration-primary transition-colors">
+                        {u.email}
+                      </span>
+                    )}
                   </td>
                   <td className="px-4 py-3.5 whitespace-nowrap">
                     <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium whitespace-nowrap ${tier.className}`}>

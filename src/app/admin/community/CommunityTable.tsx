@@ -15,7 +15,9 @@ import {
   ChevronRight,
   ArrowUpDown,
   Trash2,
+  Pencil,
 } from 'lucide-react'
+import { EditMemberModal, type EditMember } from './EditMemberModal'
 
 type SkoolStatus = 'active' | 'alumni' | 'cancelled'
 
@@ -82,6 +84,7 @@ export function CommunityTable({ members }: { members: MemberRow[] }) {
   const [diagBusy, setDiagBusy] = useState(false)
   const [deleteBusy, setDeleteBusy] = useState<string | null>(null)
   const [syncDays, setSyncDays] = useState(90)
+  const [editing, setEditing] = useState<EditMember | null>(null)
   const [message, setMessage] = useState<{ type: 'ok' | 'err'; text: string } | null>(null)
 
   const [sortKey, setSortKey] = useState<SortKey>('skool_access_expires_at')
@@ -106,7 +109,11 @@ export function CommunityTable({ members }: { members: MemberRow[] }) {
         })
         .filter((m) => {
           if (filter === 'all') return true
-          if (filter === 'invitable') return m.skool_status === 'active' && !m.claimed_at
+          if (filter === 'invitable')
+            return (
+              (m.skool_status === 'active' || m.skool_status === 'alumni') &&
+              !m.claimed_at
+            )
           if (filter === 'claimed') return !!m.claimed_at
           return m.skool_status === filter
         }),
@@ -162,7 +169,11 @@ export function CommunityTable({ members }: { members: MemberRow[] }) {
   }
 
   const invitableIds = members
-    .filter((m) => m.skool_status === 'active' && !m.claimed_at)
+    .filter(
+      (m) =>
+        (m.skool_status === 'active' || m.skool_status === 'alumni') &&
+        !m.claimed_at
+    )
     .map((m) => m.id)
 
   async function runDiagnose() {
@@ -511,7 +522,9 @@ export function CommunityTable({ members }: { members: MemberRow[] }) {
               ) : (
                 pageRows.map((m) => {
                   const meta = STATUS_META[m.skool_status]
-                  const canInvite = m.skool_status === 'active' && !m.claimed_at
+                  const canInvite =
+                    (m.skool_status === 'active' || m.skool_status === 'alumni') &&
+                    !m.claimed_at
                   return (
                     <tr
                       key={m.id}
@@ -572,6 +585,21 @@ export function CommunityTable({ members }: { members: MemberRow[] }) {
                           )}
                           <button
                             onClick={() =>
+                              setEditing({
+                                id: m.id,
+                                email: m.email,
+                                name: m.name,
+                                skool_status: m.skool_status,
+                                skool_access_expires_at: m.skool_access_expires_at,
+                              })
+                            }
+                            title="Status/Zugang bearbeiten"
+                            className="p-1.5 rounded-md text-muted hover:text-foreground hover:bg-surface-hover transition"
+                          >
+                            <Pencil className="w-3.5 h-3.5" />
+                          </button>
+                          <button
+                            onClick={() =>
                               deleteMember(m.id, m.name || m.email)
                             }
                             disabled={deleteBusy === m.id}
@@ -620,6 +648,8 @@ export function CommunityTable({ members }: { members: MemberRow[] }) {
           </div>
         </div>
       )}
+
+      <EditMemberModal member={editing} onClose={() => setEditing(null)} />
     </div>
   )
 }

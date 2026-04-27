@@ -105,12 +105,14 @@ export async function sendNewsletterInviteEmail(
 
 // Skool-Community-Einladung: eigener Claim-Link (kein Magic-Login),
 // User muss ein Passwort setzen. Link ist 30 Tage gültig (DB-getrackt).
+// mode: 'active' (Standard, voller Premium-Zugang) | 'alumni' (nur Classroom).
 export async function sendSkoolInviteEmail(
   email: string,
   params: {
     token: string
     firstName?: string | null
     creditsPerMonth?: number | null
+    mode?: 'active' | 'alumni'
   }
 ): Promise<{ ok: true } | { ok: false; error: string }> {
   const claimLink = `${PRODUCTION_URL}/invite/skool/${encodeURIComponent(params.token)}`
@@ -124,13 +126,19 @@ export async function sendSkoolInviteEmail(
     claimLink,
     firstName: params.firstName,
     creditsPerMonth: params.creditsPerMonth,
+    mode: params.mode,
   })
+
+  const subject =
+    params.mode === 'alumni'
+      ? 'Dein Alumni-Zugang zur Herr Tech World — Classroom lebenslang'
+      : 'Dein Zugang zur Herr Tech World — KI Marketing Club'
 
   try {
     await resend.emails.send({
       from: fromAddress(),
       to: email,
-      subject: 'Dein Zugang zur Herr Tech World — KI Marketing Club',
+      subject,
       html,
     })
   } catch (err) {

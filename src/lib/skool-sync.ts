@@ -473,7 +473,10 @@ export async function getCommunityMemberByToken(
 
 /**
  * Claim-Flow: verknüpft community_member mit frisch angelegtem / bestehendem profile.
- * Aktiviert Plan S + setzt access_tier.
+ *  - skool_status='active' + Zugang noch gültig → Plan S aktivieren (premium)
+ *  - skool_status='alumni' → access_tier='alumni' (lebenslanger Classroom-Zugang,
+ *    kein Plan S, kein Premium)
+ *  - skool_status='cancelled' → kein Tier-Upgrade (basic bleibt)
  */
 export async function claimCommunityMember(
   admin: SupabaseClient,
@@ -498,17 +501,26 @@ export async function claimCommunityMember(
     })
     .eq('id', communityMemberId)
 
-  // Nur Plan S aktivieren, wenn Skool-Mitgliedschaft noch aktiv
   if (
     member.skool_status === 'active' &&
     member.skool_access_expires_at &&
     new Date(member.skool_access_expires_at) > new Date()
   ) {
+    // Aktiver Club-Member → Plan S, Premium
     await ensureSkoolPlanS(admin, {
       profileId,
       periodEnd: new Date(member.skool_access_expires_at),
     })
+  } else if (member.skool_status === 'alumni') {
+    // Alumni → nur Classroom-Zugang. access_tier='alumni' setzen,
+    // wenn aktuell basic (also nicht premium oder schon alumni).
+    await admin
+      .from('profiles')
+      .update({ access_tier: 'alumni' })
+      .eq('id', profileId)
+      .eq('access_tier', 'basic')
   }
+  // cancelled → bleibt basic, kein Upgrade
 }
 
 /**
