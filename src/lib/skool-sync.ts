@@ -712,19 +712,60 @@ export async function syncSkoolMembersFromStripe(
         let priceId: string | null = null
         const lines = inv.lines?.data ?? []
         for (const ln of lines) {
-          // API 2026-03 hat ggf. ln.pricing statt ln.price; defensiv beides lesen
-          const price =
-            (ln as unknown as { price?: Stripe.Price | null }).price ?? null
-          const productRef = price?.product
-          const pid =
-            typeof productRef === 'string'
-              ? productRef
-              : productRef && 'id' in productRef && !('deleted' in productRef && productRef.deleted)
-              ? productRef.id
-              : null
+          // Stripe API hat über die Versionen das Format gewechselt.
+          // Wir lesen 4 mögliche Quellen für Product-ID + Price-ID:
+          //   1. ln.pricing.price_details.{product, price}        (API 2025+/dahlia)
+          //   2. ln.price.product / ln.price.id                   (älteres API)
+          //   3. ln.parent.subscription_item_details              (für Subscription-Renewals)
+          //   4. ln.parent.invoice_item_details                   (für one-off Invoice-Items)
+          const lnRaw = ln as unknown as {
+            pricing?: {
+              price_details?: { product?: string | null; price?: string | null } | null
+            } | null
+            price?: {
+              id?: string | null
+              product?: string | { id: string; deleted?: boolean } | null
+            } | null
+            parent?: {
+              subscription_item_details?: { price?: string | null } | null
+              invoice_item_details?: { price?: string | null; product?: string | null } | null
+            } | null
+          }
+
+          let pid: string | null = null
+          let pri: string | null = null
+
+          // 1) pricing.price_details
+          const pd = lnRaw.pricing?.price_details
+          if (pd?.product) {
+            pid = pd.product
+            pri = pd.price ?? null
+          }
+
+          // 2) price.product (älter)
+          if (!pid && lnRaw.price) {
+            const productRef = lnRaw.price.product
+            pid =
+              typeof productRef === 'string'
+                ? productRef
+                : productRef && 'id' in productRef && !productRef.deleted
+                ? productRef.id
+                : null
+            pri = lnRaw.price.id ?? null
+          }
+
+          // 3) Fallback: invoice_item_details (oneoff-Rechnungen)
+          if (!pid) {
+            const iid = lnRaw.parent?.invoice_item_details
+            if (iid?.product) {
+              pid = iid.product
+              pri = iid.price ?? null
+            }
+          }
+
           if (pid && productMap.has(pid)) {
             hit = productMap.get(pid)!
-            priceId = price?.id ?? null
+            priceId = pri
             break
           }
         }
