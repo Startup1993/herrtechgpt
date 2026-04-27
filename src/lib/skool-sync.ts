@@ -526,6 +526,8 @@ export async function syncSkoolMembersFromStripe(
   const perCustomer = new Map<string, Hit[]>()
 
   // ─── Phase 1: Checkout-Sessions ──────────────────────────────────────────
+  // Trick: expand line_items.data.price → keine Extra-API-Calls pro Session.
+  // Spart bei 1500 Sessions ~5 Minuten Zeit (von ~1500 × 200ms auf 0).
   let sessionAfter: string | undefined = undefined
   let sessionPages = 0
   while (sessionPages < SESSIONS_MAX_PAGES) {
@@ -533,6 +535,7 @@ export async function syncSkoolMembersFromStripe(
       limit: 100,
       starting_after: sessionAfter,
       created: { gte: since },
+      expand: ['data.line_items.data.price'],
     })
     sessionPages += 1
     for (const s of sessionList.data) {
@@ -541,19 +544,16 @@ export async function syncSkoolMembersFromStripe(
       if (s.mode !== 'payment') continue
 
       try {
-        const items = await stripe.checkout.sessions.listLineItems(s.id, {
-          limit: 10,
-          expand: ['data.price.product'],
-        })
         let hit: SkoolProduct | null = null
         let priceId: string | null = null
-        for (const item of items.data) {
-          const product = item.price?.product
+        const items = s.line_items?.data ?? []
+        for (const item of items) {
+          const productRef = item.price?.product
           const pid =
-            typeof product === 'string'
-              ? product
-              : product && !product.deleted
-              ? product.id
+            typeof productRef === 'string'
+              ? productRef
+              : productRef && !('deleted' in productRef && productRef.deleted)
+              ? productRef.id
               : null
           if (pid && productMap.has(pid)) {
             hit = productMap.get(pid)!
@@ -819,56 +819,102 @@ export async function syncSkoolMembersFromStripe(
     }
   }
 
-  // Pro Customer: jüngsten Kauf nehmen, expires basierend darauf, purchase_count = Anzahl
-  for (const [customerId, hits] of perCustomer) {
-    hits.sort((a, b) => b.purchasedAt.getTime() - a.purchasedAt.getTime())
-    const latest = hits[0]
-    const oldest = hits[hits.length - 1]
-    const expires = new Date(
-      latest.purchasedAt.getTime() + latest.accessDays * 86400 * 1000
-    )
-    const status: 'active' | 'alumni' = expires > new Date() ? 'active' : 'alumni'
+  // ─── Bulk-Persistenz: alle Customer-Daten in einem Schwung ──────────────
+  // Vorher: pro Customer 2 DB-Calls (read + write) → bei 1500 Customers ~75s.
+  // Jetzt: 1× bulk read, 1× pro 100er-Batch upsert + getrennt Plan-S-Updates.
+  if (perCustomer.size > 0) {
+    const customerIds = [...perCustomer.keys()]
 
-    try {
-      // Upsert
-      const { data: existing } = await admin
+    // Existing Members in einem Call laden
+    const existingMap = new Map<
+      string,
+      {
+        id: string
+        profile_id: string | null
+        skool_access_expires_at: string | null
+        purchase_count: number
+      }
+    >()
+    // Supabase .in() mag Listen bis ~1000 — falls mehr, in Batches abrufen
+    const READ_BATCH = 500
+    for (let i = 0; i < customerIds.length; i += READ_BATCH) {
+      const batch = customerIds.slice(i, i + READ_BATCH)
+      const { data: rows } = await admin
         .from('community_members')
-        .select('id, profile_id')
-        .eq('stripe_customer_id', customerId)
-        .maybeSingle()
+        .select('id, stripe_customer_id, profile_id, skool_access_expires_at, purchase_count')
+        .in('stripe_customer_id', batch)
+      for (const row of rows ?? []) {
+        existingMap.set(row.stripe_customer_id, row)
+      }
+    }
 
-      const payload = {
+    // Payloads bauen (pro Customer jüngsten Kauf bestimmt expires)
+    const payloads: Array<Record<string, unknown>> = []
+    const planSReactivations: Array<{ profileId: string; periodEnd: Date }> = []
+
+    for (const [customerId, hits] of perCustomer) {
+      hits.sort((a, b) => b.purchasedAt.getTime() - a.purchasedAt.getTime())
+      const latest = hits[0]
+      const oldest = hits[hits.length - 1]
+      const newExpires = new Date(
+        latest.purchasedAt.getTime() + latest.accessDays * 86400 * 1000
+      )
+
+      // Bestehendes Expiry nicht verkürzen (bei mehrfachem Sync stabil bleiben)
+      const existing = existingMap.get(customerId)
+      const finalExpires =
+        existing?.skool_access_expires_at &&
+        new Date(existing.skool_access_expires_at) > newExpires
+          ? new Date(existing.skool_access_expires_at)
+          : newExpires
+      const status: 'active' | 'alumni' = finalExpires > new Date() ? 'active' : 'alumni'
+
+      payloads.push({
         stripe_customer_id: customerId,
         email: latest.email.toLowerCase(),
         name: latest.name,
         skool_status: status,
         skool_access_started_at: oldest.purchasedAt.toISOString(),
-        skool_access_expires_at: expires.toISOString(),
+        skool_access_expires_at: finalExpires.toISOString(),
         last_purchase_at: latest.purchasedAt.toISOString(),
         last_stripe_product_id: latest.productId,
         last_stripe_price_id: latest.priceId,
         last_stripe_payment_intent: latest.paymentIntentId,
         purchase_count: hits.length,
-      }
-
-      if (existing) {
-        await admin.from('community_members').update(payload).eq('id', existing.id)
-        // Plan S frisch halten wenn claimed + noch aktiv
-        if (existing.profile_id && status === 'active') {
-          await ensureSkoolPlanS(admin, {
-            profileId: existing.profile_id,
-            periodEnd: expires,
-          })
-        }
-      } else {
-        await admin.from('community_members').insert(payload)
-      }
-      upserted += 1
-    } catch (err) {
-      errors.push({
-        member: latest.email,
-        error: err instanceof Error ? err.message : String(err),
       })
+
+      if (existing?.profile_id && status === 'active') {
+        planSReactivations.push({
+          profileId: existing.profile_id,
+          periodEnd: finalExpires,
+        })
+      }
+    }
+
+    // Bulk-Upsert in 100er-Batches
+    const UPSERT_BATCH = 100
+    for (let i = 0; i < payloads.length; i += UPSERT_BATCH) {
+      const batch = payloads.slice(i, i + UPSERT_BATCH)
+      const { error: upErr } = await admin
+        .from('community_members')
+        .upsert(batch, { onConflict: 'stripe_customer_id' })
+      if (upErr) {
+        errors.push({ error: `Bulk-Upsert: ${upErr.message}` })
+      } else {
+        upserted += batch.length
+      }
+    }
+
+    // Plan-S Reaktivierungen für claimed user (sequenziell, kann nicht gebatcht werden)
+    for (const r of planSReactivations) {
+      try {
+        await ensureSkoolPlanS(admin, r)
+      } catch (err) {
+        errors.push({
+          member: r.profileId,
+          error: err instanceof Error ? err.message : String(err),
+        })
+      }
     }
   }
 

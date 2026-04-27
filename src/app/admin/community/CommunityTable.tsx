@@ -233,14 +233,39 @@ export function CommunityTable({ members }: { members: MemberRow[] }) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ days: syncDays }),
       })
-      const data = await res.json().catch(() => null)
+      const txt = await res.text()
+      let data:
+        | {
+            scanned?: number
+            matched?: number
+            upserted?: number
+            expired?: number
+            errors?: { error: string }[]
+            error?: string
+            by_phase?: {
+              sessions: { scanned: number; matched: number; capped: boolean }
+              subscriptions: { scanned: number; matched: number; capped: boolean }
+              invoices: { scanned: number; matched: number; capped: boolean }
+            }
+          }
+        | null = null
+      try {
+        data = JSON.parse(txt)
+      } catch {
+        // Body war kein JSON (z.B. Vercel-504-HTML-Fehlerseite)
+      }
       if (!res.ok) {
-        setMessage({ type: 'err', text: data?.error ?? 'Sync fehlgeschlagen' })
-      } else {
+        const detail =
+          data?.error ??
+          (res.status === 504
+            ? 'Vercel-Timeout (5 Min) — versuch es nochmal mit kürzerem Lookback (z.B. 1 Jahr) oder mehrmals nacheinander.'
+            : txt.slice(0, 300))
+        setMessage({ type: 'err', text: `HTTP ${res.status}: ${detail}` })
+      } else if (data) {
         const summary = [
-          `${data.scanned} Stripe-Items geprüft`,
-          `${data.matched} davon waren Skool-Käufe`,
-          `${data.upserted} Mitglieder synchronisiert`,
+          `${data.scanned ?? 0} Stripe-Items geprüft`,
+          `${data.matched ?? 0} davon waren Skool-Käufe`,
+          `${data.upserted ?? 0} Mitglieder synchronisiert`,
         ]
         if (data.expired) summary.push(`${data.expired} auf Alumni gesetzt`)
         if (data.errors?.length) summary.push(`${data.errors.length} Fehler`)
@@ -256,7 +281,7 @@ export function CommunityTable({ members }: { members: MemberRow[] }) {
         }
 
         const hint =
-          data.matched === 0 && data.scanned > 0
+          (data.matched ?? 0) === 0 && (data.scanned ?? 0) > 0
             ? '\nHinweis: keine Skool-Products getroffen — Product-IDs in Stripe checken oder weitere unter „Stripe-Produkte pflegen" hinzufügen.'
             : phase &&
               (phase.sessions.capped || phase.subscriptions.capped || phase.invoices.capped)
@@ -268,6 +293,8 @@ export function CommunityTable({ members }: { members: MemberRow[] }) {
           text: summary.join(' · ') + (phaseLines.length ? '\n\n' + phaseLines.join('\n') : '') + hint,
         })
         router.refresh()
+      } else {
+        setMessage({ type: 'err', text: 'Sync-Antwort konnte nicht gelesen werden' })
       }
     } catch {
       setMessage({ type: 'err', text: 'Netzwerk-Fehler' })
