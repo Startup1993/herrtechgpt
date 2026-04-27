@@ -2,7 +2,7 @@
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { Loader2, Mail, CheckCircle2, Send, RefreshCw } from 'lucide-react'
+import { Loader2, Mail, CheckCircle2, Send, RefreshCw, Stethoscope } from 'lucide-react'
 
 type SkoolStatus = 'active' | 'alumni' | 'cancelled'
 
@@ -42,6 +42,7 @@ export function CommunityTable({ members }: { members: MemberRow[] }) {
   const [loading, setLoading] = useState<string | null>(null)
   const [bulkBusy, setBulkBusy] = useState(false)
   const [syncBusy, setSyncBusy] = useState(false)
+  const [diagBusy, setDiagBusy] = useState(false)
   const [syncDays, setSyncDays] = useState(90)
   const [message, setMessage] = useState<{ type: 'ok' | 'err'; text: string } | null>(null)
 
@@ -64,10 +65,40 @@ export function CommunityTable({ members }: { members: MemberRow[] }) {
     .filter((m) => m.skool_status === 'active' && !m.claimed_at)
     .map((m) => m.id)
 
+  async function runDiagnose() {
+    setDiagBusy(true)
+    setMessage(null)
+    try {
+      const res = await fetch(`/api/admin/community/diagnose?days=${syncDays}`)
+      const data = await res.json().catch(() => null)
+      if (!res.ok) {
+        setMessage({ type: 'err', text: data?.error ?? 'Diagnose fehlgeschlagen' })
+        return
+      }
+      const s = data.stripe
+      const lines = [
+        `Stripe-Mode: ${data.mode.toUpperCase()}`,
+        `Sessions (${data.days}d): ${s.sessions_in_range.count}${s.sessions_in_range.capped ? '+' : ''}`,
+        `Paid Invoices (${data.days}d): ${s.invoices_paid_in_range.count}${s.invoices_paid_in_range.capped ? '+' : ''}`,
+        `Active Subs: ${s.subscriptions_active.count}${s.subscriptions_active.capped ? '+' : ''}`,
+        `All Subs: ${s.subscriptions_all.count}${s.subscriptions_all.capped ? '+' : ''}`,
+      ]
+      const hint = data.hint ? `\n\n${data.hint}` : ''
+      setMessage({
+        type: data.mode === 'live' ? 'ok' : 'err',
+        text: lines.join(' · ') + hint,
+      })
+    } catch {
+      setMessage({ type: 'err', text: 'Netzwerk-Fehler' })
+    } finally {
+      setDiagBusy(false)
+    }
+  }
+
   async function runSync() {
     if (
       !confirm(
-        `Sync der letzten ${syncDays} Tage starten?\n\nLädt aus Stripe alle KI-Marketing-Club-Käufe, aktualisiert die Mitgliederliste und setzt abgelaufene Mitglieder auf Alumni.`
+        `Sync der letzten ${syncDays} Tage starten?\n\nDurchsucht Stripe nach KMC-Käufen (Checkout-Sessions + Subscriptions + bezahlte Rechnungen), aktualisiert die Mitgliederliste und setzt abgelaufene Mitglieder auf Alumni.`
       )
     )
       return
@@ -174,10 +205,23 @@ export function CommunityTable({ members }: { members: MemberRow[] }) {
             <option value={730}>2 Jahre</option>
           </select>
           <button
-            onClick={runSync}
-            disabled={syncBusy}
+            onClick={runDiagnose}
+            disabled={diagBusy || syncBusy}
             className="flex items-center gap-2 px-3 py-2 rounded-lg border border-border hover:bg-surface-hover text-foreground font-medium text-sm transition disabled:opacity-50"
-            title="Pullt Stripe-Käufe und cleant abgelaufene Mitglieder"
+            title="Zählt Stripe-Sessions/Invoices/Subscriptions im Live-Account"
+          >
+            {diagBusy ? (
+              <Loader2 className="w-4 h-4 animate-spin" />
+            ) : (
+              <Stethoscope className="w-4 h-4" />
+            )}
+            Diagnose
+          </button>
+          <button
+            onClick={runSync}
+            disabled={syncBusy || diagBusy}
+            className="flex items-center gap-2 px-3 py-2 rounded-lg border border-border hover:bg-surface-hover text-foreground font-medium text-sm transition disabled:opacity-50"
+            title="Pullt Stripe-Käufe (Sessions + Subs + Invoices) und cleant abgelaufene Mitglieder"
           >
             {syncBusy ? (
               <Loader2 className="w-4 h-4 animate-spin" />
@@ -204,7 +248,7 @@ export function CommunityTable({ members }: { members: MemberRow[] }) {
 
       {message && (
         <div
-          className={`text-sm px-4 py-2 rounded-lg ${
+          className={`text-sm px-4 py-2 rounded-lg whitespace-pre-line ${
             message.type === 'ok'
               ? 'bg-green-50 text-green-700 dark:bg-green-950/30 dark:text-green-400'
               : 'bg-red-50 text-red-700 dark:bg-red-950/30 dark:text-red-400'

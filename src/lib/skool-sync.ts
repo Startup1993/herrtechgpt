@@ -577,6 +577,174 @@ export async function syncSkoolMembersFromStripe(
     if (pages > 20) break
   }
 
+  // ─── Phase 2: Subscriptions (für monatliche KMC oder Subs aus Ablefy/Co.) ──
+  // Subscriptions liefern Customer-IDs + Items mit Product-Referenz direkt.
+  // Status='all' fängt aktive, past_due, canceled (= alumni) gleichermaßen.
+  let subStartingAfter: string | undefined = undefined
+  let subPages = 0
+  while (subPages < 20) {
+    const subList = await stripe.subscriptions.list({
+      limit: 100,
+      starting_after: subStartingAfter,
+      status: 'all',
+      expand: ['data.customer'],
+    })
+    subPages += 1
+    for (const sub of subList.data) {
+      scanned += 1
+      try {
+        let hit: SkoolProduct | null = null
+        let priceId: string | null = null
+        for (const item of sub.items.data) {
+          const productRef = item.price?.product
+          const pid =
+            typeof productRef === 'string'
+              ? productRef
+              : productRef && 'id' in productRef && !('deleted' in productRef && productRef.deleted)
+              ? productRef.id
+              : null
+          if (pid && productMap.has(pid)) {
+            hit = productMap.get(pid)!
+            priceId = item.price?.id ?? null
+            break
+          }
+        }
+        if (!hit) continue
+
+        const cust = sub.customer
+        const customerId = typeof cust === 'string' ? cust : cust?.id ?? null
+        if (!customerId) continue
+
+        // Email/Name aus expanded customer ziehen
+        let email: string | null = null
+        let name: string | null = null
+        if (cust && typeof cust !== 'string' && !('deleted' in cust && cust.deleted)) {
+          email = cust.email ?? null
+          name = cust.name ?? null
+        }
+        if (!email) {
+          // Customer war nicht expanded oder hat keine Email → manuell laden
+          try {
+            const full = await stripe.customers.retrieve(customerId)
+            if (!('deleted' in full) || !full.deleted) {
+              email = (full as Stripe.Customer).email ?? null
+              name = (full as Stripe.Customer).name ?? null
+            }
+          } catch {
+            // ignore, skip below
+          }
+        }
+        if (!email) continue
+
+        // purchasedAt = subscription.start_date (= erster Charge), als „Kaufdatum"
+        const purchasedAt = new Date((sub.start_date ?? sub.created) * 1000)
+        matched += 1
+        const arr = perCustomer.get(customerId) ?? []
+        arr.push({
+          sessionId: sub.id,
+          paymentIntentId: null,
+          email,
+          name,
+          customerId,
+          productId: hit.stripe_product_id,
+          priceId,
+          accessDays: hit.access_days,
+          purchasedAt,
+        })
+        perCustomer.set(customerId, arr)
+      } catch (err) {
+        errors.push({
+          session: sub.id,
+          error: err instanceof Error ? err.message : String(err),
+        })
+      }
+    }
+    if (!subList.has_more) break
+    subStartingAfter = subList.data[subList.data.length - 1].id
+  }
+
+  // ─── Phase 3: Paid Invoices (Ablefy / Hosted Invoices / direkt gerechnet) ──
+  // Invoices haben Lines mit Price → Product. Fängt alles, wo Stripe eine
+  // Rechnung erzeugt hat, unabhängig vom Verkaufsweg.
+  let invStartingAfter: string | undefined = undefined
+  let invPages = 0
+  while (invPages < 20) {
+    const invList = await stripe.invoices.list({
+      limit: 100,
+      starting_after: invStartingAfter,
+      status: 'paid',
+      created: { gte: since },
+    })
+    invPages += 1
+    for (const inv of invList.data) {
+      scanned += 1
+      try {
+        let hit: SkoolProduct | null = null
+        let priceId: string | null = null
+        const lines = inv.lines?.data ?? []
+        for (const ln of lines) {
+          // API 2026-03 hat ggf. ln.pricing statt ln.price; defensiv beides lesen
+          const price =
+            (ln as unknown as { price?: Stripe.Price | null }).price ?? null
+          const productRef = price?.product
+          const pid =
+            typeof productRef === 'string'
+              ? productRef
+              : productRef && 'id' in productRef && !('deleted' in productRef && productRef.deleted)
+              ? productRef.id
+              : null
+          if (pid && productMap.has(pid)) {
+            hit = productMap.get(pid)!
+            priceId = price?.id ?? null
+            break
+          }
+        }
+        if (!hit) continue
+
+        const customerId =
+          typeof inv.customer === 'string'
+            ? inv.customer
+            : inv.customer?.id ?? null
+        const email = inv.customer_email ?? null
+        if (!customerId || !email) continue
+
+        // Stripe API 2026-03: invoice.payment_intent ist aus dem Type entfernt,
+        // im Payload aber noch da. Defensiv lesen.
+        const piRaw = (inv as unknown as { payment_intent?: string | { id: string } | null })
+          .payment_intent
+        const paymentIntentId =
+          typeof piRaw === 'string' ? piRaw : piRaw && 'id' in piRaw ? piRaw.id : null
+        const paidAtUnix =
+          (inv.status_transitions && inv.status_transitions.paid_at) ||
+          inv.created ||
+          Math.floor(Date.now() / 1000)
+        const purchasedAt = new Date(paidAtUnix * 1000)
+
+        matched += 1
+        const arr = perCustomer.get(customerId) ?? []
+        arr.push({
+          sessionId: inv.id ?? `inv_${Date.now()}`,
+          paymentIntentId,
+          email,
+          name: inv.customer_name ?? null,
+          customerId,
+          productId: hit.stripe_product_id,
+          priceId,
+          accessDays: hit.access_days,
+          purchasedAt,
+        })
+        perCustomer.set(customerId, arr)
+      } catch (err) {
+        errors.push({
+          session: inv.id ?? 'unknown_invoice',
+          error: err instanceof Error ? err.message : String(err),
+        })
+      }
+    }
+    if (!invList.has_more) break
+    invStartingAfter = invList.data[invList.data.length - 1].id ?? undefined
+  }
+
   // Pro Customer: jüngsten Kauf nehmen, expires basierend darauf, purchase_count = Anzahl
   for (const [customerId, hits] of perCustomer) {
     hits.sort((a, b) => b.purchasedAt.getTime() - a.purchasedAt.getTime())
