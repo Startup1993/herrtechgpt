@@ -2,6 +2,7 @@ import Link from 'next/link'
 import { Settings } from 'lucide-react'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { CommunityTable } from './CommunityTable'
+import { AddMemberModal } from './AddMemberModal'
 
 export const dynamic = 'force-dynamic'
 
@@ -61,13 +62,16 @@ export default async function AdminCommunityPage() {
             {members.length} Mitglieder · {activeCount} aktiv · {alumniCount} Alumni · {claimedCount} registriert · {invitableCount} einladbar
           </p>
         </div>
-        <Link
-          href="/admin/community/products"
-          className="inline-flex items-center gap-2 px-3 py-2 rounded-lg border border-border hover:bg-surface-hover text-foreground text-sm transition"
-        >
-          <Settings className="w-4 h-4" />
-          Stripe-Produkte pflegen
-        </Link>
+        <div className="flex items-center gap-2">
+          <AddMemberModal />
+          <Link
+            href="/admin/community/products"
+            className="inline-flex items-center gap-2 px-3 py-2 rounded-lg border border-border hover:bg-surface-hover text-foreground text-sm transition"
+          >
+            <Settings className="w-4 h-4" />
+            Stripe-Produkte pflegen
+          </Link>
+        </div>
       </div>
       <CommunityTable members={members} />
     </div>
