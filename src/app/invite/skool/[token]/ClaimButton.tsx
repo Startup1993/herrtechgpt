@@ -28,18 +28,31 @@ export function ClaimButton({
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ token }),
       })
-      const data = await res.json().catch(() => null)
+      const data = (await res.json().catch(() => null)) as
+        | { ok?: boolean; redirectTo?: string; error?: string; warning?: string }
+        | null
       if (!res.ok) {
         setResult({ type: 'err', text: data?.error ?? 'Aktivierung fehlgeschlagen' })
-      } else {
+        setLoading(false)
+        return
+      }
+      if (data?.redirectTo) {
+        // Direkter Auto-Login: weiter zu /auth/callback mit token_hash
         setResult({
           type: 'ok',
-          text: `Perfekt — Login-Link ist unterwegs an ${email}. Öffne einfach die Mail und klick dich rein.`,
+          text: 'Du wirst eingeloggt — einen Moment …',
         })
+        window.location.href = data.redirectTo
+        return
       }
+      // Fallback ohne redirect (sehr seltener Edge-Case)
+      setResult({
+        type: 'ok',
+        text: `Account aktiviert. Login auf der Anmelde-Seite mit ${email}.`,
+      })
+      setLoading(false)
     } catch {
       setResult({ type: 'err', text: 'Netzwerk-Fehler, versuch es nochmal.' })
-    } finally {
       setLoading(false)
     }
   }

@@ -39,8 +39,15 @@ function parseCSV(text: string): { rows: ParsedRow[]; columns: string[] } {
 
   const header = splitLine(lines[0]).map((h) => h.toLowerCase().trim())
   const emailIdx = header.findIndex((h) => h === 'email' || h === 'e-mail' || h === 'mail')
+  // Name kann als ein Feld (name/full name) oder getrennt (firstname + lastname) kommen
   const nameIdx = header.findIndex(
     (h) => h === 'name' || h === 'full name' || h === 'fullname'
+  )
+  const firstNameIdx = header.findIndex(
+    (h) => h === 'firstname' || h === 'first name' || h === 'first_name' || h === 'vorname'
+  )
+  const lastNameIdx = header.findIndex(
+    (h) => h === 'lastname' || h === 'last name' || h === 'last_name' || h === 'nachname'
   )
   const expIdx = header.findIndex(
     (h) =>
@@ -48,6 +55,14 @@ function parseCSV(text: string): { rows: ParsedRow[]; columns: string[] } {
       h === 'expires' ||
       h === 'zugang_bis' ||
       h === 'access_until'
+  )
+  // Skool-Format: JoinedDate als Beitrittsdatum → +12 Monate als Zugang-bis
+  const joinedIdx = header.findIndex(
+    (h) =>
+      h === 'joineddate' ||
+      h === 'joined_date' ||
+      h === 'joined' ||
+      h === 'beigetreten'
   )
 
   if (emailIdx === -1) {
@@ -59,11 +74,31 @@ function parseCSV(text: string): { rows: ParsedRow[]; columns: string[] } {
     const cells = splitLine(lines[i])
     const email = cells[emailIdx]?.trim()
     if (!email) continue
-    rows.push({
-      email,
-      name: nameIdx >= 0 ? cells[nameIdx]?.trim() || undefined : undefined,
-      expires_at: expIdx >= 0 ? cells[expIdx]?.trim() || undefined : undefined,
-    })
+
+    // Name zusammensetzen
+    let name: string | undefined = undefined
+    if (nameIdx >= 0 && cells[nameIdx]?.trim()) {
+      name = cells[nameIdx].trim()
+    } else if (firstNameIdx >= 0 || lastNameIdx >= 0) {
+      const first = firstNameIdx >= 0 ? cells[firstNameIdx]?.trim() ?? '' : ''
+      const last = lastNameIdx >= 0 ? cells[lastNameIdx]?.trim() ?? '' : ''
+      const combined = `${first} ${last}`.trim()
+      if (combined) name = combined
+    }
+
+    // Zugang-bis: explizit > JoinedDate+12 Monate > leer (Backend setzt default)
+    let expires_at: string | undefined = undefined
+    if (expIdx >= 0 && cells[expIdx]?.trim()) {
+      expires_at = cells[expIdx].trim()
+    } else if (joinedIdx >= 0 && cells[joinedIdx]?.trim()) {
+      const joined = new Date(cells[joinedIdx].trim())
+      if (!isNaN(joined.getTime())) {
+        const expires = new Date(joined.getTime() + 365 * 86400 * 1000)
+        expires_at = expires.toISOString().slice(0, 10)
+      }
+    }
+
+    rows.push({ email, name, expires_at })
   }
 
   return { rows, columns: header }
@@ -166,11 +201,12 @@ export function CsvImportModal() {
                   CSV-Import (Skool-Member)
                 </h2>
                 <p className="text-xs text-muted mt-1">
-                  Lade einen CSV-Export aus Skool hoch. Erwartete Spalten:{' '}
-                  <code className="text-foreground">email</code>,{' '}
-                  <code className="text-foreground">name</code> (optional),{' '}
-                  <code className="text-foreground">expires_at</code> (optional, sonst +1 Jahr).
-                  Bestehende E-Mails werden übersprungen.
+                  Lade einen CSV-Export aus Skool hoch. Pflicht:{' '}
+                  <code className="text-foreground">Email</code>. Optional:{' '}
+                  <code className="text-foreground">FirstName + LastName</code> (oder{' '}
+                  <code className="text-foreground">Name</code>),{' '}
+                  <code className="text-foreground">JoinedDate</code> (als Zugang +12 Mo.) oder{' '}
+                  <code className="text-foreground">expires_at</code>. Bestehende E-Mails werden übersprungen.
                 </p>
               </div>
               <button
