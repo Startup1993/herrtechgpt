@@ -14,6 +14,7 @@ import {
   ChevronLeft,
   ChevronRight,
   ArrowUpDown,
+  Trash2,
 } from 'lucide-react'
 
 type SkoolStatus = 'active' | 'alumni' | 'cancelled'
@@ -75,6 +76,7 @@ export function CommunityTable({ members }: { members: MemberRow[] }) {
   const [bulkBusy, setBulkBusy] = useState(false)
   const [syncBusy, setSyncBusy] = useState(false)
   const [diagBusy, setDiagBusy] = useState(false)
+  const [deleteBusy, setDeleteBusy] = useState<string | null>(null)
   const [syncDays, setSyncDays] = useState(90)
   const [message, setMessage] = useState<{ type: 'ok' | 'err'; text: string } | null>(null)
 
@@ -303,6 +305,31 @@ export function CommunityTable({ members }: { members: MemberRow[] }) {
     }
   }
 
+  async function deleteMember(id: string, label: string) {
+    if (
+      !confirm(
+        `"${label}" wirklich löschen?\n\nDer Eintrag wird aus der Liste entfernt. Falls die Person registriert war, wird Plan S beendet (das User-Profil bleibt erhalten).`
+      )
+    )
+      return
+    setDeleteBusy(id)
+    setMessage(null)
+    try {
+      const res = await fetch(`/api/admin/community/${id}`, { method: 'DELETE' })
+      const data = await res.json().catch(() => null)
+      if (!res.ok) {
+        setMessage({ type: 'err', text: data?.error ?? 'Löschen fehlgeschlagen' })
+      } else {
+        setMessage({ type: 'ok', text: `"${label}" gelöscht` })
+        router.refresh()
+      }
+    } catch {
+      setMessage({ type: 'err', text: 'Netzwerk-Fehler' })
+    } finally {
+      setDeleteBusy(null)
+    }
+  }
+
   async function inviteMany(ids: string[], confirmText?: string) {
     if (ids.length === 0) return
     if (confirmText && !confirm(confirmText)) return
@@ -516,24 +543,40 @@ export function CommunityTable({ members }: { members: MemberRow[] }) {
                         )}
                       </td>
                       <td className="px-4 py-3 text-right">
-                        {canInvite ? (
+                        <div className="inline-flex items-center gap-1.5">
+                          {canInvite ? (
+                            <button
+                              onClick={() => inviteMany([m.id])}
+                              disabled={loading === m.id || bulkBusy}
+                              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium bg-primary hover:bg-primary-hover text-white transition disabled:opacity-50"
+                            >
+                              {loading === m.id ? (
+                                <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                              ) : (
+                                <Mail className="w-3.5 h-3.5" />
+                              )}
+                              {m.invitation_sent_count > 0 ? 'Nochmal' : 'Einladen'}
+                            </button>
+                          ) : m.claimed_at ? (
+                            <span className="text-xs text-muted">Aktiv</span>
+                          ) : (
+                            <span className="text-xs text-muted">—</span>
+                          )}
                           <button
-                            onClick={() => inviteMany([m.id])}
-                            disabled={loading === m.id || bulkBusy}
-                            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium bg-primary hover:bg-primary-hover text-white transition disabled:opacity-50"
+                            onClick={() =>
+                              deleteMember(m.id, m.name || m.email)
+                            }
+                            disabled={deleteBusy === m.id}
+                            title="Mitglied löschen"
+                            className="p-1.5 rounded-md text-muted hover:text-red-600 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-950/30 transition disabled:opacity-50"
                           >
-                            {loading === m.id ? (
+                            {deleteBusy === m.id ? (
                               <Loader2 className="w-3.5 h-3.5 animate-spin" />
                             ) : (
-                              <Mail className="w-3.5 h-3.5" />
+                              <Trash2 className="w-3.5 h-3.5" />
                             )}
-                            {m.invitation_sent_count > 0 ? 'Nochmal' : 'Einladen'}
                           </button>
-                        ) : m.claimed_at ? (
-                          <span className="text-xs text-muted">Aktiv</span>
-                        ) : (
-                          <span className="text-xs text-muted">—</span>
-                        )}
+                        </div>
                       </td>
                     </tr>
                   )

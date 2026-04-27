@@ -470,6 +470,7 @@ export async function syncSkoolMembersFromStripe(
   const SESSIONS_MAX_PAGES = 100 // 10.000 Sessions max (mit expand inline ~50ms/Page)
   const SUBS_MAX_PAGES = 100 // 10.000 Subscriptions max
   const INVOICES_MAX_PAGES = 100 // 10.000 Invoices max
+  const REFUNDS_MAX_PAGES = 50 // 5.000 Refunds max
 
   // Whitelist laden — beim manuellen Sync auch deaktivierte berücksichtigen,
   // damit Bestand nicht verloren geht
@@ -510,6 +511,52 @@ export async function syncSkoolMembersFromStripe(
   let invScanned = 0
   let invMatched = 0
   let invCapped = false
+
+  // ─── Refund-Map vorab aufbauen ────────────────────────────────────────────
+  // Customers, deren letzte Zahlung refunded wurde, sollen NICHT als aktive
+  // Mitglieder gelten. Wir bauen Map<customerId, { date, amount }> mit dem
+  // jüngsten Refund pro Customer. Beim Aggregation prüfen wir: liegt der
+  // Refund NACH dem letzten Kauf? Dann Zugang weg.
+  const refundsByCustomer = new Map<string, { date: Date; amount: number }>()
+  let refundAfter: string | undefined = undefined
+  let refundPages = 0
+  while (refundPages < REFUNDS_MAX_PAGES) {
+    try {
+      const refundList = await stripe.refunds.list({
+        limit: 100,
+        starting_after: refundAfter,
+        created: { gte: since },
+        expand: ['data.payment_intent'],
+      })
+      refundPages += 1
+      for (const r of refundList.data) {
+        // payment_intent ist expanded → enthält customer als string
+        const pi = r.payment_intent
+        let customerId: string | null = null
+        if (pi && typeof pi !== 'string') {
+          customerId =
+            typeof pi.customer === 'string' ? pi.customer : pi.customer?.id ?? null
+        }
+        if (!customerId) continue
+
+        const refundDate = new Date((r.created ?? Date.now() / 1000) * 1000)
+        const existing = refundsByCustomer.get(customerId)
+        if (!existing || existing.date < refundDate) {
+          refundsByCustomer.set(customerId, {
+            date: refundDate,
+            amount: r.amount,
+          })
+        }
+      }
+      if (!refundList.has_more) break
+      refundAfter = refundList.data[refundList.data.length - 1]?.id
+    } catch (err) {
+      errors.push({
+        error: `refunds.list: ${err instanceof Error ? err.message : String(err)}`,
+      })
+      break
+    }
+  }
 
   // Per Customer aggregieren — pro Customer nur einmal upserten (jüngster Kauf gewinnt)
   type Hit = {
@@ -857,13 +904,23 @@ export async function syncSkoolMembersFromStripe(
       hits.sort((a, b) => b.purchasedAt.getTime() - a.purchasedAt.getTime())
       const latest = hits[0]
       const oldest = hits[hits.length - 1]
-      const newExpires = new Date(
+      let newExpires = new Date(
         latest.purchasedAt.getTime() + latest.accessDays * 86400 * 1000
       )
 
+      // Refund-Check: wenn der jüngste Refund NACH dem letzten Kauf liegt,
+      // wurde der Zugang storniert. Expiry auf Refund-Datum setzen → alumni.
+      const refund = refundsByCustomer.get(customerId)
+      const refunded = refund && refund.date > latest.purchasedAt
+      if (refunded) {
+        newExpires = refund.date
+      }
+
       // Bestehendes Expiry nicht verkürzen (bei mehrfachem Sync stabil bleiben)
+      // — außer es gab einen Refund, dann zählt der Refund-Tag.
       const existing = existingMap.get(customerId)
       const finalExpires =
+        !refunded &&
         existing?.skool_access_expires_at &&
         new Date(existing.skool_access_expires_at) > newExpires
           ? new Date(existing.skool_access_expires_at)

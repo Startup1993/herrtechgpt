@@ -3,6 +3,7 @@ import { Settings } from 'lucide-react'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { CommunityTable } from './CommunityTable'
 import { AddMemberModal } from './AddMemberModal'
+import { CsvImportModal } from './CsvImportModal'
 
 export const dynamic = 'force-dynamic'
 
@@ -62,8 +63,9 @@ export default async function AdminCommunityPage() {
             {members.length} Mitglieder · {activeCount} aktiv · {alumniCount} Alumni · {claimedCount} registriert · {invitableCount} einladbar
           </p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap">
           <AddMemberModal />
+          <CsvImportModal />
           <Link
             href="/admin/community/products"
             className="inline-flex items-center gap-2 px-3 py-2 rounded-lg border border-border hover:bg-surface-hover text-foreground text-sm transition"
