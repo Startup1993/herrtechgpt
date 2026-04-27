@@ -19,18 +19,32 @@ type MemberRow = {
   created_at: string
 }
 
-export default async function AdminCommunityPage() {
+// Supabase/PostgREST hat einen Server-seitigen Hard-Cap auf 1000 Rows
+// (db-max-rows). .limit() überschreibt den nicht — wir müssen seitenweise lesen.
+async function fetchAllCommunityMembers(): Promise<MemberRow[]> {
   const admin = createAdminClient()
-  const { data } = await admin
-    .from('community_members')
-    .select(
-      'id, email, name, skool_status, skool_access_expires_at, last_purchase_at, purchase_count, invitation_sent_count, last_invited_at, claimed_at, created_at'
-    )
-    .order('created_at', { ascending: false })
-    // PostgREST default ist 1000 — wir wollen aber alle Mitglieder
-    .limit(50000)
+  const PAGE = 1000
+  const MAX_TOTAL = 50000 // safety
+  const all: MemberRow[] = []
+  let offset = 0
+  while (offset < MAX_TOTAL) {
+    const { data, error } = await admin
+      .from('community_members')
+      .select(
+        'id, email, name, skool_status, skool_access_expires_at, last_purchase_at, purchase_count, invitation_sent_count, last_invited_at, claimed_at, created_at'
+      )
+      .order('created_at', { ascending: false })
+      .range(offset, offset + PAGE - 1)
+    if (error || !data) break
+    all.push(...(data as MemberRow[]))
+    if (data.length < PAGE) break
+    offset += PAGE
+  }
+  return all
+}
 
-  const members = (data ?? []) as MemberRow[]
+export default async function AdminCommunityPage() {
+  const members = await fetchAllCommunityMembers()
   const activeCount = members.filter((m) => m.skool_status === 'active').length
   const alumniCount = members.filter((m) => m.skool_status === 'alumni').length
   const claimedCount = members.filter((m) => m.claimed_at).length
