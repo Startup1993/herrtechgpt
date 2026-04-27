@@ -70,26 +70,55 @@ export function CommunityTable({ members }: { members: MemberRow[] }) {
     setMessage(null)
     try {
       const res = await fetch(`/api/admin/community/diagnose?days=${syncDays}`)
-      const data = await res.json().catch(() => null)
+      const txt = await res.text()
+      let data: {
+        mode?: string
+        days?: number
+        stripe?: {
+          sessions_in_range: { count: number; has_more: boolean }
+          invoices_paid_in_range: { count: number; has_more: boolean }
+          subscriptions_active: { count: number; has_more: boolean }
+          subscriptions_all: { count: number; has_more: boolean }
+        }
+        hint?: string | null
+        errors?: string[]
+        error?: string
+      } | null = null
+      try {
+        data = JSON.parse(txt)
+      } catch {
+        // ignore — we'll show the raw text below
+      }
       if (!res.ok) {
-        setMessage({ type: 'err', text: data?.error ?? 'Diagnose fehlgeschlagen' })
+        const detail = data?.error ?? txt.slice(0, 300)
+        setMessage({ type: 'err', text: `HTTP ${res.status}: ${detail}` })
+        return
+      }
+      if (!data?.stripe) {
+        setMessage({ type: 'err', text: data?.error ?? 'Diagnose-Antwort unvollständig' })
         return
       }
       const s = data.stripe
+      const more = (snap: { count: number; has_more: boolean }) =>
+        snap.has_more ? `${snap.count}+` : `${snap.count}`
       const lines = [
-        `Stripe-Mode: ${data.mode.toUpperCase()}`,
-        `Sessions (${data.days}d): ${s.sessions_in_range.count}${s.sessions_in_range.capped ? '+' : ''}`,
-        `Paid Invoices (${data.days}d): ${s.invoices_paid_in_range.count}${s.invoices_paid_in_range.capped ? '+' : ''}`,
-        `Active Subs: ${s.subscriptions_active.count}${s.subscriptions_active.capped ? '+' : ''}`,
-        `All Subs: ${s.subscriptions_all.count}${s.subscriptions_all.capped ? '+' : ''}`,
+        `Stripe-Mode: ${(data.mode ?? '?').toUpperCase()}`,
+        `Sessions (${data.days}d): ${more(s.sessions_in_range)}`,
+        `Paid Invoices (${data.days}d): ${more(s.invoices_paid_in_range)}`,
+        `Active Subs: ${more(s.subscriptions_active)}`,
+        `All Subs: ${more(s.subscriptions_all)}`,
       ]
-      const hint = data.hint ? `\n\n${data.hint}` : ''
+      const hint = data.hint ? `\n${data.hint}` : ''
+      const errs = data.errors?.length ? `\nFehler: ${data.errors.join('; ')}` : ''
       setMessage({
-        type: data.mode === 'live' ? 'ok' : 'err',
-        text: lines.join(' · ') + hint,
+        type: data.mode === 'live' && !data.errors?.length ? 'ok' : 'err',
+        text: lines.join(' · ') + hint + errs,
       })
-    } catch {
-      setMessage({ type: 'err', text: 'Netzwerk-Fehler' })
+    } catch (err) {
+      setMessage({
+        type: 'err',
+        text: err instanceof Error ? err.message : 'Netzwerk-Fehler',
+      })
     } finally {
       setDiagBusy(false)
     }
