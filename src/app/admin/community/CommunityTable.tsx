@@ -1,8 +1,20 @@
 'use client'
 
-import { useState } from 'react'
+import { useMemo, useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
-import { Loader2, Mail, CheckCircle2, Send, RefreshCw, Stethoscope } from 'lucide-react'
+import {
+  Loader2,
+  Mail,
+  CheckCircle2,
+  Send,
+  RefreshCw,
+  Stethoscope,
+  ChevronUp,
+  ChevronDown,
+  ChevronLeft,
+  ChevronRight,
+  ArrowUpDown,
+} from 'lucide-react'
 
 type SkoolStatus = 'active' | 'alumni' | 'cancelled'
 
@@ -35,6 +47,26 @@ function formatDate(iso: string | null): string {
   })
 }
 
+type SortKey =
+  | 'name'
+  | 'email'
+  | 'skool_status'
+  | 'skool_access_expires_at'
+  | 'purchase_count'
+  | 'invitation_sent_count'
+  | 'claimed_at'
+type SortDir = 'asc' | 'desc'
+
+function compare<T>(a: T, b: T): number {
+  if (a == null && b == null) return 0
+  if (a == null) return 1 // null/undefined ans Ende
+  if (b == null) return -1
+  if (typeof a === 'number' && typeof b === 'number') return a - b
+  return String(a).localeCompare(String(b), 'de')
+}
+
+const PAGE_SIZE = 50
+
 export function CommunityTable({ members }: { members: MemberRow[] }) {
   const router = useRouter()
   const [search, setSearch] = useState('')
@@ -46,20 +78,82 @@ export function CommunityTable({ members }: { members: MemberRow[] }) {
   const [syncDays, setSyncDays] = useState(90)
   const [message, setMessage] = useState<{ type: 'ok' | 'err'; text: string } | null>(null)
 
-  const filtered = members
-    .filter((m) => {
-      const q = search.toLowerCase()
-      return (
-        m.email.toLowerCase().includes(q) ||
-        (m.name ?? '').toLowerCase().includes(q)
-      )
+  const [sortKey, setSortKey] = useState<SortKey>('skool_access_expires_at')
+  const [sortDir, setSortDir] = useState<SortDir>('desc')
+  const [page, setPage] = useState(1)
+
+  // Filter zurücksetzen → zurück zur ersten Seite
+  useEffect(() => {
+    setPage(1)
+  }, [search, filter, sortKey, sortDir])
+
+  const filtered = useMemo(
+    () =>
+      members
+        .filter((m) => {
+          const q = search.toLowerCase().trim()
+          if (!q) return true
+          return (
+            m.email.toLowerCase().includes(q) ||
+            (m.name ?? '').toLowerCase().includes(q)
+          )
+        })
+        .filter((m) => {
+          if (filter === 'all') return true
+          if (filter === 'invitable') return m.skool_status === 'active' && !m.claimed_at
+          if (filter === 'claimed') return !!m.claimed_at
+          return m.skool_status === filter
+        }),
+    [members, search, filter]
+  )
+
+  const sorted = useMemo(() => {
+    const dir = sortDir === 'asc' ? 1 : -1
+    return [...filtered].sort((a, b) => {
+      const av = a[sortKey] as unknown
+      const bv = b[sortKey] as unknown
+      return compare(av, bv) * dir
     })
-    .filter((m) => {
-      if (filter === 'all') return true
-      if (filter === 'invitable') return m.skool_status === 'active' && !m.claimed_at
-      if (filter === 'claimed') return !!m.claimed_at
-      return m.skool_status === filter
-    })
+  }, [filtered, sortKey, sortDir])
+
+  const totalPages = Math.max(1, Math.ceil(sorted.length / PAGE_SIZE))
+  const currentPage = Math.min(page, totalPages)
+  const pageStart = (currentPage - 1) * PAGE_SIZE
+  const pageRows = sorted.slice(pageStart, pageStart + PAGE_SIZE)
+
+  function toggleSort(key: SortKey) {
+    if (sortKey === key) {
+      setSortDir(sortDir === 'asc' ? 'desc' : 'asc')
+    } else {
+      setSortKey(key)
+      setSortDir('asc')
+    }
+  }
+
+  function SortHeader({
+    column,
+    label,
+    align = 'left',
+  }: {
+    column: SortKey
+    label: string
+    align?: 'left' | 'right'
+  }) {
+    const active = sortKey === column
+    const Icon = !active ? ArrowUpDown : sortDir === 'asc' ? ChevronUp : ChevronDown
+    return (
+      <button
+        type="button"
+        onClick={() => toggleSort(column)}
+        className={`flex items-center gap-1 font-medium text-muted hover:text-foreground transition ${
+          align === 'right' ? 'ml-auto' : ''
+        } ${active ? 'text-foreground' : ''}`}
+      >
+        {label}
+        <Icon className="w-3.5 h-3.5" />
+      </button>
+    )
+  }
 
   const invitableIds = members
     .filter((m) => m.skool_status === 'active' && !m.claimed_at)
@@ -260,12 +354,17 @@ export function CommunityTable({ members }: { members: MemberRow[] }) {
             Sync
           </button>
           <button
-            onClick={() =>
+            onClick={() => {
+              const count = invitableIds.length
+              const warning =
+                count > 100
+                  ? `\n\n⚠️ Das sind ${count} Mails — das könnte einige Minuten dauern und kann Resend-Rate-Limits triggern.`
+                  : ''
               inviteMany(
                 invitableIds,
-                `${invitableIds.length} Einladungen verschicken?`
+                `${count} Einladungen verschicken?${warning}`
               )
-            }
+            }}
             disabled={invitableIds.length === 0 || bulkBusy}
             className="flex items-center gap-2 px-4 py-2 rounded-lg bg-primary hover:bg-primary-hover text-white font-medium text-sm transition disabled:opacity-50 disabled:cursor-not-allowed"
           >
@@ -287,29 +386,50 @@ export function CommunityTable({ members }: { members: MemberRow[] }) {
         </div>
       )}
 
+      <div className="text-xs text-muted">
+        {sorted.length === 0
+          ? 'Keine Einträge'
+          : `${sorted.length} ${sorted.length === 1 ? 'Eintrag' : 'Einträge'}` +
+            (sorted.length > PAGE_SIZE
+              ? ` · Zeige ${pageStart + 1}–${Math.min(pageStart + PAGE_SIZE, sorted.length)}`
+              : '')}
+      </div>
+
       <div className="bg-surface border border-border rounded-xl overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead className="bg-surface-secondary border-b border-border">
-              <tr className="text-left text-muted">
-                <th className="px-4 py-3 font-medium">Name / E-Mail</th>
-                <th className="px-4 py-3 font-medium">Status</th>
-                <th className="px-4 py-3 font-medium">Zugang bis</th>
-                <th className="px-4 py-3 font-medium">Käufe</th>
-                <th className="px-4 py-3 font-medium">Eingeladen</th>
-                <th className="px-4 py-3 font-medium">Registriert</th>
-                <th className="px-4 py-3 font-medium text-right">Aktion</th>
+              <tr className="text-left">
+                <th className="px-4 py-3">
+                  <SortHeader column="name" label="Name / E-Mail" />
+                </th>
+                <th className="px-4 py-3">
+                  <SortHeader column="skool_status" label="Status" />
+                </th>
+                <th className="px-4 py-3">
+                  <SortHeader column="skool_access_expires_at" label="Zugang bis" />
+                </th>
+                <th className="px-4 py-3">
+                  <SortHeader column="purchase_count" label="Käufe" />
+                </th>
+                <th className="px-4 py-3">
+                  <SortHeader column="invitation_sent_count" label="Eingeladen" />
+                </th>
+                <th className="px-4 py-3">
+                  <SortHeader column="claimed_at" label="Registriert" />
+                </th>
+                <th className="px-4 py-3 font-medium text-right text-muted">Aktion</th>
               </tr>
             </thead>
             <tbody>
-              {filtered.length === 0 ? (
+              {pageRows.length === 0 ? (
                 <tr>
                   <td colSpan={7} className="px-4 py-10 text-center text-muted">
                     Keine Einträge.
                   </td>
                 </tr>
               ) : (
-                filtered.map((m) => {
+                pageRows.map((m) => {
                   const meta = STATUS_META[m.skool_status]
                   const canInvite = m.skool_status === 'active' && !m.claimed_at
                   return (
@@ -378,6 +498,32 @@ export function CommunityTable({ members }: { members: MemberRow[] }) {
           </table>
         </div>
       </div>
+
+      {totalPages > 1 && (
+        <div className="flex items-center justify-between gap-3 text-sm">
+          <div className="text-muted">
+            Seite {currentPage} von {totalPages}
+          </div>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setPage((p) => Math.max(1, p - 1))}
+              disabled={currentPage === 1}
+              className="inline-flex items-center gap-1 px-3 py-1.5 rounded-md border border-border hover:bg-surface-hover transition disabled:opacity-40 disabled:cursor-not-allowed"
+            >
+              <ChevronLeft className="w-4 h-4" />
+              Zurück
+            </button>
+            <button
+              onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+              disabled={currentPage === totalPages}
+              className="inline-flex items-center gap-1 px-3 py-1.5 rounded-md border border-border hover:bg-surface-hover transition disabled:opacity-40 disabled:cursor-not-allowed"
+            >
+              Vor
+              <ChevronRight className="w-4 h-4" />
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
