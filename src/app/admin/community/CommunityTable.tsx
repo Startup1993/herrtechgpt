@@ -20,6 +20,7 @@ import {
 import { EditMemberModal, type EditMember } from './EditMemberModal'
 
 type SkoolStatus = 'active' | 'alumni' | 'cancelled'
+type MemberSource = 'stripe' | 'manual' | 'csv' | 'skool' | null
 
 type MemberRow = {
   id: string
@@ -33,6 +34,39 @@ type MemberRow = {
   last_invited_at: string | null
   claimed_at: string | null
   created_at: string
+  source: MemberSource
+}
+
+const SOURCE_META: Record<
+  Exclude<MemberSource, null> | 'unknown',
+  { label: string; className: string; title: string }
+> = {
+  stripe: {
+    label: 'Stripe',
+    className: 'bg-blue-50 text-blue-700 dark:bg-blue-950/30 dark:text-blue-400',
+    title: 'Automatisch über Stripe-Sync importiert',
+  },
+  manual: {
+    label: 'Manuell',
+    className:
+      'bg-purple-50 text-purple-700 dark:bg-purple-950/30 dark:text-purple-400',
+    title: 'Vom Admin manuell hinzugefügt',
+  },
+  csv: {
+    label: 'CSV',
+    className: 'bg-amber-50 text-amber-700 dark:bg-amber-950/30 dark:text-amber-400',
+    title: 'Aus CSV-Datei importiert',
+  },
+  skool: {
+    label: 'Skool',
+    className: 'bg-green-50 text-green-700 dark:bg-green-950/30 dark:text-green-400',
+    title: 'Direkt aus Skool importiert',
+  },
+  unknown: {
+    label: '—',
+    className: 'bg-surface-secondary text-muted',
+    title: 'Quelle unbekannt',
+  },
 }
 
 const STATUS_META: Record<SkoolStatus, { label: string; dot: string; text: string }> = {
@@ -78,6 +112,7 @@ export function CommunityTable({ members }: { members: MemberRow[] }) {
   const router = useRouter()
   const [search, setSearch] = useState('')
   const [filter, setFilter] = useState<'all' | SkoolStatus | 'invitable' | 'claimed'>('all')
+  const [sourceFilter, setSourceFilter] = useState<'all' | Exclude<MemberSource, null>>('all')
   const [loading, setLoading] = useState<string | null>(null)
   const [bulkBusy, setBulkBusy] = useState(false)
   const [syncBusy, setSyncBusy] = useState(false)
@@ -94,7 +129,7 @@ export function CommunityTable({ members }: { members: MemberRow[] }) {
   // Filter zurücksetzen → zurück zur ersten Seite
   useEffect(() => {
     setPage(1)
-  }, [search, filter, sortKey, sortDir])
+  }, [search, filter, sourceFilter, sortKey, sortDir])
 
   const filtered = useMemo(
     () =>
@@ -116,8 +151,12 @@ export function CommunityTable({ members }: { members: MemberRow[] }) {
             )
           if (filter === 'claimed') return !!m.claimed_at
           return m.skool_status === filter
+        })
+        .filter((m) => {
+          if (sourceFilter === 'all') return true
+          return (m.source ?? 'stripe') === sourceFilter
         }),
-    [members, search, filter]
+    [members, search, filter, sourceFilter]
   )
 
   const sorted = useMemo(() => {
@@ -403,6 +442,20 @@ export function CommunityTable({ members }: { members: MemberRow[] }) {
             <option value="invitable">Einladbar (aktiv, nicht registriert)</option>
             <option value="claimed">Registriert</option>
           </select>
+          <select
+            value={sourceFilter}
+            onChange={(e) =>
+              setSourceFilter(e.target.value as typeof sourceFilter)
+            }
+            className="px-4 py-2 rounded-lg bg-surface border border-border text-foreground focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent"
+            title="Filtern nach Herkunft"
+          >
+            <option value="all">Alle Quellen</option>
+            <option value="stripe">Stripe-Sync</option>
+            <option value="manual">Manuell</option>
+            <option value="csv">CSV-Import</option>
+            <option value="skool">Skool</option>
+          </select>
         </div>
         <div className="flex items-center gap-2">
           <select
@@ -509,13 +562,14 @@ export function CommunityTable({ members }: { members: MemberRow[] }) {
                 <th className="px-4 py-3">
                   <SortHeader column="claimed_at" label="Registriert" />
                 </th>
+                <th className="px-4 py-3 font-medium text-muted">Quelle</th>
                 <th className="px-4 py-3 font-medium text-right text-muted">Aktion</th>
               </tr>
             </thead>
             <tbody>
               {pageRows.length === 0 ? (
                 <tr>
-                  <td colSpan={7} className="px-4 py-10 text-center text-muted">
+                  <td colSpan={8} className="px-4 py-10 text-center text-muted">
                     Keine Einträge.
                   </td>
                 </tr>
@@ -562,6 +616,20 @@ export function CommunityTable({ members }: { members: MemberRow[] }) {
                         ) : (
                           '—'
                         )}
+                      </td>
+                      <td className="px-4 py-3">
+                        {(() => {
+                          const meta =
+                            SOURCE_META[m.source ?? 'unknown'] ?? SOURCE_META.unknown
+                          return (
+                            <span
+                              title={meta.title}
+                              className={`inline-flex items-center px-2 py-0.5 rounded-md text-xs font-medium ${meta.className}`}
+                            >
+                              {meta.label}
+                            </span>
+                          )
+                        })()}
                       </td>
                       <td className="px-4 py-3 text-right">
                         <div className="inline-flex items-center gap-1.5">
