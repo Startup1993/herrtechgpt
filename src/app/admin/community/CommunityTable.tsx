@@ -2,7 +2,7 @@
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { Loader2, Mail, CheckCircle2, Send } from 'lucide-react'
+import { Loader2, Mail, CheckCircle2, Send, RefreshCw } from 'lucide-react'
 
 type SkoolStatus = 'active' | 'alumni' | 'cancelled'
 
@@ -41,6 +41,8 @@ export function CommunityTable({ members }: { members: MemberRow[] }) {
   const [filter, setFilter] = useState<'all' | SkoolStatus | 'invitable' | 'claimed'>('all')
   const [loading, setLoading] = useState<string | null>(null)
   const [bulkBusy, setBulkBusy] = useState(false)
+  const [syncBusy, setSyncBusy] = useState(false)
+  const [syncDays, setSyncDays] = useState(90)
   const [message, setMessage] = useState<{ type: 'ok' | 'err'; text: string } | null>(null)
 
   const filtered = members
@@ -61,6 +63,42 @@ export function CommunityTable({ members }: { members: MemberRow[] }) {
   const invitableIds = members
     .filter((m) => m.skool_status === 'active' && !m.claimed_at)
     .map((m) => m.id)
+
+  async function runSync() {
+    if (
+      !confirm(
+        `Sync der letzten ${syncDays} Tage starten?\n\nLädt aus Stripe alle KI-Marketing-Club-Käufe, aktualisiert die Mitgliederliste und setzt abgelaufene Mitglieder auf Alumni.`
+      )
+    )
+      return
+    setSyncBusy(true)
+    setMessage(null)
+    try {
+      const res = await fetch('/api/admin/community/sync', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ days: syncDays }),
+      })
+      const data = await res.json().catch(() => null)
+      if (!res.ok) {
+        setMessage({ type: 'err', text: data?.error ?? 'Sync fehlgeschlagen' })
+      } else {
+        const parts = [
+          `${data.scanned} geprüft`,
+          `${data.matched} Skool-Käufe`,
+          `${data.upserted} synchronisiert`,
+        ]
+        if (data.expired) parts.push(`${data.expired} → Alumni`)
+        if (data.errors?.length) parts.push(`${data.errors.length} Fehler`)
+        setMessage({ type: 'ok', text: parts.join(' · ') })
+        router.refresh()
+      }
+    } catch {
+      setMessage({ type: 'err', text: 'Netzwerk-Fehler' })
+    } finally {
+      setSyncBusy(false)
+    }
+  }
 
   async function inviteMany(ids: string[], confirmText?: string) {
     if (ids.length === 0) return
@@ -117,19 +155,47 @@ export function CommunityTable({ members }: { members: MemberRow[] }) {
             <option value="claimed">Registriert</option>
           </select>
         </div>
-        <button
-          onClick={() =>
-            inviteMany(
-              invitableIds,
-              `${invitableIds.length} Einladungen verschicken?`
-            )
-          }
-          disabled={invitableIds.length === 0 || bulkBusy}
-          className="flex items-center gap-2 px-4 py-2 rounded-lg bg-primary hover:bg-primary-hover text-white font-medium text-sm transition disabled:opacity-50 disabled:cursor-not-allowed"
-        >
-          {bulkBusy ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
-          Alle einladbaren ({invitableIds.length})
-        </button>
+        <div className="flex items-center gap-2">
+          <select
+            value={syncDays}
+            onChange={(e) => setSyncDays(parseInt(e.target.value, 10))}
+            disabled={syncBusy}
+            className="px-2 py-2 rounded-lg bg-surface border border-border text-foreground text-xs focus:outline-none focus:ring-2 focus:ring-primary"
+            title="Wie weit zurück soll Stripe geprüft werden?"
+          >
+            <option value={30}>30 Tage</option>
+            <option value={90}>90 Tage</option>
+            <option value={180}>180 Tage</option>
+            <option value={365}>1 Jahr</option>
+            <option value={730}>2 Jahre</option>
+          </select>
+          <button
+            onClick={runSync}
+            disabled={syncBusy}
+            className="flex items-center gap-2 px-3 py-2 rounded-lg border border-border hover:bg-surface-hover text-foreground font-medium text-sm transition disabled:opacity-50"
+            title="Pullt Stripe-Käufe und cleant abgelaufene Mitglieder"
+          >
+            {syncBusy ? (
+              <Loader2 className="w-4 h-4 animate-spin" />
+            ) : (
+              <RefreshCw className="w-4 h-4" />
+            )}
+            Sync
+          </button>
+          <button
+            onClick={() =>
+              inviteMany(
+                invitableIds,
+                `${invitableIds.length} Einladungen verschicken?`
+              )
+            }
+            disabled={invitableIds.length === 0 || bulkBusy}
+            className="flex items-center gap-2 px-4 py-2 rounded-lg bg-primary hover:bg-primary-hover text-white font-medium text-sm transition disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            {bulkBusy ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
+            Alle einladbaren ({invitableIds.length})
+          </button>
+        </div>
       </div>
 
       {message && (

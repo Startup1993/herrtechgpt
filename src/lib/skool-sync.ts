@@ -436,6 +436,231 @@ export async function claimCommunityMember(
 }
 
 /**
+ * Voll-Sync: alle Stripe-Checkout-Sessions der letzten N Tage durchgehen,
+ * jede die zu einem aktiven Skool-Product passt, in community_members upserten,
+ * und am Schluss expireSkoolMembership für alle abgelaufenen laufen lassen.
+ *
+ * Wird von Admin-UI „Sync"-Button und vom Initial-Import-Script aufgerufen.
+ *
+ * Sicher gegen lange Laufzeit:
+ *  - max 1000 Sessions/Sync (≈ 10 Stripe-Pages)
+ *  - default Lookback 90 Tage
+ *  - berücksichtigt auch deaktivierte Products → so dass Bestandskäufe nicht
+ *    verloren gehen wenn ein Product später deaktiviert wird
+ */
+export async function syncSkoolMembersFromStripe(
+  admin: SupabaseClient,
+  opts: { days?: number; maxSessions?: number; includeInactive?: boolean } = {}
+): Promise<{
+  scanned: number
+  matched: number
+  upserted: number
+  expired: number
+  errors: Array<{ session?: string; member?: string; error: string }>
+}> {
+  const days = opts.days ?? 90
+  const maxSessions = opts.maxSessions ?? 1000
+  const since = Math.floor(Date.now() / 1000) - days * 86400
+  const stripe = getStripe()
+
+  // Whitelist laden — beim manuellen Sync auch deaktivierte berücksichtigen,
+  // damit Bestand nicht verloren geht
+  const { data: products } = await admin
+    .from('skool_stripe_products')
+    .select('stripe_product_id, label, access_days, active')
+  const productMap = new Map<string, SkoolProduct>(
+    (products ?? [])
+      .filter((p) => opts.includeInactive ?? true ? true : p.active)
+      .map((p) => [p.stripe_product_id, p as SkoolProduct])
+  )
+
+  if (productMap.size === 0) {
+    return {
+      scanned: 0,
+      matched: 0,
+      upserted: 0,
+      expired: 0,
+      errors: [{ error: 'Keine Skool-Products in der Whitelist' }],
+    }
+  }
+
+  const errors: Array<{ session?: string; member?: string; error: string }> = []
+  let scanned = 0
+  let matched = 0
+  let upserted = 0
+
+  // Per Customer aggregieren — pro Customer nur einmal upserten (jüngster Kauf gewinnt)
+  type Hit = {
+    sessionId: string
+    paymentIntentId: string | null
+    email: string
+    name: string | null
+    customerId: string
+    productId: string
+    priceId: string | null
+    accessDays: number
+    purchasedAt: Date
+  }
+  const perCustomer = new Map<string, Hit[]>()
+
+  let startingAfter: string | undefined = undefined
+  let pages = 0
+
+  while (scanned < maxSessions) {
+    const list = await stripe.checkout.sessions.list({
+      limit: 100,
+      starting_after: startingAfter,
+      created: { gte: since },
+    })
+    pages += 1
+    for (const s of list.data) {
+      scanned += 1
+      if (s.status !== 'complete') continue
+      if (s.mode !== 'payment') continue
+
+      try {
+        const items = await stripe.checkout.sessions.listLineItems(s.id, {
+          limit: 10,
+          expand: ['data.price.product'],
+        })
+        let hit: SkoolProduct | null = null
+        let priceId: string | null = null
+        for (const item of items.data) {
+          const product = item.price?.product
+          const pid =
+            typeof product === 'string'
+              ? product
+              : product && !product.deleted
+              ? product.id
+              : null
+          if (pid && productMap.has(pid)) {
+            hit = productMap.get(pid)!
+            priceId = item.price?.id ?? null
+            break
+          }
+        }
+        if (!hit) continue
+
+        const customerId =
+          typeof s.customer === 'string' ? s.customer : s.customer?.id ?? null
+        const email = s.customer_details?.email ?? s.customer_email ?? null
+        if (!customerId || !email) continue
+
+        const paymentIntentId =
+          typeof s.payment_intent === 'string'
+            ? s.payment_intent
+            : s.payment_intent?.id ?? null
+
+        matched += 1
+        const list = perCustomer.get(customerId) ?? []
+        list.push({
+          sessionId: s.id,
+          paymentIntentId,
+          email,
+          name: s.customer_details?.name ?? null,
+          customerId,
+          productId: hit.stripe_product_id,
+          priceId,
+          accessDays: hit.access_days,
+          purchasedAt: new Date((s.created ?? Date.now() / 1000) * 1000),
+        })
+        perCustomer.set(customerId, list)
+      } catch (err) {
+        errors.push({
+          session: s.id,
+          error: err instanceof Error ? err.message : String(err),
+        })
+      }
+    }
+    if (!list.has_more) break
+    startingAfter = list.data[list.data.length - 1].id
+    if (pages > 20) break
+  }
+
+  // Pro Customer: jüngsten Kauf nehmen, expires basierend darauf, purchase_count = Anzahl
+  for (const [customerId, hits] of perCustomer) {
+    hits.sort((a, b) => b.purchasedAt.getTime() - a.purchasedAt.getTime())
+    const latest = hits[0]
+    const oldest = hits[hits.length - 1]
+    const expires = new Date(
+      latest.purchasedAt.getTime() + latest.accessDays * 86400 * 1000
+    )
+    const status: 'active' | 'alumni' = expires > new Date() ? 'active' : 'alumni'
+
+    try {
+      // Upsert
+      const { data: existing } = await admin
+        .from('community_members')
+        .select('id, profile_id')
+        .eq('stripe_customer_id', customerId)
+        .maybeSingle()
+
+      const payload = {
+        stripe_customer_id: customerId,
+        email: latest.email.toLowerCase(),
+        name: latest.name,
+        skool_status: status,
+        skool_access_started_at: oldest.purchasedAt.toISOString(),
+        skool_access_expires_at: expires.toISOString(),
+        last_purchase_at: latest.purchasedAt.toISOString(),
+        last_stripe_product_id: latest.productId,
+        last_stripe_price_id: latest.priceId,
+        last_stripe_payment_intent: latest.paymentIntentId,
+        purchase_count: hits.length,
+      }
+
+      if (existing) {
+        await admin.from('community_members').update(payload).eq('id', existing.id)
+        // Plan S frisch halten wenn claimed + noch aktiv
+        if (existing.profile_id && status === 'active') {
+          await ensureSkoolPlanS(admin, {
+            profileId: existing.profile_id,
+            periodEnd: expires,
+          })
+        }
+      } else {
+        await admin.from('community_members').insert(payload)
+      }
+      upserted += 1
+    } catch (err) {
+      errors.push({
+        member: latest.email,
+        error: err instanceof Error ? err.message : String(err),
+      })
+    }
+  }
+
+  // Cleanup: alle abgelaufenen aktiven auf alumni setzen
+  const nowIso = new Date().toISOString()
+  const { data: toExpire } = await admin
+    .from('community_members')
+    .select('id')
+    .eq('skool_status', 'active')
+    .lt('skool_access_expires_at', nowIso)
+
+  let expiredCount = 0
+  for (const m of toExpire ?? []) {
+    try {
+      await expireSkoolMembership(admin, m.id)
+      expiredCount += 1
+    } catch (err) {
+      errors.push({
+        member: m.id,
+        error: err instanceof Error ? err.message : String(err),
+      })
+    }
+  }
+
+  return {
+    scanned,
+    matched,
+    upserted,
+    expired: expiredCount,
+    errors,
+  }
+}
+
+/**
  * Checkout-Session auswerten: prüft ob Skool-Produkt, wenn ja → recordSkoolPurchase.
  * Rückgabe: true = Skool-Kauf verarbeitet, false = nicht unser Fall.
  *
