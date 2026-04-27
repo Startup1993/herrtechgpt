@@ -1,6 +1,8 @@
 import { Resend } from 'resend'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { renderInviteEmail, renderNewsletterInviteEmail, renderSkoolInviteEmail } from './email-template'
+import { applyVariables } from './email-templates/registry'
+import { loadTemplate } from './email-templates/load'
 import { PRODUCTION_URL } from './urls'
 
 function getResend(): Resend | null {
@@ -22,6 +24,7 @@ function fromAddress(): string {
 export async function sendInvitationEmail(
   admin: SupabaseClient,
   email: string,
+  opts?: { firstName?: string | null },
 ): Promise<{ ok: true } | { ok: false; error: string }> {
   const { data, error } = await admin.auth.admin.generateLink({
     type: 'magiclink',
@@ -44,13 +47,14 @@ export async function sendInvitationEmail(
     return { ok: false, error: 'RESEND_API_KEY nicht konfiguriert' }
   }
 
-  const html = renderInviteEmail({ loginLink })
+  const tpl = await loadTemplate('admin_invite', admin)
+  const html = renderInviteEmail({ loginLink, firstName: opts?.firstName, content: tpl.data })
 
   try {
     await resend.emails.send({
       from: fromAddress(),
       to: email,
-      subject: 'Einladung in die Herr Tech World',
+      subject: applyVariables(tpl.subject, { loginLink, firstName: opts?.firstName ?? '' }),
       html,
     })
   } catch (err) {
@@ -87,13 +91,14 @@ export async function sendNewsletterInviteEmail(
     return { ok: false, error: 'RESEND_API_KEY nicht konfiguriert' }
   }
 
-  const html = renderNewsletterInviteEmail({ loginLink })
+  const tpl = await loadTemplate('newsletter_invite', admin)
+  const html = renderNewsletterInviteEmail({ loginLink, content: tpl.data })
 
   try {
     await resend.emails.send({
       from: fromAddress(),
       to: email,
-      subject: '🚀 Die Herr Tech World ist offen für dich.',
+      subject: applyVariables(tpl.subject, { loginLink }),
       html,
     })
   } catch (err) {
@@ -122,17 +127,23 @@ export async function sendSkoolInviteEmail(
     return { ok: false, error: 'RESEND_API_KEY nicht konfiguriert' }
   }
 
+  const mode = params.mode ?? 'active'
+  const tplKey = mode === 'alumni' ? 'skool_alumni' : 'skool_active'
+  const tpl = await loadTemplate(tplKey)
+
   const html = renderSkoolInviteEmail({
     claimLink,
     firstName: params.firstName,
     creditsPerMonth: params.creditsPerMonth,
-    mode: params.mode,
+    mode,
+    content: tpl.data,
   })
 
-  const subject =
-    params.mode === 'alumni'
-      ? 'Dein Alumni-Zugang zur Herr Tech World — Classroom lebenslang'
-      : 'Dein Zugang zur Herr Tech World — KI Marketing Club'
+  const subject = applyVariables(tpl.subject, {
+    claimLink,
+    firstName: params.firstName ?? '',
+    creditsPerMonth: params.creditsPerMonth ?? 200,
+  })
 
   try {
     await resend.emails.send({

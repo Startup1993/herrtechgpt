@@ -1,6 +1,8 @@
 import { Resend } from 'resend'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { renderEmail } from './email-template'
+import { applyVariables } from './email-templates/registry'
+import { loadTemplate } from './email-templates/load'
 import { PRODUCTION_URL } from './urls'
 
 function getResend(): Resend | null {
@@ -45,21 +47,24 @@ export async function notifyCommunityDowngrade({
     year: 'numeric',
   })
 
+  const tpl = await loadTemplate('community_downgrade', admin)
+  const vars = { endDate }
+
   const html = renderEmail({
-    heading: 'Deine Community-Mitgliedschaft ist beendet',
-    intro: `Hey,<br><br>dein Zugang zum KI Marketing Club wurde beendet.<br><br>Dein bestehendes Abo läuft noch bis zum <strong>${endDate}</strong> weiter — bis dahin hast du vollen Zugriff auf Herr Tech GPT und die KI Toolbox.<br><br>Danach endet das Abo automatisch. Du kannst jederzeit zu den regulären Alumni-Preisen neu abschließen. Dein Classroom-Zugang bleibt als Alumni lebenslang erhalten.`,
+    heading: applyVariables(tpl.data.heading ?? '', vars),
+    intro: applyVariables(tpl.data.intro ?? '', vars),
     cta: {
-      label: 'Neuen Plan wählen',
+      label: applyVariables(tpl.data.cta_label ?? 'Neuen Plan wählen', vars),
       href: `${PRODUCTION_URL}/dashboard/pricing`,
     },
-    footerNote: 'Keine Sorge — du verlierst keine Daten. Wir freuen uns, wenn du dabei bleibst.',
+    footerNote: applyVariables(tpl.data.footer_note ?? '', vars),
   })
 
   try {
     await resend.emails.send({
       from: fromAddress(),
       to: email,
-      subject: 'Deine Community-Mitgliedschaft ist beendet',
+      subject: applyVariables(tpl.subject, vars),
       html,
     })
   } catch (err) {
@@ -96,12 +101,14 @@ export async function notifyAdminsNewTicket({
 
   const ticketUrl = `${PRODUCTION_URL}/admin/tickets/${conversationId}`
 
+  const tpl = await loadTemplate('admin_new_ticket', admin)
+  const vars = { userEmail: escapeHtml(userEmail) }
+  const subjectVars = { userEmail }
+
   const html = renderEmail({
-    heading: 'Neues Support-Ticket',
-    intro: `
-      <p style="margin:0;"><strong>${escapeHtml(userEmail)}</strong> hat den Support-Chat aktiviert und wartet auf eine Antwort.</p>
-    `,
-    cta: { label: 'Ticket öffnen', href: ticketUrl },
+    heading: applyVariables(tpl.data.heading ?? '', vars),
+    intro: applyVariables(tpl.data.intro ?? '', vars),
+    cta: { label: applyVariables(tpl.data.cta_label ?? 'Ticket öffnen', vars), href: ticketUrl },
     preheader: `Neues Support-Ticket von ${userEmail}`,
   })
 
@@ -109,7 +116,7 @@ export async function notifyAdminsNewTicket({
     await resend.emails.send({
       from: fromAddress(),
       to: adminEmails,
-      subject: `Neues Support-Ticket von ${userEmail}`,
+      subject: applyVariables(tpl.subject, subjectVars),
       html,
     })
   } catch (err) {

@@ -1062,6 +1062,17 @@ function AdminSidebar({
           />
         </div>
 
+        <SectionHeader label="Kommunikation" />
+        <div className="space-y-1">
+          <NavItem
+            href="/admin/emails"
+            icon={Mail}
+            label="E-Mail-Templates"
+            description="Texte aller System-Mails anpassen"
+            isActive={pathname.startsWith('/admin/emails')}
+          />
+        </div>
+
         <SectionHeader label="Support" />
         <div className="space-y-1">
           <NavItem
