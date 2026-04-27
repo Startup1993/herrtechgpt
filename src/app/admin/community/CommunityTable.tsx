@@ -84,13 +84,17 @@ export function CommunityTable({ members }: { members: MemberRow[] }) {
         setMessage({ type: 'err', text: data?.error ?? 'Sync fehlgeschlagen' })
       } else {
         const parts = [
-          `${data.scanned} geprüft`,
-          `${data.matched} Skool-Käufe`,
-          `${data.upserted} synchronisiert`,
+          `${data.scanned} Stripe-Sessions geprüft`,
+          `${data.matched} davon waren Skool-Käufe`,
+          `${data.upserted} Mitglieder synchronisiert`,
         ]
-        if (data.expired) parts.push(`${data.expired} → Alumni`)
+        if (data.expired) parts.push(`${data.expired} auf Alumni gesetzt`)
         if (data.errors?.length) parts.push(`${data.errors.length} Fehler`)
-        setMessage({ type: 'ok', text: parts.join(' · ') })
+        const hint =
+          data.matched === 0 && data.scanned > 0
+            ? ' · Hinweis: keine Skool-Products getroffen — Product-IDs in Stripe checken oder weitere unter „Stripe-Produkte pflegen" hinzufügen.'
+            : ''
+        setMessage({ type: 'ok', text: parts.join(' · ') + hint })
         router.refresh()
       }
     } catch {
