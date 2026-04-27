@@ -50,7 +50,7 @@ export async function sendInvitationEmail(
     await resend.emails.send({
       from: fromAddress(),
       to: email,
-      subject: 'Dein Zugang zur Herr Tech World',
+      subject: 'Einladung in die Herr Tech World',
       html,
     })
   } catch (err) {
