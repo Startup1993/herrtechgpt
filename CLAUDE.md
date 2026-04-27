@@ -40,6 +40,8 @@ KI-Lern- und Coaching-Plattform für deutschsprachige Unternehmer. Powered by "H
 /admin/content/knowledge            → Wissensbasis verwalten
 /admin/content/videos               → Video-Sync-Status
 /admin/tickets                      → Support-Tickets
+/admin/emails                       → E-Mail-Templates editieren
+/admin/emails/[key]                 → Template-Editor + Live-Preview
 ```
 
 ## DB-Tabellen (Supabase)
@@ -51,6 +53,7 @@ KI-Lern- und Coaching-Plattform für deutschsprachige Unternehmer. Powered by "H
 - `pending_transcripts` — AssemblyAI Transkriptions-Queue
 - `sync_log` — Wistia-Sync-Protokoll
 - `agent_configs` — Agent-Konfigurationen (CRUD via Admin)
+- `email_templates` — Editierbare Texte aller System-Mails (siehe E-Mail-System)
 
 ## 6 KI-Agenten (`src/lib/agents.ts`)
 herr-tech (Standard), content-hook, funnel-monetization, personal-growth, ai-prompt, business-coach
@@ -72,6 +75,61 @@ herr-tech (Standard), content-hook, funnel-monetization, personal-growth, ai-pro
 - **Free (basic):** Classroom (Videos) ✅ | Chat ❌ | Toolbox ❌
 - **Premium:** Alles ✅
 - **Admin:** Alles ✅ + Admin-Bereich
+
+# E-Mail-System (WICHTIG für jeden neuen Chat)
+
+Alle System-Mails werden über **Resend** versendet und sind über `/admin/emails`
+durch Florian/Jacob editierbar — Subject, Headline, Intro-Text, CTA-Label,
+P.S. usw. Die HTML-Struktur (Logo, Feature-Liste, Footer) bleibt im Code.
+
+## Architektur
+- **Registry:** `src/lib/email-templates/registry.ts` — Single Source of Truth
+  für alle Templates. Definiert pro Template: `key`, `label`, `group`, `trigger`
+  (Beschreibung wann/wo die Mail rausgeht), `variables`, `fields` (editierbare
+  Felder mit Reihenfolge für UI), `defaults` (Subject + Daten als Code-Fallback).
+- **DB-Tabelle:** `email_templates` (key PK, subject, data jsonb, updated_at,
+  updated_by). Override pro Feld — leere Felder fallen auf Code-Default zurück.
+- **Loader:** `src/lib/email-templates/load.ts` — `loadTemplate(key)` merged
+  DB-Override mit Defaults aus Registry.
+- **Render:** `src/lib/email-template.ts` (Hero-Layouts) und `renderEmail()`
+  (Simple-Layout für System-Notifications). Render-Funktionen nehmen
+  `content: Record<string, string>` mit allen Texten — Variablen werden über
+  `applyVariables()` mit `{varname}` → Wert ersetzt.
+- **Versand:** `src/lib/invitations.ts` (Invites) und `src/lib/email.ts`
+  (System-Notifications). Beide laden vor jedem Send das Template via
+  `loadTemplate(key)`.
+- **Admin-UI:** `/admin/emails` (Liste) + `/admin/emails/[key]` (Editor mit
+  Live-Preview-iframe). API: `/api/admin/emails` (PUT/DELETE) +
+  `/api/admin/emails/preview` (POST, rendert mit Beispieldaten).
+
+## ⚠ REGEL: Wenn du eine neue System-Mail anlegst, IMMER auch Template-Eintrag
+
+Sobald du eine neue Mail-Versand-Funktion baust (egal ob Resend oder anderer
+Provider), MUSST du in einem Schritt:
+
+1. **Registry erweitern** — Neuen Eintrag in `TEMPLATES` in
+   `src/lib/email-templates/registry.ts` mit:
+   - eindeutigem `key` (snake_case)
+   - `label` (Anzeige im Admin-Menü)
+   - `group` (`'invites'` oder `'system'` — oder neue Gruppe in
+     `TEMPLATE_GROUPS`)
+   - `trigger` (volle Beschreibung wann/wo die Mail rausgeht — Florian liest
+     das in der Admin-Übersicht!)
+   - `variables` (alle `{var}`-Platzhalter mit Erklärung)
+   - `fields` (editierbare Felder, Reihenfolge bestimmt UI)
+   - `defaults.subject` + `defaults.data` (alle Default-Texte)
+   - `preview` (Beispielwerte für Live-Preview)
+2. **Render-Funktion** — Render-Funktion akzeptiert `content: Record<string, string>`
+   und nutzt `applyVariables(text, vars)` für Platzhalter-Ersetzung.
+3. **Send-Funktion** — Lädt Template via `loadTemplate(key)` vor dem Versand,
+   übergibt `tpl.data` als `content` an Render und `tpl.subject` (mit
+   `applyVariables`) als Subject.
+4. **Preview-Endpoint** — Neuen `case key:` in
+   `src/app/api/admin/emails/preview/route.ts` ergänzen, sonst funktioniert die
+   Live-Preview nicht.
+
+Ohne diese Schritte taucht die Mail NICHT in `/admin/emails` auf und Florian
+kann sie nicht editieren. Das ist immer Teil der Aufgabe — nicht "danach noch".
 
 # Git-Kollaboration (Jacob & Jonas)
 
