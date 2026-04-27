@@ -1,3 +1,5 @@
+import Link from 'next/link'
+import { Settings } from 'lucide-react'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { CommunityTable } from './CommunityTable'
 
@@ -36,11 +38,20 @@ export default async function AdminCommunityPage() {
 
   return (
     <div className="p-4 sm:p-8 max-w-6xl mx-auto">
-      <div className="mb-6">
-        <h1 className="text-2xl font-bold text-foreground">KI Marketing Club</h1>
-        <p className="text-sm text-muted mt-1">
-          {members.length} Mitglieder · {activeCount} aktiv · {alumniCount} Alumni · {claimedCount} registriert · {invitableCount} einladbar
-        </p>
+      <div className="mb-6 flex items-start justify-between gap-4 flex-wrap">
+        <div>
+          <h1 className="text-2xl font-bold text-foreground">KI Marketing Club</h1>
+          <p className="text-sm text-muted mt-1">
+            {members.length} Mitglieder · {activeCount} aktiv · {alumniCount} Alumni · {claimedCount} registriert · {invitableCount} einladbar
+          </p>
+        </div>
+        <Link
+          href="/admin/community/products"
+          className="inline-flex items-center gap-2 px-3 py-2 rounded-lg border border-border hover:bg-surface-hover text-foreground text-sm transition"
+        >
+          <Settings className="w-4 h-4" />
+          Stripe-Produkte pflegen
+        </Link>
       </div>
       <CommunityTable members={members} />
     </div>
