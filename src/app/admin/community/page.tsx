@@ -1,0 +1,48 @@
+import { createAdminClient } from '@/lib/supabase/admin'
+import { CommunityTable } from './CommunityTable'
+
+export const dynamic = 'force-dynamic'
+
+type MemberRow = {
+  id: string
+  email: string
+  name: string | null
+  skool_status: 'active' | 'alumni' | 'cancelled'
+  skool_access_expires_at: string | null
+  last_purchase_at: string | null
+  purchase_count: number
+  invitation_sent_count: number
+  last_invited_at: string | null
+  claimed_at: string | null
+  created_at: string
+}
+
+export default async function AdminCommunityPage() {
+  const admin = createAdminClient()
+  const { data } = await admin
+    .from('community_members')
+    .select(
+      'id, email, name, skool_status, skool_access_expires_at, last_purchase_at, purchase_count, invitation_sent_count, last_invited_at, claimed_at, created_at'
+    )
+    .order('created_at', { ascending: false })
+
+  const members = (data ?? []) as MemberRow[]
+  const activeCount = members.filter((m) => m.skool_status === 'active').length
+  const alumniCount = members.filter((m) => m.skool_status === 'alumni').length
+  const claimedCount = members.filter((m) => m.claimed_at).length
+  const invitableCount = members.filter(
+    (m) => m.skool_status === 'active' && !m.claimed_at
+  ).length
+
+  return (
+    <div className="p-4 sm:p-8 max-w-6xl mx-auto">
+      <div className="mb-6">
+        <h1 className="text-2xl font-bold text-foreground">KI Marketing Club</h1>
+        <p className="text-sm text-muted mt-1">
+          {members.length} Mitglieder · {activeCount} aktiv · {alumniCount} Alumni · {claimedCount} registriert · {invitableCount} einladbar
+        </p>
+      </div>
+      <CommunityTable members={members} />
+    </div>
+  )
+}
