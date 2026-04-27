@@ -254,11 +254,87 @@ export async function ensureSkoolPlanS(
 }
 
 /**
- * Beendet Skool-Zugang (Alumni-Werden).
+ * Refund-Case: Mitglied wollte raus, hat Geld zurück.
+ *  - Wenn nicht claimed (nie registriert) → community_members-Eintrag löschen
+ *  - Wenn claimed → status='cancelled' (NICHT alumni!),
+ *    Plan S beenden, access_tier='basic' (Gast/Upgrade-Pfad,
+ *    KEIN lebenslanger Classroom-Zugang).
+ *
+ * Wichtig: alumni ist für saubere 12-Monats-Abläufe reserviert.
+ * Refund ist semantisch was anderes — der User hat aktiv abgelehnt.
+ */
+export async function cancelSkoolMembership(
+  admin: SupabaseClient,
+  communityMemberId: string
+): Promise<{ deleted: boolean; cancelled: boolean }> {
+  const { data: member } = await admin
+    .from('community_members')
+    .select('id, profile_id, skool_status')
+    .eq('id', communityMemberId)
+    .maybeSingle()
+
+  if (!member) return { deleted: false, cancelled: false }
+
+  // Nicht claimed → komplett raus
+  if (!member.profile_id) {
+    await admin.from('community_members').delete().eq('id', member.id)
+    return { deleted: true, cancelled: false }
+  }
+
+  // Claimed → cancelled markieren
+  if (member.skool_status !== 'cancelled') {
+    await admin
+      .from('community_members')
+      .update({ skool_status: 'cancelled' })
+      .eq('id', member.id)
+  }
+
+  // Skool-Community-Sub beenden (falls aktiv)
+  const { data: skoolSub } = await admin
+    .from('subscriptions')
+    .select('id')
+    .eq('user_id', member.profile_id)
+    .eq('plan_source', 'skool_community')
+    .in('status', ['active', 'trialing', 'past_due'])
+    .maybeSingle()
+
+  if (skoolSub) {
+    await admin
+      .from('subscriptions')
+      .update({
+        status: 'ended',
+        ended_at: new Date().toISOString(),
+      })
+      .eq('id', skoolSub.id)
+  }
+
+  // access_tier auf 'basic' zurücksetzen (nicht alumni!) —
+  // nur wenn aktuell premium und keine andere aktive paid Sub vorhanden
+  const { data: otherActive } = await admin
+    .from('subscriptions')
+    .select('id')
+    .eq('user_id', member.profile_id)
+    .in('status', ['active', 'trialing', 'past_due'])
+    .limit(1)
+    .maybeSingle()
+
+  if (!otherActive) {
+    await admin
+      .from('profiles')
+      .update({ access_tier: 'basic' })
+      .eq('id', member.profile_id)
+      .eq('access_tier', 'premium')
+  }
+
+  return { deleted: false, cancelled: true }
+}
+
+/**
+ * Beendet Skool-Zugang (Alumni-Werden, NACH 12-Monats-Ablauf).
  * - community_members.skool_status = 'alumni'
  * - Wenn profile_id vorhanden und Plan S aus Skool → beenden
- * - access_tier von 'premium' auf 'alumni' zurücksetzen (nur wenn keine
- *   andere aktive Sub vorhanden)
+ * - access_tier von 'premium' auf 'alumni' zurücksetzen (Classroom
+ *   bleibt lebenslang erhalten — das ist der Unterschied zu cancel).
  */
 export async function expireSkoolMembership(
   admin: SupabaseClient,
@@ -460,6 +536,7 @@ export async function syncSkoolMembersFromStripe(
     subscriptions: { scanned: number; matched: number; capped: boolean }
     invoices: { scanned: number; matched: number; capped: boolean }
   }
+  refunds: { detected: number; cleaned_up: number }
   errors: Array<{ session?: string; member?: string; error: string }>
 }> {
   const days = opts.days ?? 90
@@ -494,6 +571,7 @@ export async function syncSkoolMembersFromStripe(
         subscriptions: { scanned: 0, matched: 0, capped: false },
         invoices: { scanned: 0, matched: 0, capped: false },
       },
+      refunds: { detected: 0, cleaned_up: 0 },
       errors: [{ error: 'Keine Skool-Products in der Whitelist' }],
     }
   }
@@ -899,32 +977,42 @@ export async function syncSkoolMembersFromStripe(
     // Payloads bauen (pro Customer jüngsten Kauf bestimmt expires)
     const payloads: Array<Record<string, unknown>> = []
     const planSReactivations: Array<{ profileId: string; periodEnd: Date }> = []
+    // Refund-Cases werden separat behandelt (cancel oder delete statt upsert)
+    const refundCancelMemberIds: string[] = []
 
     for (const [customerId, hits] of perCustomer) {
       hits.sort((a, b) => b.purchasedAt.getTime() - a.purchasedAt.getTime())
       const latest = hits[0]
       const oldest = hits[hits.length - 1]
-      let newExpires = new Date(
+      const newExpires = new Date(
         latest.purchasedAt.getTime() + latest.accessDays * 86400 * 1000
       )
 
-      // Refund-Check: wenn der jüngste Refund NACH dem letzten Kauf liegt,
-      // wurde der Zugang storniert. Expiry auf Refund-Datum setzen → alumni.
       const refund = refundsByCustomer.get(customerId)
       const refunded = refund && refund.date > latest.purchasedAt
+      const existing = existingMap.get(customerId)
+
       if (refunded) {
-        newExpires = refund.date
+        // Refund-Case: NICHT als alumni speichern. User wollte raus.
+        if (existing) {
+          // In DB → cancel/delete (cancelSkoolMembership entscheidet je
+          // nach claimed/nicht-claimed)
+          refundCancelMemberIds.push(existing.id)
+        }
+        // Nicht in DB → gar nicht erst anlegen
+        continue
       }
 
-      // Bestehendes Expiry nicht verkürzen (bei mehrfachem Sync stabil bleiben)
-      // — außer es gab einen Refund, dann zählt der Refund-Tag.
-      const existing = existingMap.get(customerId)
+      // Normaler Fall: kein Refund, oder Refund VOR jüngstem Kauf
+      // (= User hat refund bekommen, dann später wieder neu gekauft)
       const finalExpires =
-        !refunded &&
         existing?.skool_access_expires_at &&
         new Date(existing.skool_access_expires_at) > newExpires
           ? new Date(existing.skool_access_expires_at)
           : newExpires
+      // alumni nur durch saubere 12-Monats-Abläufe; in der Aggregation
+      // zählt status='active', wenn finalExpires noch in der Zukunft liegt,
+      // sonst 'alumni' (das ist dann ein echter, sauberer Ablauf).
       const status: 'active' | 'alumni' = finalExpires > new Date() ? 'active' : 'alumni'
 
       payloads.push({
@@ -974,9 +1062,62 @@ export async function syncSkoolMembersFromStripe(
         })
       }
     }
+
+    // Refund-Cases aus dem Aggregations-Loop abarbeiten
+    for (const memberId of refundCancelMemberIds) {
+      try {
+        await cancelSkoolMembership(admin, memberId)
+      } catch (err) {
+        errors.push({
+          member: memberId,
+          error: err instanceof Error ? err.message : String(err),
+        })
+      }
+    }
+  }
+
+  // ─── Refund-Cleanup: existing members mit Refund, die NICHT in perCustomer sind ──
+  // Fängt alte Refund-Fälle, die zuvor fälschlich als alumni markiert wurden,
+  // und Customers ohne neuen Kauf in der Lookback-Periode.
+  const refundCustomerIds = [...refundsByCustomer.keys()].filter(
+    (id) => !perCustomer.has(id)
+  )
+  let refundCleanedCount = 0
+  if (refundCustomerIds.length > 0) {
+    const READ_BATCH = 500
+    const toCancelOrDelete: string[] = []
+    for (let i = 0; i < refundCustomerIds.length; i += READ_BATCH) {
+      const batch = refundCustomerIds.slice(i, i + READ_BATCH)
+      const { data: rows } = await admin
+        .from('community_members')
+        .select('id, stripe_customer_id, last_purchase_at, skool_status')
+        .in('stripe_customer_id', batch)
+      for (const row of rows ?? []) {
+        if (row.skool_status === 'cancelled') continue
+        const refund = refundsByCustomer.get(row.stripe_customer_id as string)
+        if (!refund) continue
+        const lastPurchase = row.last_purchase_at
+          ? new Date(row.last_purchase_at)
+          : new Date(0)
+        if (refund.date <= lastPurchase) continue
+        toCancelOrDelete.push(row.id)
+      }
+    }
+    for (const memberId of toCancelOrDelete) {
+      try {
+        await cancelSkoolMembership(admin, memberId)
+        refundCleanedCount += 1
+      } catch (err) {
+        errors.push({
+          member: memberId,
+          error: err instanceof Error ? err.message : String(err),
+        })
+      }
+    }
   }
 
   // Cleanup: alle abgelaufenen aktiven auf alumni setzen
+  // (NUR der saubere 12-Monats-Ablauf — Refund-Cases sind oben raus)
   const nowIso = new Date().toISOString()
   const { data: toExpire } = await admin
     .from('community_members')
@@ -1006,6 +1147,10 @@ export async function syncSkoolMembersFromStripe(
       sessions: { scanned: sessionsScanned, matched: sessionsMatched, capped: sessionsCapped },
       subscriptions: { scanned: subsScanned, matched: subsMatched, capped: subsCapped },
       invoices: { scanned: invScanned, matched: invMatched, capped: invCapped },
+    },
+    refunds: {
+      detected: refundsByCustomer.size,
+      cleaned_up: refundCleanedCount,
     },
     errors,
   }

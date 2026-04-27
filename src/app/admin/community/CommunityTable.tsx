@@ -36,7 +36,11 @@ type MemberRow = {
 const STATUS_META: Record<SkoolStatus, { label: string; dot: string; text: string }> = {
   active: { label: 'Aktiv', dot: 'bg-green-500', text: 'text-green-600 dark:text-green-400' },
   alumni: { label: 'Alumni', dot: 'bg-amber-400', text: 'text-amber-700 dark:text-amber-400' },
-  cancelled: { label: 'Gekündigt', dot: 'bg-gray-400', text: 'text-muted' },
+  cancelled: {
+    label: 'Refunded',
+    dot: 'bg-red-400',
+    text: 'text-red-600 dark:text-red-400',
+  },
 }
 
 function formatDate(iso: string | null): string {
@@ -249,6 +253,7 @@ export function CommunityTable({ members }: { members: MemberRow[] }) {
               subscriptions: { scanned: number; matched: number; capped: boolean }
               invoices: { scanned: number; matched: number; capped: boolean }
             }
+            refunds?: { detected: number; cleaned_up: number }
           }
         | null = null
       try {
@@ -270,6 +275,9 @@ export function CommunityTable({ members }: { members: MemberRow[] }) {
           `${data.upserted ?? 0} Mitglieder synchronisiert`,
         ]
         if (data.expired) summary.push(`${data.expired} auf Alumni gesetzt`)
+        if (data.refunds?.cleaned_up) {
+          summary.push(`${data.refunds.cleaned_up} Refunds bereinigt`)
+        }
         if (data.errors?.length) summary.push(`${data.errors.length} Fehler`)
 
         const phase = data.by_phase
@@ -380,7 +388,7 @@ export function CommunityTable({ members }: { members: MemberRow[] }) {
             <option value="all">Alle</option>
             <option value="active">Aktive Mitglieder</option>
             <option value="alumni">Alumni</option>
-            <option value="cancelled">Gekündigt</option>
+            <option value="cancelled">Refunded</option>
             <option value="invitable">Einladbar (aktiv, nicht registriert)</option>
             <option value="claimed">Registriert</option>
           </select>
