@@ -227,6 +227,14 @@ function UserMenu({ userEmail, userName }: { userEmail: string; userName: string
               <Settings size={15} className="text-muted" />
               Einstellungen
             </Link>
+            <Link
+              href="/dashboard/account/billing"
+              onClick={() => setOpen(false)}
+              className="flex items-center gap-2.5 px-4 py-2.5 text-sm text-foreground hover:bg-surface-hover transition-colors"
+            >
+              <CreditCard size={15} className="text-muted" />
+              Abrechnung & Abo
+            </Link>
           </div>
           <div className="border-t border-border py-1">
             <button
@@ -981,6 +989,13 @@ function AdminSidebar({
             description="Coming-Soon-Signups + Einladungen"
             isActive={pathname.startsWith('/admin/newsletter')}
           />
+          <NavItem
+            href="/admin/community"
+            icon={Users}
+            label="Club-Mitglieder"
+            description="Skool-Sync + Einladungen"
+            isActive={pathname.startsWith('/admin/community')}
+          />
         </div>
 
         <SectionHeader label="Inhalte" />
@@ -1044,6 +1059,17 @@ function AdminSidebar({
             label="Credits"
             description="Kosten pro Aktion, Top-ups"
             isActive={pathname.startsWith('/admin/monetization/credits')}
+          />
+        </div>
+
+        <SectionHeader label="Kommunikation" />
+        <div className="space-y-1">
+          <NavItem
+            href="/admin/emails"
+            icon={Mail}
+            label="E-Mail-Templates"
+            description="Texte aller System-Mails anpassen"
+            isActive={pathname.startsWith('/admin/emails')}
           />
         </div>
 

@@ -3,10 +3,12 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import { NextResponse } from 'next/server'
 import { handleAccessTierChange } from '@/lib/monetization'
 import { notifyCommunityDowngrade } from '@/lib/email'
+import { sendInvitationEmail, recordInvitationSent } from '@/lib/invitations'
 import type { AccessTier } from '@/lib/access'
 
 const VALID_ROLES = ['user', 'admin'] as const
 const VALID_TIERS = ['basic', 'alumni', 'premium'] as const
+const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 
 const PROFILE_TEXT_FIELDS = [
   'background',
@@ -26,6 +28,80 @@ async function requireAdmin() {
   if (!profile || profile.role !== 'admin') return null
 
   return user
+}
+
+export async function POST(request: Request) {
+  const adminUser = await requireAdmin()
+  if (!adminUser) return NextResponse.json({ error: 'Unauthorized' }, { status: 403 })
+
+  const body = await request.json().catch(() => null) as {
+    email?: unknown
+    access_tier?: unknown
+    role?: unknown
+    send_invite?: unknown
+  } | null
+  if (!body) return NextResponse.json({ error: 'Invalid JSON' }, { status: 400 })
+
+  const emailRaw = typeof body.email === 'string' ? body.email.trim().toLowerCase() : ''
+  if (!EMAIL_REGEX.test(emailRaw)) {
+    return NextResponse.json({ error: 'Ungültige E-Mail-Adresse' }, { status: 400 })
+  }
+  const tier = typeof body.access_tier === 'string' && VALID_TIERS.includes(body.access_tier as AccessTier)
+    ? (body.access_tier as AccessTier)
+    : 'basic'
+  const role = typeof body.role === 'string' && VALID_ROLES.includes(body.role as 'user' | 'admin')
+    ? (body.role as 'user' | 'admin')
+    : 'user'
+  const sendInvite = body.send_invite !== false
+
+  const admin = createAdminClient()
+
+  const { data: existingPage } = await admin.auth.admin.listUsers({ perPage: 1000 })
+  const existing = existingPage?.users?.find((u) => u.email?.toLowerCase() === emailRaw)
+  if (existing) {
+    return NextResponse.json({ error: 'Nutzer mit dieser E-Mail existiert bereits' }, { status: 409 })
+  }
+
+  const { data: created, error: createError } = await admin.auth.admin.createUser({
+    email: emailRaw,
+    email_confirm: true,
+  })
+  if (createError || !created.user) {
+    return NextResponse.json({ error: createError?.message ?? 'Anlegen fehlgeschlagen' }, { status: 500 })
+  }
+  const userId = created.user.id
+
+  const { error: profileError } = await admin
+    .from('profiles')
+    .update({
+      role,
+      access_tier: tier,
+      updated_at: new Date().toISOString(),
+    })
+    .eq('id', userId)
+  if (profileError) {
+    return NextResponse.json({ error: `Profil-Update: ${profileError.message}` }, { status: 500 })
+  }
+
+  let inviteSent = false
+  let inviteError: string | null = null
+  if (sendInvite) {
+    const res = await sendInvitationEmail(admin, emailRaw)
+    if (res.ok) {
+      await recordInvitationSent(admin, userId)
+      inviteSent = true
+    } else {
+      inviteError = res.error
+    }
+  }
+
+  return NextResponse.json({
+    success: true,
+    userId,
+    email: emailRaw,
+    invite_sent: inviteSent,
+    invite_error: inviteError,
+  })
 }
 
 export async function PATCH(request: Request) {

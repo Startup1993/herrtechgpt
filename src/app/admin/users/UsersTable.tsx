@@ -3,6 +3,8 @@
 import { useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { CsvImportModal } from './CsvImportModal'
+import { CreateUserModal } from './CreateUserModal'
+import { Plus } from 'lucide-react'
 
 type AccessTier = 'basic' | 'alumni' | 'premium'
 type UserStatus = 'active' | 'invited' | 'added'
@@ -19,9 +21,12 @@ interface SubscriptionInfo {
   current_period_end: string | null
 }
 
+type CommunitySource = 'stripe' | 'manual' | 'csv' | 'skool' | null
+
 interface UserRow {
   id: string
   email: string
+  full_name: string | null
   role: 'user' | 'admin'
   access_tier: AccessTier
   created_at: string
@@ -30,6 +35,38 @@ interface UserRow {
   has_logged_in: boolean
   invitation_sent_count: number
   subscription: SubscriptionInfo | null
+  community_source: CommunitySource
+}
+
+const SOURCE_META: Record<
+  Exclude<CommunitySource, null> | 'unknown',
+  { label: string; className: string; title: string }
+> = {
+  stripe: {
+    label: 'Stripe',
+    className: 'bg-blue-50 text-blue-700 dark:bg-blue-950/30 dark:text-blue-400',
+    title: 'Aus KMC-Stripe-Sync importiert',
+  },
+  manual: {
+    label: 'Manuell',
+    className: 'bg-purple-50 text-purple-700 dark:bg-purple-950/30 dark:text-purple-400',
+    title: 'Vom Admin manuell hinzugefügt',
+  },
+  csv: {
+    label: 'CSV',
+    className: 'bg-amber-50 text-amber-700 dark:bg-amber-950/30 dark:text-amber-400',
+    title: 'Aus CSV-Datei importiert',
+  },
+  skool: {
+    label: 'Skool',
+    className: 'bg-green-50 text-green-700 dark:bg-green-950/30 dark:text-green-400',
+    title: 'Direkt aus Skool importiert',
+  },
+  unknown: {
+    label: 'Self-Signup',
+    className: 'bg-surface-secondary text-muted',
+    title: 'Direkt registriert (kein Skool-Eintrag)',
+  },
 }
 
 type TierFilter = 'all' | AccessTier
@@ -92,9 +129,13 @@ export default function UsersTable({ users }: { users: UserRow[] }) {
   const [filterStatus, setFilterStatus] = useState<StatusFilter>('all')
   const [filterRole, setFilterRole] = useState<RoleFilter>('all')
   const [filterSub, setFilterSub] = useState<SubFilter>('all')
+  const [filterSource, setFilterSource] = useState<
+    'all' | Exclude<CommunitySource, null> | 'self'
+  >('all')
   const [sortKey, setSortKey] = useState<SortKey>('created_at')
   const [sortDir, setSortDir] = useState<SortDir>('desc')
   const [importOpen, setImportOpen] = useState(false)
+  const [createOpen, setCreateOpen] = useState(false)
 
   const withStatus = useMemo(
     () => users.map((u) => ({ ...u, _status: computeStatus(u) as UserStatus })),
@@ -117,12 +158,21 @@ export default function UsersTable({ users }: { users: UserRow[] }) {
   const filtered = useMemo(() => {
     const q = search.toLowerCase()
     return withStatus
-      .filter((u) => u.email.toLowerCase().includes(q))
+      .filter(
+        (u) =>
+          u.email.toLowerCase().includes(q) ||
+          (u.full_name ?? '').toLowerCase().includes(q)
+      )
       .filter((u) => filterTier === 'all' || u.access_tier === filterTier)
       .filter((u) => filterStatus === 'all' || u._status === filterStatus)
       .filter((u) => filterRole === 'all' || u.role === filterRole)
       .filter((u) => matchesSubFilter(u.subscription, filterSub))
-  }, [withStatus, search, filterTier, filterStatus, filterRole, filterSub])
+      .filter((u) => {
+        if (filterSource === 'all') return true
+        if (filterSource === 'self') return u.community_source == null
+        return u.community_source === filterSource
+      })
+  }, [withStatus, search, filterTier, filterStatus, filterRole, filterSub, filterSource])
 
   const sorted = useMemo(() => {
     const tierRank: Record<AccessTier, number> = { basic: 0, alumni: 1, premium: 2 }
@@ -169,12 +219,14 @@ export default function UsersTable({ users }: { users: UserRow[] }) {
     setFilterStatus('all')
     setFilterRole('all')
     setFilterSub('all')
+    setFilterSource('all')
   }
 
   const filtersActive =
     search !== '' ||
     filterTier !== 'all' ||
     filterStatus !== 'all' ||
+    filterSource !== 'all' ||
     filterRole !== 'all' ||
     filterSub !== 'all'
 
@@ -245,8 +297,15 @@ export default function UsersTable({ users }: { users: UserRow[] }) {
           />
         </div>
         <button
+          onClick={() => setCreateOpen(true)}
+          className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium bg-primary text-white hover:bg-primary-hover transition-colors whitespace-nowrap"
+        >
+          <Plus size={15} />
+          Nutzer hinzufügen
+        </button>
+        <button
           onClick={() => setImportOpen(true)}
-          className="px-3 py-2 rounded-lg text-sm font-medium bg-primary text-white hover:bg-primary-hover transition-colors whitespace-nowrap"
+          className="px-3 py-2 rounded-lg text-sm font-medium border border-border bg-surface text-foreground hover:bg-surface-secondary transition-colors whitespace-nowrap"
         >
           CSV importieren
         </button>
@@ -302,6 +361,23 @@ export default function UsersTable({ users }: { users: UserRow[] }) {
           ]}
         />
         <FilterSelect
+          label="Quelle"
+          value={filterSource}
+          onChange={(v) =>
+            setFilterSource(
+              v as 'all' | Exclude<CommunitySource, null> | 'self'
+            )
+          }
+          options={[
+            { value: 'all', label: 'Alle' },
+            { value: 'stripe', label: 'Stripe-Sync' },
+            { value: 'manual', label: 'Manuell' },
+            { value: 'csv', label: 'CSV-Import' },
+            { value: 'skool', label: 'Skool' },
+            { value: 'self', label: 'Self-Signup (kein KMC)' },
+          ]}
+        />
+        <FilterSelect
           label="Sortierung"
           value={`${sortKey}:${sortDir}`}
           onChange={(v) => {
@@ -341,25 +417,35 @@ export default function UsersTable({ users }: { users: UserRow[] }) {
         }}
       />
 
+      <CreateUserModal
+        open={createOpen}
+        onClose={() => setCreateOpen(false)}
+        onDone={() => {
+          setCreateOpen(false)
+          router.refresh()
+        }}
+      />
+
       {/* Tabelle */}
-      <div className="bg-surface border border-border rounded-xl overflow-hidden">
-        <table className="w-full text-sm">
+      <div className="bg-surface border border-border rounded-xl overflow-x-auto">
+        <table className="w-full min-w-[900px] text-sm">
           <thead>
             <tr className="border-b border-border bg-surface-secondary">
-              <SortableTh label="E-Mail" sortKey="email" current={sortKey} dir={sortDir} onClick={toggleSort} align="left" />
+              <SortableTh label="Name / E-Mail" sortKey="email" current={sortKey} dir={sortDir} onClick={toggleSort} align="left" />
               <SortableTh label="Zugang" sortKey="access_tier" current={sortKey} dir={sortDir} onClick={toggleSort} align="left" />
               <SortableTh label="Abo" sortKey="subscription" current={sortKey} dir={sortDir} onClick={toggleSort} align="left" />
               <SortableTh label="Registriert" sortKey="created_at" current={sortKey} dir={sortDir} onClick={toggleSort} align="left" />
               <SortableTh label="Status" sortKey="last_active" current={sortKey} dir={sortDir} onClick={toggleSort} align="left" />
               <SortableTh label="Chats" sortKey="conversation_count" current={sortKey} dir={sortDir} onClick={toggleSort} align="center" />
               <th className="text-left px-4 py-3 text-xs font-semibold text-muted uppercase tracking-wider">Rolle</th>
+              <th className="text-left px-4 py-3 text-xs font-semibold text-muted uppercase tracking-wider">Quelle</th>
               <th className="px-4 py-3" />
             </tr>
           </thead>
           <tbody className="divide-y divide-border">
             {sorted.length === 0 && (
               <tr>
-                <td colSpan={8} className="px-5 py-8 text-center text-sm text-muted">
+                <td colSpan={9} className="px-5 py-8 text-center text-sm text-muted">
                   Keine Nutzer gefunden.
                 </td>
               </tr>
@@ -373,24 +459,35 @@ export default function UsersTable({ users }: { users: UserRow[] }) {
                   className="hover:bg-surface-secondary/50 transition-colors cursor-pointer"
                   onClick={() => router.push(`/admin/users/${u.id}`)}
                 >
-                  <td className="px-5 py-3.5">
-                    <span className="font-medium text-foreground underline decoration-transparent hover:decoration-primary transition-colors">{u.email}</span>
+                  <td className="px-5 py-3.5 whitespace-nowrap">
+                    {u.full_name ? (
+                      <>
+                        <div className="font-medium text-foreground underline decoration-transparent hover:decoration-primary transition-colors">
+                          {u.full_name}
+                        </div>
+                        <div className="text-xs text-muted">{u.email}</div>
+                      </>
+                    ) : (
+                      <span className="font-medium text-foreground underline decoration-transparent hover:decoration-primary transition-colors">
+                        {u.email}
+                      </span>
+                    )}
                   </td>
-                  <td className="px-4 py-3.5">
-                    <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium ${tier.className}`}>
+                  <td className="px-4 py-3.5 whitespace-nowrap">
+                    <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium whitespace-nowrap ${tier.className}`}>
                       {tier.label}
                     </span>
                   </td>
-                  <td className="px-4 py-3.5">
+                  <td className="px-4 py-3.5 whitespace-nowrap">
                     <SubscriptionBadge sub={u.subscription} />
                   </td>
-                  <td className="px-4 py-3.5 text-xs text-muted">{formatDate(u.created_at)}</td>
-                  <td className="px-4 py-3.5">
+                  <td className="px-4 py-3.5 whitespace-nowrap text-xs text-muted">{formatDate(u.created_at)}</td>
+                  <td className="px-4 py-3.5 whitespace-nowrap">
                     <div className="flex items-center gap-2">
                       <span className={`w-2 h-2 rounded-full shrink-0 ${status.dot}`} />
                       <div className="flex flex-col min-w-0">
                         <span className={`text-xs font-medium ${status.text}`}>{status.label}</span>
-                        <span className="text-[11px] text-muted truncate">
+                        <span className="text-[11px] text-muted">
                           {u._status === 'active'
                             ? timeAgo(u.last_active)
                             : u._status === 'invited'
@@ -400,15 +497,30 @@ export default function UsersTable({ users }: { users: UserRow[] }) {
                       </div>
                     </div>
                   </td>
-                  <td className="px-4 py-3.5 text-center">
+                  <td className="px-4 py-3.5 text-center whitespace-nowrap">
                     <span className="text-sm font-medium text-foreground">{u.conversation_count}</span>
                   </td>
-                  <td className="px-4 py-3.5">
-                    <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${
+                  <td className="px-4 py-3.5 whitespace-nowrap">
+                    <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium whitespace-nowrap ${
                       u.role === 'admin' ? 'bg-primary/10 text-primary' : 'bg-surface-secondary text-muted'
                     }`}>
                       {u.role === 'admin' ? 'Admin' : 'Nutzer'}
                     </span>
+                  </td>
+                  <td className="px-4 py-3.5 whitespace-nowrap">
+                    {(() => {
+                      const meta =
+                        SOURCE_META[u.community_source ?? 'unknown'] ??
+                        SOURCE_META.unknown
+                      return (
+                        <span
+                          title={meta.title}
+                          className={`inline-flex items-center px-2 py-0.5 rounded-md text-xs font-medium ${meta.className}`}
+                        >
+                          {meta.label}
+                        </span>
+                      )
+                    })()}
                   </td>
                   <td className="px-4 py-3.5">
                     <div className="flex items-center gap-2 justify-end" onClick={(e) => e.stopPropagation()}>
@@ -563,7 +675,7 @@ function SubscriptionBadge({ sub }: { sub: SubscriptionInfo | null }) {
   if (sub.status === 'past_due') {
     return (
       <div className="flex flex-col gap-0.5">
-        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-700 dark:bg-red-950/30 dark:text-red-400 w-fit">
+        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-700 dark:bg-red-950/30 dark:text-red-400 w-fit whitespace-nowrap">
           {tierLabel} · Zahlung offen
         </span>
         <span className="text-[10px] text-muted">{cycle}</span>
@@ -574,7 +686,7 @@ function SubscriptionBadge({ sub }: { sub: SubscriptionInfo | null }) {
   if (sub.cancel_at_period_end) {
     return (
       <div className="flex flex-col gap-0.5">
-        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-amber-100 text-amber-700 dark:bg-amber-950/30 dark:text-amber-400 w-fit">
+        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-amber-100 text-amber-700 dark:bg-amber-950/30 dark:text-amber-400 w-fit whitespace-nowrap">
           {tierLabel} · läuft aus
         </span>
         <span className="text-[10px] text-muted">
@@ -588,7 +700,7 @@ function SubscriptionBadge({ sub }: { sub: SubscriptionInfo | null }) {
   const isTrialing = sub.status === 'trialing'
   return (
     <div className="flex flex-col gap-0.5">
-      <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium w-fit ${
+      <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium w-fit whitespace-nowrap ${
         isTrialing
           ? 'bg-blue-100 text-blue-700 dark:bg-blue-950/30 dark:text-blue-400'
           : 'bg-primary/10 text-primary'

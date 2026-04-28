@@ -35,6 +35,11 @@ export interface Subscription {
   cancel_at_period_end: boolean
   cancelled_at: string | null
   ended_at: string | null
+  scheduled_plan_id: string | null
+  scheduled_price_id: string | null
+  scheduled_billing_cycle: 'monthly' | 'yearly' | null
+  scheduled_change_at: string | null
+  stripe_schedule_id: string | null
 }
 
 export interface CreditWallet {

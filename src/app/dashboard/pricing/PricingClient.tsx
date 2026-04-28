@@ -3,7 +3,7 @@
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { Check, Sparkles, Loader2 } from 'lucide-react'
+import { Check, Sparkles, Loader2, AlertTriangle, Clock } from 'lucide-react'
 import type { Plan } from '@/lib/types'
 import type { AccessTier } from '@/lib/access'
 
@@ -17,13 +17,33 @@ interface Props {
   accessTier: AccessTier
   currentPlanId: string | null
   currentCycle: Cycle | null
+  currentPeriodEnd: string | null
   subscriptionActive: boolean
+  scheduledPlanId: string | null
+  scheduledCycle: Cycle | null
+  scheduledChangeAt: string | null
 }
 
 function formatEuro(cents: number | null | undefined): string {
   if (cents == null) return '—'
   const euro = cents / 100
   return euro % 1 === 0 ? `${euro}` : euro.toFixed(2).replace('.', ',')
+}
+
+function formatDate(iso: string | null): string {
+  if (!iso) return ''
+  return new Date(iso).toLocaleDateString('de-DE', {
+    day: '2-digit',
+    month: 'long',
+    year: 'numeric',
+  })
+}
+
+function centsFor(plan: Plan, cycle: Cycle, band: PriceBand): number | null {
+  if (cycle === 'yearly') {
+    return band === 'community' ? plan.price_yearly_community_cents : plan.price_yearly_basic_cents
+  }
+  return band === 'community' ? plan.price_community_cents : plan.price_basic_cents
 }
 
 export default function PricingClient({
@@ -33,15 +53,29 @@ export default function PricingClient({
   accessTier,
   currentPlanId,
   currentCycle,
+  currentPeriodEnd,
   subscriptionActive,
+  scheduledPlanId,
+  scheduledCycle,
+  scheduledChangeAt,
 }: Props) {
   const router = useRouter()
-  const [cycle, setCycle] = useState<Cycle>('monthly')
-  // Preisband nur toggelbar wenn Community-User (die sehen den Vergleich).
-  // Basic-User sehen nur Basic-Preise (kein Toggle).
+  const [cycle, setCycle] = useState<Cycle>(currentCycle ?? 'monthly')
   const [priceBand, setPriceBand] = useState<PriceBand>(defaultPriceBand)
   const [loadingPlan, setLoadingPlan] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [confirming, setConfirming] = useState<{
+    planId: string
+    action: 'upgrade' | 'downgrade'
+    newCents: number | null
+    currentCents: number | null
+  } | null>(null)
+  const [successInfo, setSuccessInfo] = useState<string | null>(null)
+
+  const currentPlan = currentPlanId ? plans.find((p) => p.id === currentPlanId) ?? null : null
+  const currentCentsRaw = currentPlan && currentCycle
+    ? centsFor(currentPlan, currentCycle, priceBand)
+    : null
 
   async function startCheckout(planId: string) {
     setLoadingPlan(planId)
@@ -52,8 +86,6 @@ export default function PricingClient({
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ planId, cycle }),
       })
-      // Safe JSON-Parse — Body ist bei Framework-500ern leer und würde
-      // "Unexpected end of JSON input" werfen
       const text = await res.text()
       let data: { url?: string; error?: string } = {}
       try {
@@ -73,9 +105,69 @@ export default function PricingClient({
     }
   }
 
+  async function changePlan(planId: string) {
+    setLoadingPlan(planId)
+    setError(null)
+    setSuccessInfo(null)
+    try {
+      const res = await fetch('/api/subscriptions/change', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ planId, cycle }),
+      })
+      const text = await res.text()
+      let data: {
+        ok?: boolean
+        action?: string
+        effectiveAt?: string
+        error?: string
+      } = {}
+      try {
+        data = text ? JSON.parse(text) : {}
+      } catch {
+        throw new Error(`Server-Fehler (${res.status}). Nochmal probieren.`)
+      }
+      if (!res.ok || !data.ok) {
+        throw new Error(data.error || 'Plan-Wechsel fehlgeschlagen')
+      }
+      if (data.action === 'upgraded') {
+        setSuccessInfo('Upgrade erfolgreich! Dein neuer Plan ist sofort aktiv.')
+      } else if (data.action === 'downgrade_scheduled') {
+        setSuccessInfo(
+          `Downgrade für ${formatDate(data.effectiveAt ?? null)} geplant. Bis dahin behältst du deinen aktuellen Plan.`
+        )
+      } else if (data.action === 'scheduled_change_released') {
+        setSuccessInfo('Geplanter Wechsel wurde aufgehoben.')
+      }
+      setConfirming(null)
+      router.refresh()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err))
+    } finally {
+      setLoadingPlan(null)
+    }
+  }
+
+  function handleSelectPlan(plan: Plan) {
+    setError(null)
+    setSuccessInfo(null)
+    const newCents = centsFor(plan, cycle, priceBand)
+
+    if (!subscriptionActive) {
+      startCheckout(plan.id)
+      return
+    }
+
+    // Aktives Abo → Change-Flow. Confirm-Dialog mit passender Message.
+    const action: 'upgrade' | 'downgrade' =
+      newCents != null && currentCentsRaw != null && newCents > currentCentsRaw
+        ? 'upgrade'
+        : 'downgrade'
+    setConfirming({ planId: plan.id, action, newCents, currentCents: currentCentsRaw })
+  }
+
   return (
     <div className="max-w-6xl mx-auto px-4 sm:px-6 py-10">
-      {/* Header */}
       <div className="text-center mb-8">
         <h1 className="text-3xl sm:text-4xl font-bold text-foreground mb-3">
           Wähle deinen Plan
@@ -86,7 +178,6 @@ export default function PricingClient({
         </p>
       </div>
 
-      {/* Community-Badge wenn User Community ist */}
       {isCommunity && (
         <div className="max-w-2xl mx-auto mb-6 flex items-center gap-2 px-4 py-3 rounded-xl border border-primary/30 bg-primary/5">
           <Sparkles size={18} className="text-primary shrink-0" />
@@ -98,9 +189,24 @@ export default function PricingClient({
         </div>
       )}
 
+      {/* Geplanter Wechsel */}
+      {scheduledPlanId && scheduledChangeAt && (
+        <div className="max-w-2xl mx-auto mb-6 flex items-start gap-2 px-4 py-3 rounded-xl border border-amber-500/30 bg-amber-500/5">
+          <Clock size={18} className="text-amber-600 shrink-0 mt-0.5" />
+          <p className="text-sm text-foreground">
+            <span className="font-semibold">Geplanter Wechsel:</span> Ab{' '}
+            {formatDate(scheduledChangeAt)} wechselst du zu{' '}
+            <strong>
+              {plans.find((p) => p.id === scheduledPlanId)?.name ?? scheduledPlanId}
+            </strong>
+            {scheduledCycle ? ` (${scheduledCycle === 'yearly' ? 'jährlich' : 'monatlich'})` : ''}.
+            Um den Wechsel zu stornieren, wähle deinen aktuellen Plan erneut.
+          </p>
+        </div>
+      )}
+
       {/* Toggles */}
       <div className="flex flex-col sm:flex-row items-center justify-center gap-4 mb-10">
-        {/* Monthly/Yearly Toggle */}
         <div className="inline-flex items-center gap-1 p-1 rounded-xl bg-surface-secondary border border-border">
           <button
             onClick={() => setCycle('monthly')}
@@ -127,7 +233,6 @@ export default function PricingClient({
           </button>
         </div>
 
-        {/* Basic/Community Toggle — nur für Community-User */}
         {isCommunity && (
           <div className="inline-flex items-center gap-1 p-1 rounded-xl bg-surface-secondary border border-border">
             <button
@@ -173,7 +278,23 @@ export default function PricingClient({
             basicCents > communityCents
           const yearlyMissing = cycle === 'yearly' && displayCents == null
           const isFree = displayCents === 0
-          const featured = idx === 1 // Mittlerer Plan hervorheben (M)
+          const featured = idx === 1
+
+          // Button-Label bei aktivem Abo abhängig von Upgrade/Downgrade
+          let changeLabel = 'Auswählen'
+          if (subscriptionActive && !isCurrent && currentCentsRaw != null && displayCents != null) {
+            if (displayCents > currentCentsRaw) {
+              changeLabel = 'Sofort upgraden'
+            } else if (displayCents < currentCentsRaw) {
+              changeLabel = `Zum ${formatDate(currentPeriodEnd)} wechseln`
+            } else {
+              // Gleicher Preis, aber anderer Cycle oder Plan (selten)
+              changeLabel = cycle !== currentCycle ? 'Abrechnungsrhythmus wechseln' : 'Wechseln'
+            }
+          }
+
+          const isScheduledTarget =
+            scheduledPlanId === plan.id && scheduledCycle === cycle
 
           return (
             <div
@@ -184,9 +305,14 @@ export default function PricingClient({
                   : 'border border-border bg-surface'
               }`}
             >
-              {featured && (
+              {featured && !isScheduledTarget && (
                 <div className="absolute -top-3 left-1/2 -translate-x-1/2 bg-primary text-primary-foreground text-xs font-semibold px-3 py-1 rounded-full">
                   Beliebteste Wahl
+                </div>
+              )}
+              {isScheduledTarget && (
+                <div className="absolute -top-3 left-1/2 -translate-x-1/2 bg-amber-500 text-white text-xs font-semibold px-3 py-1 rounded-full">
+                  Ab {formatDate(scheduledChangeAt)}
                 </div>
               )}
 
@@ -259,18 +385,10 @@ export default function PricingClient({
                 </ul>
               )}
 
-              {/* CTA */}
               {isCurrent ? (
                 <div className="w-full px-4 py-2.5 text-sm font-semibold rounded-xl border border-border text-muted text-center">
                   ✓ Aktueller Plan
                 </div>
-              ) : subscriptionActive ? (
-                <Link
-                  href="/dashboard/account/billing"
-                  className="w-full px-4 py-2.5 text-sm font-semibold rounded-xl border border-border text-foreground text-center hover:border-primary hover:text-primary transition-colors"
-                >
-                  Plan wechseln
-                </Link>
               ) : yearlyMissing ? (
                 <button
                   disabled
@@ -280,7 +398,7 @@ export default function PricingClient({
                 </button>
               ) : (
                 <button
-                  onClick={() => startCheckout(plan.id)}
+                  onClick={() => handleSelectPlan(plan)}
                   disabled={loadingPlan === plan.id}
                   className={`w-full px-4 py-2.5 text-sm font-semibold rounded-xl transition-colors flex items-center justify-center gap-2 ${
                     featured
@@ -292,6 +410,8 @@ export default function PricingClient({
                     <>
                       <Loader2 size={14} className="animate-spin" /> Lade…
                     </>
+                  ) : subscriptionActive ? (
+                    changeLabel
                   ) : isFree ? (
                     'Aktivieren'
                   ) : (
@@ -309,8 +429,13 @@ export default function PricingClient({
           {error}
         </div>
       )}
+      {successInfo && (
+        <div className="max-w-xl mx-auto mb-6 p-3 rounded-xl bg-green-500/10 border border-green-500/30 text-sm text-green-700 dark:text-green-400">
+          {successInfo}
+        </div>
+      )}
 
-      {/* Community-Upsell für Basic/Alumni */}
+      {/* Community-Upsell */}
       {!isCommunity && (
         <div className="max-w-3xl mx-auto rounded-2xl p-6 sm:p-8 bg-gradient-to-br from-primary/5 to-primary/10 border border-primary/20 mb-8">
           <div className="flex items-center gap-2 mb-3">
@@ -353,7 +478,6 @@ export default function PricingClient({
         </div>
       )}
 
-      {/* FAQ / Info */}
       <div className="max-w-3xl mx-auto text-center text-xs text-muted space-y-1">
         <p>
           Alle Preise inkl. USt. Abos laufen monatlich oder jährlich und können jederzeit
@@ -364,6 +488,64 @@ export default function PricingClient({
           Monate gültig.
         </p>
       </div>
+
+      {/* Confirmation Modal für Plan-Change */}
+      {confirming && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+          <div className="bg-background border border-border rounded-2xl max-w-md w-full p-6">
+            <div className="flex items-start gap-3 mb-4">
+              <AlertTriangle
+                className={
+                  confirming.action === 'upgrade' ? 'text-primary shrink-0' : 'text-amber-500 shrink-0'
+                }
+                size={24}
+              />
+              <div>
+                <h3 className="text-lg font-semibold text-foreground">
+                  {confirming.action === 'upgrade'
+                    ? 'Jetzt sofort upgraden?'
+                    : 'Plan-Wechsel planen?'}
+                </h3>
+                <p className="text-sm text-muted mt-2 leading-relaxed">
+                  {confirming.action === 'upgrade' ? (
+                    <>
+                      Dein neuer Plan ist <strong>sofort aktiv</strong>. Der Rest deines
+                      aktuellen Zeitraums wird dir anteilig gutgeschrieben und mit dem neuen
+                      Preis verrechnet. Dein Abrechnungszyklus startet heute neu. Die neuen
+                      Monats-Credits werden sofort gutgeschrieben.
+                    </>
+                  ) : (
+                    <>
+                      Dein aktueller Plan läuft bis{' '}
+                      <strong>{formatDate(currentPeriodEnd)}</strong>. Ab dann wird
+                      automatisch auf den neuen, günstigeren Plan gewechselt. Bis dahin
+                      behältst du alle aktuellen Credits und Features.
+                    </>
+                  )}
+                </p>
+              </div>
+            </div>
+            <div className="flex gap-2 justify-end">
+              <button
+                onClick={() => setConfirming(null)}
+                className="px-4 py-2 border border-border text-foreground rounded-xl text-sm hover:border-primary transition-colors"
+              >
+                Abbrechen
+              </button>
+              <button
+                onClick={() => changePlan(confirming.planId)}
+                disabled={loadingPlan === confirming.planId}
+                className="px-4 py-2 bg-primary hover:bg-primary-hover text-primary-foreground rounded-xl text-sm font-medium disabled:opacity-50 inline-flex items-center gap-2"
+              >
+                {loadingPlan === confirming.planId && (
+                  <Loader2 size={14} className="animate-spin" />
+                )}
+                {confirming.action === 'upgrade' ? 'Sofort upgraden' : 'Wechsel planen'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

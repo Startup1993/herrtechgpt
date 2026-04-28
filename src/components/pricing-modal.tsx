@@ -1,7 +1,8 @@
 'use client'
 
 import { useEffect, useState, useCallback } from 'react'
-import { X, Check, Sparkles, Loader2 } from 'lucide-react'
+import { useRouter } from 'next/navigation'
+import { X, Check, Sparkles, Loader2, AlertTriangle, Clock } from 'lucide-react'
 import type { Plan } from '@/lib/types'
 
 type PriceBand = 'basic' | 'community'
@@ -19,14 +20,36 @@ interface Props {
   /** ID des aktuell laufenden Plans (plan_s/plan_m/plan_l) — für "Aktueller Plan"-Markierung */
   currentPlanId?: string | null
   currentCycle?: Cycle | null
+  /** Ende der Abrechnungsperiode — für "Zum TT.MM. wechseln"-Label */
+  currentPeriodEnd?: string | null
   /** true wenn User schon ein aktives Abo hat */
   hasActiveSubscription?: boolean
+  /** Geplanter Plan-Wechsel (Downgrade) zum Periodenende */
+  scheduledPlanId?: string | null
+  scheduledCycle?: Cycle | null
+  scheduledChangeAt?: string | null
 }
 
 function formatEuro(cents: number | null | undefined): string {
   if (cents == null) return '—'
   const euro = cents / 100
   return euro % 1 === 0 ? `${euro}` : euro.toFixed(2).replace('.', ',')
+}
+
+function formatDate(iso: string | null | undefined): string {
+  if (!iso) return ''
+  return new Date(iso).toLocaleDateString('de-DE', {
+    day: '2-digit',
+    month: 'long',
+    year: 'numeric',
+  })
+}
+
+function centsFor(plan: Plan, cycle: Cycle, band: PriceBand): number | null {
+  if (cycle === 'yearly') {
+    return band === 'community' ? plan.price_yearly_community_cents : plan.price_yearly_basic_cents
+  }
+  return band === 'community' ? plan.price_community_cents : plan.price_basic_cents
 }
 
 export function PricingModal({
@@ -37,12 +60,22 @@ export function PricingModal({
   isCommunity,
   currentPlanId,
   currentCycle,
+  currentPeriodEnd,
   hasActiveSubscription,
+  scheduledPlanId,
+  scheduledCycle,
+  scheduledChangeAt,
 }: Props) {
-  const [cycle, setCycle] = useState<Cycle>('monthly')
+  const router = useRouter()
+  const [cycle, setCycle] = useState<Cycle>(currentCycle ?? 'monthly')
   const [priceBand, setPriceBand] = useState<PriceBand>(defaultPriceBand)
   const [loadingPlan, setLoadingPlan] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [confirming, setConfirming] = useState<{
+    planId: string
+    action: 'upgrade' | 'downgrade'
+  } | null>(null)
+  const [successInfo, setSuccessInfo] = useState<string | null>(null)
 
   // ESC schließt Modal
   useEffect(() => {
@@ -62,6 +95,10 @@ export function PricingModal({
     }
   }, [open])
 
+  const currentPlan = currentPlanId ? plans.find((p) => p.id === currentPlanId) ?? null : null
+  const currentCentsRaw =
+    currentPlan && currentCycle ? centsFor(currentPlan, currentCycle, priceBand) : null
+
   const startCheckout = useCallback(
     async (planId: string) => {
       setLoadingPlan(planId)
@@ -72,7 +109,6 @@ export function PricingModal({
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ planId, cycle }),
         })
-        // Safe JSON-Parse — Body könnte leer sein bei Framework-Errors
         const text = await res.text()
         let data: { url?: string; error?: string } = {}
         try {
@@ -93,6 +129,69 @@ export function PricingModal({
     },
     [cycle]
   )
+
+  const changePlan = useCallback(
+    async (planId: string) => {
+      setLoadingPlan(planId)
+      setError(null)
+      setSuccessInfo(null)
+      try {
+        const res = await fetch('/api/subscriptions/change', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ planId, cycle }),
+        })
+        const text = await res.text()
+        let data: {
+          ok?: boolean
+          action?: string
+          effectiveAt?: string
+          error?: string
+        } = {}
+        try {
+          data = text ? JSON.parse(text) : {}
+        } catch {
+          throw new Error(`Server-Fehler (${res.status}). Nochmal probieren.`)
+        }
+        if (!res.ok || !data.ok) {
+          throw new Error(data.error || 'Plan-Wechsel fehlgeschlagen')
+        }
+        if (data.action === 'upgraded') {
+          setSuccessInfo('Upgrade erfolgreich! Dein neuer Plan ist sofort aktiv.')
+        } else if (data.action === 'downgrade_scheduled') {
+          setSuccessInfo(
+            `Downgrade für ${formatDate(data.effectiveAt)} geplant. Bis dahin behältst du deinen aktuellen Plan.`
+          )
+        } else if (data.action === 'scheduled_change_released') {
+          setSuccessInfo('Geplanter Wechsel wurde aufgehoben.')
+        }
+        setConfirming(null)
+        router.refresh()
+      } catch (err) {
+        setError(err instanceof Error ? err.message : String(err))
+      } finally {
+        setLoadingPlan(null)
+      }
+    },
+    [cycle, router]
+  )
+
+  function handleSelectPlan(plan: Plan) {
+    setError(null)
+    setSuccessInfo(null)
+    const newCents = centsFor(plan, cycle, priceBand)
+
+    if (!hasActiveSubscription) {
+      void startCheckout(plan.id)
+      return
+    }
+
+    const action: 'upgrade' | 'downgrade' =
+      newCents != null && currentCentsRaw != null && newCents > currentCentsRaw
+        ? 'upgrade'
+        : 'downgrade'
+    setConfirming({ planId: plan.id, action })
+  }
 
   if (!open) return null
 
@@ -131,6 +230,20 @@ export function PricingModal({
               <Sparkles size={16} className="text-primary shrink-0" />
               <p className="text-sm text-foreground">
                 <strong>Community-Mitglied:</strong> Plan S ist für dich inklusive.
+              </p>
+            </div>
+          )}
+
+          {/* Geplanter Wechsel */}
+          {scheduledPlanId && scheduledChangeAt && (
+            <div className="max-w-2xl mx-auto mb-5 flex items-start gap-2 px-4 py-2 rounded-xl border border-amber-500/30 bg-amber-500/5">
+              <Clock size={16} className="text-amber-600 shrink-0 mt-0.5" />
+              <p className="text-sm text-foreground">
+                <strong>Geplanter Wechsel:</strong> Ab {formatDate(scheduledChangeAt)} wechselst du zu{' '}
+                <strong>
+                  {plans.find((p) => p.id === scheduledPlanId)?.name ?? scheduledPlanId}
+                </strong>
+                . Um den Wechsel zu stornieren, wähle deinen aktuellen Plan erneut.
               </p>
             </div>
           )}
@@ -209,6 +322,25 @@ export function PricingModal({
               const yearlyMissing = cycle === 'yearly' && displayCents == null
               const isFree = displayCents === 0
               const featured = idx === 1
+              const isScheduledTarget =
+                scheduledPlanId === plan.id && scheduledCycle === cycle
+
+              // Button-Label bei aktivem Abo
+              let changeLabel = 'Auswählen'
+              if (
+                hasActiveSubscription &&
+                !isCurrent &&
+                currentCentsRaw != null &&
+                displayCents != null
+              ) {
+                if (displayCents > currentCentsRaw) {
+                  changeLabel = 'Sofort upgraden'
+                } else if (displayCents < currentCentsRaw) {
+                  changeLabel = `Zum ${formatDate(currentPeriodEnd)} wechseln`
+                } else {
+                  changeLabel = cycle !== currentCycle ? 'Abrechnungsrhythmus wechseln' : 'Wechseln'
+                }
+              }
 
               return (
                 <div
@@ -219,9 +351,14 @@ export function PricingModal({
                       : 'border border-border bg-surface'
                   }`}
                 >
-                  {featured && (
+                  {featured && !isScheduledTarget && (
                     <div className="absolute -top-3 left-1/2 -translate-x-1/2 bg-primary text-primary-foreground text-xs font-semibold px-3 py-1 rounded-full">
                       Beliebteste Wahl
+                    </div>
+                  )}
+                  {isScheduledTarget && (
+                    <div className="absolute -top-3 left-1/2 -translate-x-1/2 bg-amber-500 text-white text-xs font-semibold px-3 py-1 rounded-full">
+                      Ab {formatDate(scheduledChangeAt)}
                     </div>
                   )}
 
@@ -299,7 +436,7 @@ export function PricingModal({
                     </button>
                   ) : (
                     <button
-                      onClick={() => startCheckout(plan.id)}
+                      onClick={() => handleSelectPlan(plan)}
                       disabled={loadingPlan === plan.id}
                       className={`w-full px-3 py-2 text-sm font-semibold rounded-xl transition-colors inline-flex items-center justify-center gap-2 ${
                         featured
@@ -311,10 +448,10 @@ export function PricingModal({
                         <>
                           <Loader2 size={14} className="animate-spin" /> Lade…
                         </>
+                      ) : hasActiveSubscription ? (
+                        changeLabel
                       ) : isFree ? (
                         'Aktivieren'
-                      ) : hasActiveSubscription ? (
-                        'Zu diesem Plan wechseln'
                       ) : (
                         'Auswählen'
                       )}
@@ -330,6 +467,11 @@ export function PricingModal({
               {error}
             </div>
           )}
+          {successInfo && (
+            <div className="mt-5 max-w-xl mx-auto p-3 rounded-xl bg-green-500/10 border border-green-500/30 text-sm text-green-700 dark:text-green-400">
+              {successInfo}
+            </div>
+          )}
 
           {/* Footer-Hinweis */}
           <div className="mt-6 text-center text-[11px] text-muted space-y-0.5">
@@ -341,6 +483,69 @@ export function PricingModal({
           </div>
         </div>
       </div>
+
+      {/* Confirm-Modal für Plan-Change */}
+      {confirming && (
+        <div
+          className="fixed inset-0 z-[60] flex items-center justify-center bg-black/60 p-4"
+          onClick={(e) => e.stopPropagation()}
+        >
+          <div className="bg-background border border-border rounded-2xl max-w-md w-full p-6">
+            <div className="flex items-start gap-3 mb-4">
+              <AlertTriangle
+                className={
+                  confirming.action === 'upgrade'
+                    ? 'text-primary shrink-0'
+                    : 'text-amber-500 shrink-0'
+                }
+                size={24}
+              />
+              <div>
+                <h3 className="text-lg font-semibold text-foreground">
+                  {confirming.action === 'upgrade'
+                    ? 'Jetzt sofort upgraden?'
+                    : 'Plan-Wechsel planen?'}
+                </h3>
+                <p className="text-sm text-muted mt-2 leading-relaxed">
+                  {confirming.action === 'upgrade' ? (
+                    <>
+                      Dein neuer Plan ist <strong>sofort aktiv</strong>. Der Rest deines
+                      aktuellen Zeitraums wird dir anteilig gutgeschrieben und mit dem neuen
+                      Preis verrechnet. Dein Abrechnungszyklus startet heute neu. Die neuen
+                      Monats-Credits werden sofort gutgeschrieben.
+                    </>
+                  ) : (
+                    <>
+                      Dein aktueller Plan läuft bis{' '}
+                      <strong>{formatDate(currentPeriodEnd)}</strong>. Ab dann wird
+                      automatisch auf den neuen, günstigeren Plan gewechselt. Bis dahin
+                      behältst du alle aktuellen Credits und Features.
+                    </>
+                  )}
+                </p>
+              </div>
+            </div>
+            <div className="flex gap-2 justify-end">
+              <button
+                onClick={() => setConfirming(null)}
+                className="px-4 py-2 border border-border text-foreground rounded-xl text-sm hover:border-primary transition-colors"
+              >
+                Abbrechen
+              </button>
+              <button
+                onClick={() => changePlan(confirming.planId)}
+                disabled={loadingPlan === confirming.planId}
+                className="px-4 py-2 bg-primary hover:bg-primary-hover text-primary-foreground rounded-xl text-sm font-medium disabled:opacity-50 inline-flex items-center gap-2"
+              >
+                {loadingPlan === confirming.planId && (
+                  <Loader2 size={14} className="animate-spin" />
+                )}
+                {confirming.action === 'upgrade' ? 'Sofort upgraden' : 'Wechsel planen'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

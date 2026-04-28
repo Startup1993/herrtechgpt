@@ -10,8 +10,9 @@ export default async function AdminUsersPage() {
     { data: convStats },
     { data: subs },
     { data: plans },
+    { data: communityMembers },
   ] = await Promise.all([
-    admin.from('profiles').select('id, role, access_tier, created_at, invitation_sent_count').order('created_at', { ascending: false }),
+    admin.from('profiles').select('id, role, access_tier, full_name, created_at, invitation_sent_count').order('created_at', { ascending: false }),
     admin.auth.admin.listUsers({ perPage: 1000 }),
     admin.from('conversations').select('user_id, updated_at'),
     admin
@@ -20,6 +21,10 @@ export default async function AdminUsersPage() {
       .in('status', ['active', 'trialing', 'past_due'])
       .order('created_at', { ascending: false }),
     admin.from('plans').select('id, tier, name'),
+    admin
+      .from('community_members')
+      .select('profile_id, source')
+      .not('profile_id', 'is', null),
   ])
 
   const emailMap: Record<string, string> = {}
@@ -73,9 +78,21 @@ export default async function AdminUsersPage() {
     }
   })
 
+  // Source-Map: profile_id → community_members.source
+  // Zeigt in der Nutzerverwaltung wie der User reingekommen ist (Skool-Sync, CSV, manuell).
+  // Users ohne community_members-Eintrag haben keine Source (z.B. self-signup via Login).
+  type CommunitySource = 'stripe' | 'manual' | 'csv' | 'skool' | null
+  const sourceMap: Record<string, CommunitySource> = {}
+  communityMembers?.forEach((cm) => {
+    if (cm.profile_id) {
+      sourceMap[cm.profile_id as string] = (cm.source ?? null) as CommunitySource
+    }
+  })
+
   const users = (profiles ?? []).map((p) => ({
     id: p.id,
     email: emailMap[p.id] ?? '—',
+    full_name: (p as { full_name?: string | null }).full_name ?? null,
     role: p.role as 'user' | 'admin',
     access_tier: (p.access_tier ?? 'basic') as 'basic' | 'alumni' | 'premium',
     created_at: p.created_at,
@@ -84,10 +101,11 @@ export default async function AdminUsersPage() {
     has_logged_in: !!hasLoggedInMap[p.id],
     invitation_sent_count: (p as { invitation_sent_count?: number }).invitation_sent_count ?? 0,
     subscription: subMap[p.id] ?? null,
+    community_source: sourceMap[p.id] ?? null,
   }))
 
   return (
-    <div className="p-4 sm:p-8 max-w-6xl mx-auto">
+    <div className="p-4 sm:p-8 max-w-screen-2xl mx-auto">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-6 gap-3">
         <div>
           <h1 className="text-2xl font-bold text-foreground">Nutzerverwaltung</h1>

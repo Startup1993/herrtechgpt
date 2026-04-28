@@ -35,6 +35,12 @@ export interface SubscriptionGateState {
   currentPlanId: string | null
   currentPlanTier: 'S' | 'M' | 'L' | null
   currentCycle: 'monthly' | 'yearly' | null
+  /** Ende der aktuellen Abrechnungsperiode — für "Wechsel zum TT.MM."-Label */
+  currentPeriodEnd: string | null
+  /** Geplanter Plan-Wechsel (Downgrade) zum Periodenende */
+  scheduledPlanId: string | null
+  scheduledCycle: 'monthly' | 'yearly' | null
+  scheduledChangeAt: string | null
   priceBand: PriceBand
   isCommunity: boolean
   credits: number
@@ -80,7 +86,11 @@ export function SubscriptionGate({ state, creditCost = 0, onAction, children }: 
         isCommunity={state.isCommunity}
         currentPlanId={state.currentPlanId}
         currentCycle={state.currentCycle}
+        currentPeriodEnd={state.currentPeriodEnd}
         hasActiveSubscription={state.hasActiveSubscription}
+        scheduledPlanId={state.scheduledPlanId}
+        scheduledCycle={state.scheduledCycle}
+        scheduledChangeAt={state.scheduledChangeAt}
       />
       <CreditTopupModal
         open={creditsOpen}

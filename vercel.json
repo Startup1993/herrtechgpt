@@ -3,6 +3,10 @@
     {
       "path": "/api/cron/wistia-sync",
       "schedule": "0 6 * * *"
+    },
+    {
+      "path": "/api/cron/skool-expiry",
+      "schedule": "0 3 * * *"
     }
   ]
 }
