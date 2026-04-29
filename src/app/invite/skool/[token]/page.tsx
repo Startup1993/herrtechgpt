@@ -73,8 +73,11 @@ export default async function SkoolClaimPage({
           )}
           {expiryLabel && (
             <>
-              <div className="text-xs text-muted mt-3 mb-1">Zugang gültig bis</div>
+              <div className="text-xs text-muted mt-3 mb-1">Voller Zugang bis</div>
               <div className="text-sm text-foreground">{expiryLabel}</div>
+              <div className="text-xs text-muted mt-1 italic">
+                Classroom bleibt danach lebenslang erhalten (Alumni-Status).
+              </div>
             </>
           )}
         </div>
