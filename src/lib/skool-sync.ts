@@ -24,6 +24,30 @@ export function isSkoolSyncEnabled(): boolean {
 // Default 30 Tage Magic-Link-Gültigkeit (aus Plan)
 const INVITE_TOKEN_DAYS = 30
 
+/**
+ * Schutz gegen unbeabsichtigte Admin-Mutationen via Community-Operationen.
+ *
+ * Admin-Profile dürfen NIE durch Skool-/Community-Sync, Bulk-Delete, Cron
+ * oder PATCH/DELETE-Routen verändert werden — weder access_tier noch
+ * subscriptions. community_members-Einträge selbst sind erlaubt (Admin kann
+ * trotzdem aus der Liste raus), nur ihre profile_id-Seite bleibt tabu.
+ *
+ * Aufrufer sind verantwortlich, das Result früh zu prüfen und betroffene
+ * Operationen zu skippen.
+ */
+export async function isAdminProfile(
+  admin: SupabaseClient,
+  profileId: string | null | undefined
+): Promise<boolean> {
+  if (!profileId) return false
+  const { data } = await admin
+    .from('profiles')
+    .select('role')
+    .eq('id', profileId)
+    .maybeSingle()
+  return data?.role === 'admin'
+}
+
 export interface SkoolProduct {
   stripe_product_id: string
   label: string
@@ -219,6 +243,9 @@ export async function ensureSkoolPlanS(
 ): Promise<void> {
   const { profileId, periodEnd } = params
 
+  // Admin-Schutz: Admin-Profile niemals durch Skool-Sync verändern.
+  if (await isAdminProfile(admin, profileId)) return
+
   // Schon aktive Sub?
   const { data: active } = await admin
     .from('subscriptions')
@@ -306,6 +333,12 @@ export async function cancelSkoolMembership(
       .eq('id', member.id)
   }
 
+  // Admin-Schutz: profiles + subscriptions des Admins NIE anfassen.
+  // (community_members oben darf trotzdem cancelled werden.)
+  if (await isAdminProfile(admin, member.profile_id)) {
+    return { deleted: false, cancelled: true }
+  }
+
   // Skool-Community-Sub beenden (falls aktiv)
   const { data: skoolSub } = await admin
     .from('subscriptions')
@@ -372,6 +405,9 @@ export async function expireSkoolMembership(
     .eq('id', member.id)
 
   if (!member.profile_id) return
+
+  // Admin-Schutz: profiles + subscriptions des Admins NIE anfassen.
+  if (await isAdminProfile(admin, member.profile_id)) return
 
   // Skool-Community-Sub beenden
   const { data: skoolSub } = await admin
@@ -541,6 +577,12 @@ export async function autoLinkProfileIfExists(
       invitation_token_expires: null,
     })
     .eq('id', member.id)
+
+  // Admin-Schutz: profiles-Mutationen (full_name, access_tier, Plan S)
+  // für Admin-Profile überspringen — Verknüpfung selbst ist OK.
+  if (await isAdminProfile(admin, userId)) {
+    return { linked: true, profileId: userId }
+  }
 
   // Name nur befüllen wenn leer
   if (member.name) {
@@ -767,6 +809,9 @@ export async function claimCommunityMember(
       invitation_token_expires: null,
     })
     .eq('id', communityMemberId)
+
+  // Admin-Schutz: profiles-Mutationen für Admins überspringen.
+  if (await isAdminProfile(admin, profileId)) return
 
   if (
     member.skool_status === 'active' &&

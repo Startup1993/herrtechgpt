@@ -1,8 +1,8 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { Loader2, X, Save } from 'lucide-react'
+import { Loader2, X, Save, AlertTriangle } from 'lucide-react'
 
 type SkoolStatus = 'active' | 'alumni' | 'cancelled'
 
@@ -50,6 +50,14 @@ export function EditMemberModal({
     )
     setError(null)
   }, [member])
+
+  const showCronWarning = useMemo(() => {
+    if (status !== 'active') return false
+    if (!expiresAt) return true
+    const expiryMs = new Date(expiresAt).getTime()
+    if (isNaN(expiryMs)) return true
+    return expiryMs < Date.now()
+  }, [status, expiresAt])
 
   if (!member) return null
 
@@ -151,6 +159,18 @@ export function EditMemberModal({
               className="w-full px-3 py-2 rounded-lg bg-background border border-border text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-primary"
             />
           </div>
+
+          {showCronWarning && (
+            <div className="flex gap-2 text-xs px-3 py-2 rounded-lg bg-amber-50 text-amber-800 border border-amber-200 dark:bg-amber-950/30 dark:text-amber-300 dark:border-amber-900/50">
+              <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" />
+              <div>
+                <strong>Datum auch anpassen!</strong> „Aktiv" mit abgelaufenem
+                oder leerem „Zugang bis" wird vom nächtlichen Cleanup
+                automatisch wieder auf <strong>Alumni</strong> gesetzt. Schieb
+                das Datum in die Zukunft, sonst war's umsonst.
+              </div>
+            </div>
+          )}
 
           {error && (
             <div className="text-sm px-3 py-2 rounded-lg bg-red-50 text-red-700 dark:bg-red-950/30 dark:text-red-400">
