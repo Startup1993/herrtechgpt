@@ -573,6 +573,151 @@ export async function autoLinkProfileIfExists(
 }
 
 /**
+ * Backfill: alle community_members ohne profile_id durchgehen und mit
+ * existierenden auth.users verknüpfen. Nutzt einen Email-Map-Cache —
+ * 1× listUsers vorab statt N×.
+ *
+ * profiles.role bleibt unangetastet (Admin bleibt Admin).
+ */
+export async function autoLinkAllUnclaimed(
+  admin: SupabaseClient
+): Promise<{ scanned: number; linked: number; errors: string[] }> {
+  const errors: string[] = []
+  let userMap: Map<string, string>
+  try {
+    userMap = await buildAuthUserEmailMap(admin)
+  } catch (err) {
+    errors.push(`auth-users laden: ${err instanceof Error ? err.message : String(err)}`)
+    return { scanned: 0, linked: 0, errors }
+  }
+
+  type Row = {
+    id: string
+    email: string
+    name: string | null
+    skool_status: 'active' | 'alumni' | 'cancelled'
+    skool_access_expires_at: string | null
+    profile_id: string | null
+  }
+
+  const all: Row[] = []
+  const PAGE = 1000
+  let offset = 0
+  while (offset < 50000) {
+    const { data } = await admin
+      .from('community_members')
+      .select('id, email, name, skool_status, skool_access_expires_at, profile_id')
+      .is('profile_id', null)
+      .range(offset, offset + PAGE - 1)
+    if (!data || data.length === 0) break
+    all.push(...(data as Row[]))
+    if (data.length < PAGE) break
+    offset += PAGE
+  }
+
+  let linked = 0
+  for (const m of all) {
+    try {
+      const res = await autoLinkProfileIfExists(admin, m, userMap)
+      if (res.linked) linked += 1
+    } catch (err) {
+      errors.push(err instanceof Error ? err.message : String(err))
+    }
+  }
+  return { scanned: all.length, linked, errors }
+}
+
+/**
+ * Dedupe: gruppiert community_members nach lower(email) und löscht
+ * Duplikate. Stripe-Source gewinnt, sonst jüngster created_at, claimed
+ * vor unclaimed.
+ */
+export async function dedupeCommunityMembers(
+  admin: SupabaseClient
+): Promise<{ duplicate_groups: number; deleted: number; errors: string[] }> {
+  type Member = {
+    id: string
+    email: string
+    source: 'stripe' | 'manual' | 'csv' | 'skool' | null
+    profile_id: string | null
+    claimed_at: string | null
+    created_at: string
+    skool_status: 'active' | 'alumni' | 'cancelled'
+  }
+
+  const SOURCE_PRIO: Record<string, number> = {
+    stripe: 4,
+    skool: 3,
+    manual: 2,
+    csv: 1,
+  }
+
+  function pickKeeper(rows: Member[]): Member {
+    const sorted = [...rows].sort((a, b) => {
+      const ac = a.profile_id ? 1 : 0
+      const bc = b.profile_id ? 1 : 0
+      if (ac !== bc) return bc - ac
+      const ap = SOURCE_PRIO[a.source ?? ''] ?? 0
+      const bp = SOURCE_PRIO[b.source ?? ''] ?? 0
+      if (ap !== bp) return bp - ap
+      return new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+    })
+    return sorted[0]
+  }
+
+  const all: Member[] = []
+  const PAGE = 1000
+  let offset = 0
+  while (offset < 50000) {
+    const { data } = await admin
+      .from('community_members')
+      .select(
+        'id, email, source, profile_id, claimed_at, created_at, skool_status'
+      )
+      .order('created_at', { ascending: false })
+      .range(offset, offset + PAGE - 1)
+    if (!data || data.length === 0) break
+    all.push(...(data as Member[]))
+    if (data.length < PAGE) break
+    offset += PAGE
+  }
+
+  const groups = new Map<string, Member[]>()
+  for (const m of all) {
+    const key = m.email.toLowerCase()
+    const arr = groups.get(key) ?? []
+    arr.push(m)
+    groups.set(key, arr)
+  }
+
+  const toDelete: string[] = []
+  let groupsWithDuplicates = 0
+  for (const [, rows] of groups) {
+    if (rows.length <= 1) continue
+    groupsWithDuplicates += 1
+    const keeper = pickKeeper(rows)
+    for (const row of rows) {
+      if (row.id !== keeper.id) toDelete.push(row.id)
+    }
+  }
+
+  let deleted = 0
+  const errors: string[] = []
+  const BATCH = 100
+  for (let i = 0; i < toDelete.length; i += BATCH) {
+    const batch = toDelete.slice(i, i + BATCH)
+    const { error: delErr, count } = await admin
+      .from('community_members')
+      .delete({ count: 'exact' })
+      .in('id', batch)
+    if (delErr) errors.push(delErr.message)
+    else deleted += count ?? batch.length
+  }
+
+  return { duplicate_groups: groupsWithDuplicates, deleted, errors }
+}
+
+/**
  * Hilfsfunktion: Map<emailLower, userId> aus auth.users bauen.
  * Für Bulk-Aufrufe gedacht — listUsers liefert max 1000 pro Page.
  */
@@ -671,6 +816,8 @@ export async function syncSkoolMembersFromStripe(
     invoices: { scanned: number; matched: number; capped: boolean }
   }
   refunds: { detected: number; cleaned_up: number }
+  deduped: number
+  auto_linked: number
   errors: Array<{ session?: string; member?: string; error: string }>
 }> {
   const days = opts.days ?? 90
@@ -706,6 +853,8 @@ export async function syncSkoolMembersFromStripe(
         invoices: { scanned: 0, matched: 0, capped: false },
       },
       refunds: { detected: 0, cleaned_up: 0 },
+      deduped: 0,
+      auto_linked: 0,
       errors: [{ error: 'Keine Skool-Products in der Whitelist' }],
     }
   }
@@ -1209,45 +1358,9 @@ export async function syncSkoolMembersFromStripe(
       }
     }
 
-    // ─── Auto-Link: gerade upsertete Members, deren Email schon einem
-    //     auth.user gehört (z.B. Admin / Self-Signup), direkt verknüpfen.
-    //     Verhindert Doppel-Listings und gibt dem User direkt den richtigen
-    //     access_tier (premium für active, alumni für alumni). Admin-Rolle
-    //     wird NICHT verändert.
-    try {
-      const userMap = await buildAuthUserEmailMap(admin)
-      // Frisch gelandete Members (noch ohne profile_id) durchgehen
-      const customerIdsToCheck = [...perCustomer.keys()]
-      const READ_LINK_BATCH = 500
-      for (let i = 0; i < customerIdsToCheck.length; i += READ_LINK_BATCH) {
-        const batch = customerIdsToCheck.slice(i, i + READ_LINK_BATCH)
-        const { data: rows } = await admin
-          .from('community_members')
-          .select(
-            'id, email, name, skool_status, skool_access_expires_at, profile_id'
-          )
-          .in('stripe_customer_id', batch)
-          .is('profile_id', null)
-        for (const row of rows ?? []) {
-          try {
-            await autoLinkProfileIfExists(
-              admin,
-              row as Parameters<typeof autoLinkProfileIfExists>[1],
-              userMap
-            )
-          } catch (err) {
-            errors.push({
-              member: (row as { id: string }).id,
-              error: `auto-link: ${err instanceof Error ? err.message : String(err)}`,
-            })
-          }
-        }
-      }
-    } catch (err) {
-      errors.push({
-        error: `auto-link map: ${err instanceof Error ? err.message : String(err)}`,
-      })
-    }
+    // Auto-Link wird am Ende des Syncs als Bulk-Operation ausgeführt
+    // (siehe weiter unten — autoLinkAllUnclaimed deckt frisch upsertete
+    // sowie Bestand ohne profile_id ab).
   }
 
   // ─── Refund-Cleanup: existing members mit Refund, die NICHT in perCustomer sind ──
@@ -1312,6 +1425,32 @@ export async function syncSkoolMembersFromStripe(
     }
   }
 
+  // ─── Automatisches Aufräumen am Ende jedes Sync ───────────────────────
+  // 1. Dedupe: doppelte Einträge nach lower(email) → Stripe gewinnt
+  let dedupedCount = 0
+  try {
+    const r = await dedupeCommunityMembers(admin)
+    dedupedCount = r.deleted
+    for (const e of r.errors) errors.push({ error: `dedupe: ${e}` })
+  } catch (err) {
+    errors.push({
+      error: `dedupe: ${err instanceof Error ? err.message : String(err)}`,
+    })
+  }
+
+  // 2. Auto-Link: alle Bestand ohne profile_id mit existierenden auth.users
+  //    verknüpfen (Admin / Self-Signup → KMC). Verhindert Doppel-Listings.
+  let autoLinkedCount = 0
+  try {
+    const r = await autoLinkAllUnclaimed(admin)
+    autoLinkedCount = r.linked
+    for (const e of r.errors) errors.push({ error: `auto-link: ${e}` })
+  } catch (err) {
+    errors.push({
+      error: `auto-link: ${err instanceof Error ? err.message : String(err)}`,
+    })
+  }
+
   return {
     scanned: sessionsScanned + subsScanned + invScanned,
     matched: sessionsMatched + subsMatched + invMatched,
@@ -1326,6 +1465,8 @@ export async function syncSkoolMembersFromStripe(
       detected: refundsByCustomer.size,
       cleaned_up: refundCleanedCount,
     },
+    deduped: dedupedCount,
+    auto_linked: autoLinkedCount,
     errors,
   }
 }
