@@ -10,6 +10,7 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
+import { isAdminProfile } from '@/lib/skool-sync'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -56,8 +57,15 @@ export async function POST(req: Request) {
     .in('id', ids)
     .not('profile_id', 'is', null)
 
+  let skippedAdmins = 0
   for (const m of claimed ?? []) {
     if (!m.profile_id) continue
+    // Admin-Schutz: profiles + subscriptions des Admins NIE anfassen.
+    // community_members-Eintrag selbst wird unten weiterhin gelöscht.
+    if (await isAdminProfile(admin, m.profile_id)) {
+      skippedAdmins += 1
+      continue
+    }
     // Plan-S-Sub beenden
     const { data: skoolSub } = await admin
       .from('subscriptions')
@@ -109,6 +117,7 @@ export async function POST(req: Request) {
   return NextResponse.json({
     requested: ids.length,
     deleted,
+    skipped_admins: skippedAdmins,
     errors: errors.length > 0 ? errors : undefined,
   })
 }

@@ -28,6 +28,7 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import { computeEffectiveAccess, VIEW_AS_COOKIE } from '@/lib/access'
 import { priceBandForAccessTier } from '@/lib/monetization'
 import { getStripe } from '@/lib/stripe'
+import { getAppUrl } from '@/lib/urls'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -155,8 +156,15 @@ export async function POST(req: Request) {
     const isUpgrade = newUnitAmount > currentUnitAmount
 
     if (isUpgrade) {
-      // UPGRADE: sofort, Rest des aktuellen Zeitraums als Credit, neue Rechnung jetzt
-      // Falls zuvor ein Downgrade geplant war → Schedule freigeben, dann upgraden
+      // UPGRADE: Stripe Customer Portal mit "subscription_update_confirm"-Flow.
+      // User sieht: Proration-Vorschau, hinterlegte Zahlungsmethode (kann sie
+      // ändern), exakter Betrag heute, "Confirm" / "Cancel". Bei Cancel oder
+      // Zahlungsfehler bleibt der alte Plan aktiv — kein zerschossener State.
+      // Nach Confirm fired Stripe customer.subscription.updated → unser Webhook
+      // übernimmt DB-Update + Credits-Grant.
+
+      // Falls zuvor ein Downgrade geplant war → Schedule freigeben, sonst
+      // konfligiert das mit dem Portal-Update.
       if (currentSub.schedule) {
         try {
           await stripe.subscriptionSchedules.release(
@@ -167,38 +175,46 @@ export async function POST(req: Request) {
         } catch (err) {
           console.error('[subscriptions/change] Release vor Upgrade:', err)
         }
+        // DB-scheduled-Felder leeren (Webhook holt's auch nach, aber sofort sauberer)
+        const admin = createAdminClient()
+        await admin
+          .from('subscriptions')
+          .update({
+            scheduled_plan_id: null,
+            scheduled_price_id: null,
+            scheduled_billing_cycle: null,
+            scheduled_change_at: null,
+            stripe_schedule_id: null,
+          })
+          .eq('id', sub.id)
       }
 
-      const updated = await stripe.subscriptions.update(sub.stripe_subscription_id, {
-        items: [{ id: currentItem.id, price: newPriceId }],
-        proration_behavior: 'always_invoice',
-        billing_cycle_anchor: 'now',
-        metadata: {
-          user_id: user.id,
-          plan_id: planId,
-          price_band: priceBand,
-          cycle,
+      // Customer-ID brauchen wir für die Portal-Session
+      const customerId =
+        typeof currentSub.customer === 'string' ? currentSub.customer : currentSub.customer.id
+      const origin = getAppUrl(req)
+
+      const portal = await stripe.billingPortal.sessions.create({
+        customer: customerId,
+        return_url: `${origin}/dashboard/account/billing?upgrade=done`,
+        locale: 'de',
+        flow_data: {
+          type: 'subscription_update_confirm',
+          subscription_update_confirm: {
+            subscription: sub.stripe_subscription_id,
+            items: [{ id: currentItem.id, price: newPriceId, quantity: 1 }],
+          },
+          after_completion: {
+            type: 'redirect',
+            redirect: { return_url: `${origin}/dashboard/account/billing?upgrade=done` },
+          },
         },
       })
 
-      // Scheduled-Felder immer löschen (falls vorher gesetzt)
-      const admin = createAdminClient()
-      await admin
-        .from('subscriptions')
-        .update({
-          scheduled_plan_id: null,
-          scheduled_price_id: null,
-          scheduled_billing_cycle: null,
-          scheduled_change_at: null,
-          stripe_schedule_id: null,
-        })
-        .eq('id', sub.id)
-
-      // Webhook customer.subscription.updated übernimmt Plan-Update + Credits-Grant
       return NextResponse.json({
         ok: true,
-        action: 'upgraded',
-        stripeSubscriptionId: updated.id,
+        action: 'upgrade_portal',
+        url: portal.url,
       })
     }
 
