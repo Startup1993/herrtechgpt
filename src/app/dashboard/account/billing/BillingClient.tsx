@@ -227,7 +227,7 @@ export default function BillingClient({
                 ) : (
                   <FileText size={14} />
                 )}
-                Zahlungsmethode aktualisieren
+                Karte aktualisieren
               </button>
             )}
           </div>
@@ -319,7 +319,7 @@ export default function BillingClient({
                 ) : (
                   <FileText size={14} />
                 )}
-                Rechnungen ansehen
+                Rechnungen &amp; Zahlungsdaten
               </button>
             )}
             {subscription.cancel_at_period_end ? (
