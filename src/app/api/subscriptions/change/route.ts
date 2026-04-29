@@ -197,6 +197,7 @@ export async function POST(req: Request) {
       const portal = await stripe.billingPortal.sessions.create({
         customer: customerId,
         return_url: `${origin}/dashboard/account/billing?upgrade=done`,
+        locale: 'de',
         flow_data: {
           type: 'subscription_update_confirm',
           subscription_update_confirm: {
