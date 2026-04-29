@@ -354,9 +354,20 @@ export function CommunityTable({ members }: { members: MemberRow[] }) {
     await executeSync()
   }
 
+  /**
+   * Drei-Phasen-Sync: Stripe-Sync → Dedupe → Auto-Link.
+   * Jede Phase ein eigener API-Call → kein Vercel-Timeout-Risiko bei großen
+   * Datenmengen. Frontend zeigt Progress + zusammengefasste Ergebnis-Box.
+   */
   async function executeSync() {
     setSyncBusy(true)
     setMessage(null)
+
+    // Phase 1: Stripe-Sync
+    setMessage({ type: 'ok', text: '⏳ Phase 1/3: Stripe-Sync …' })
+    let syncOk = false
+    let syncSummary = ''
+    let syncErrors: string[] = []
     try {
       const res = await fetch('/api/admin/community/sync', {
         method: 'POST',
@@ -377,8 +388,6 @@ export function CommunityTable({ members }: { members: MemberRow[] }) {
           invoices: { scanned: number; matched: number; capped: boolean }
         }
         refunds?: { detected: number; cleaned_up: number }
-        deduped?: number
-        auto_linked?: number
       } | null = null
       try {
         data = JSON.parse(txt)
@@ -389,68 +398,93 @@ export function CommunityTable({ members }: { members: MemberRow[] }) {
         const detail =
           data?.error ??
           (res.status === 504
-            ? 'Vercel-Timeout — kürzeren Lookback probieren oder mehrmals nacheinander.'
+            ? 'Vercel-Timeout — kürzeren Lookback probieren.'
             : txt.slice(0, 300))
-        setMessage({ type: 'err', text: `HTTP ${res.status}: ${detail}` })
-      } else if (data) {
-        const summary = [
+        setMessage({ type: 'err', text: `Sync HTTP ${res.status}: ${detail}` })
+        setSyncBusy(false)
+        return
+      }
+      if (data) {
+        syncOk = true
+        const parts = [
           `${data.scanned ?? 0} Stripe-Items geprüft`,
           `${data.matched ?? 0} Skool-Käufe`,
-          `${data.upserted ?? 0} Mitglieder synchronisiert`,
+          `${data.upserted ?? 0} synchronisiert`,
         ]
-        if (data.expired) summary.push(`${data.expired} → Alumni`)
-        if (data.refunds?.cleaned_up) summary.push(`${data.refunds.cleaned_up} Refunds bereinigt`)
-        if (data.deduped) summary.push(`${data.deduped} Duplikate entfernt`)
-        if (data.auto_linked) summary.push(`${data.auto_linked} mit Konten verknüpft`)
-        if (data.errors?.length) summary.push(`${data.errors.length} Fehler`)
-
+        if (data.expired) parts.push(`${data.expired} → Alumni`)
+        if (data.refunds?.cleaned_up) parts.push(`${data.refunds.cleaned_up} Refunds bereinigt`)
         const phase = data.by_phase
         const phaseLines: string[] = []
         if (phase) {
           const fmt = (label: string, p: { scanned: number; matched: number; capped: boolean }) =>
-            `${label}: ${p.scanned} geprüft / ${p.matched} matched${p.capped ? ' (Cap erreicht)' : ''}`
+            `${label}: ${p.scanned} geprüft / ${p.matched} matched${p.capped ? ' (Cap)' : ''}`
           phaseLines.push(fmt('Sessions', phase.sessions))
           phaseLines.push(fmt('Subscriptions', phase.subscriptions))
           phaseLines.push(fmt('Invoices', phase.invoices))
         }
-
-        const cap =
-          phase &&
-          (phase.sessions.capped || phase.subscriptions.capped || phase.invoices.capped)
-            ? '\nEine Phase hat das Pagination-Cap erreicht — nochmal Sync drücken.'
-            : ''
-
-        // Fehler-Details: zeige die ersten 5 unique Fehler-Texte
-        let errorDetails = ''
+        syncSummary =
+          parts.join(' · ') + (phaseLines.length ? '\n' + phaseLines.join('\n') : '')
         if (data.errors?.length) {
           const unique = [
             ...new Set(data.errors.map((e) => e.error).filter(Boolean)),
-          ].slice(0, 5)
-          if (unique.length > 0) {
-            errorDetails = '\n\nFehler:\n• ' + unique.join('\n• ')
-            if (data.errors.length > unique.length) {
-              errorDetails += `\n(+${data.errors.length - unique.length} weitere)`
-            }
-          }
+          ].slice(0, 3)
+          syncErrors = unique
         }
-
-        setMessage({
-          type: data.errors?.length ? 'err' : 'ok',
-          text:
-            summary.join(' · ') +
-            (phaseLines.length ? '\n\n' + phaseLines.join('\n') : '') +
-            cap +
-            errorDetails,
-        })
-        router.refresh()
-      } else {
-        setMessage({ type: 'err', text: 'Sync-Antwort konnte nicht gelesen werden' })
       }
     } catch {
-      setMessage({ type: 'err', text: 'Netzwerk-Fehler' })
-    } finally {
+      setMessage({ type: 'err', text: 'Phase 1 Sync: Netzwerk-Fehler' })
       setSyncBusy(false)
+      return
     }
+    if (!syncOk) {
+      setMessage({ type: 'err', text: 'Sync abgebrochen' })
+      setSyncBusy(false)
+      return
+    }
+
+    // Phase 2: Dedupe
+    setMessage({ type: 'ok', text: `✓ Sync fertig\n⏳ Phase 2/3: Duplikate aufräumen …` })
+    let dedupedCount = 0
+    try {
+      const res = await fetch('/api/admin/community/dedupe', { method: 'POST' })
+      const data = await res.json().catch(() => null)
+      if (res.ok && data) {
+        dedupedCount = data.deleted ?? 0
+      }
+    } catch {
+      // best-effort
+    }
+
+    // Phase 3: Auto-Link
+    setMessage({
+      type: 'ok',
+      text: `✓ Sync fertig · ✓ ${dedupedCount} Duplikate entfernt\n⏳ Phase 3/3: Konten verknüpfen …`,
+    })
+    let linkedCount = 0
+    try {
+      const res = await fetch('/api/admin/community/auto-link', { method: 'POST' })
+      const data = await res.json().catch(() => null)
+      if (res.ok && data) {
+        linkedCount = data.linked ?? 0
+      }
+    } catch {
+      // best-effort
+    }
+
+    // Final-Summary
+    const finalParts = [syncSummary]
+    if (dedupedCount) finalParts.push(`${dedupedCount} Duplikate entfernt`)
+    if (linkedCount) finalParts.push(`${linkedCount} mit Konten verknüpft`)
+    let errorDetails = ''
+    if (syncErrors.length) {
+      errorDetails = '\n\nFehler aus Sync:\n• ' + syncErrors.join('\n• ')
+    }
+    setMessage({
+      type: syncErrors.length ? 'err' : 'ok',
+      text: finalParts.join(' · ') + errorDetails,
+    })
+    router.refresh()
+    setSyncBusy(false)
   }
 
   function toggleSelectionMode() {
