@@ -118,6 +118,7 @@ export function CsvImportModal() {
     invalid: number
     skipped_existing: number
     inserted: number
+    inserted_as_alumni?: number
     errors?: Array<{ email: string; error: string }>
   } | null>(null)
 
@@ -272,8 +273,11 @@ export function CsvImportModal() {
                     Import abgeschlossen
                   </div>
                   <div className="text-foreground text-xs">
-                    {result.received} Zeilen erhalten · {result.inserted} neu hinzugefügt ·{' '}
-                    {result.skipped_existing} schon vorhanden · {result.invalid} ungültig
+                    {result.received} Zeilen erhalten · {result.inserted} neu hinzugefügt
+                    {result.inserted_as_alumni && result.inserted_as_alumni > 0
+                      ? ` (davon ${result.inserted_as_alumni} als Alumni — Zugang abgelaufen)`
+                      : ''}{' '}
+                    · {result.skipped_existing} schon vorhanden · {result.invalid} ungültig
                   </div>
                   {result.errors?.length ? (
                     <div className="text-red-600 text-xs mt-2">

@@ -8,10 +8,11 @@
  * Verhalten:
  *  - Pro Row Email validieren
  *  - Email schon in DB (egal welche source)? → skip (nicht überschreiben)
- *  - Sonst: insert mit source='csv', skool_status='active'
+ *  - Sonst: insert mit source='csv'
  *  - Default-Zugang: 1 Jahr ab heute, falls expires_at fehlt
+ *  - Status: 'alumni' wenn expires_at < now, sonst 'active'
  *
- * Antwort: { inserted, skipped_existing, invalid, errors }
+ * Antwort: { inserted, inserted_as_alumni, skipped_existing, invalid, errors }
  */
 
 import { NextResponse } from 'next/server'
@@ -66,7 +67,13 @@ export async function POST(req: Request) {
   const defaultExpiry = new Date(Date.now() + 365 * 86400 * 1000).toISOString()
 
   // 1) Bereinigen + validieren
-  const validRows: Array<{ email: string; name: string | null; expires_at: string }> = []
+  const nowMs = Date.now()
+  const validRows: Array<{
+    email: string
+    name: string | null
+    expires_at: string
+    status: 'active' | 'alumni'
+  }> = []
   let invalid = 0
   for (const row of rows) {
     const email = row.email?.trim().toLowerCase() ?? ''
@@ -81,10 +88,16 @@ export async function POST(req: Request) {
         expires = parsed.toISOString()
       }
     }
+    // Wenn Zugang bereits abgelaufen → direkt als alumni anlegen, sonst macht
+    // der nächste Cron-Lauf das ohnehin (bis dahin stünden sie fälschlich
+    // als „aktiv" in der UI).
+    const status: 'active' | 'alumni' =
+      new Date(expires).getTime() < nowMs ? 'alumni' : 'active'
     validRows.push({
       email,
       name: row.name?.trim() || null,
       expires_at: expires,
+      status,
     })
   }
 
@@ -112,16 +125,18 @@ export async function POST(req: Request) {
   const skipped_existing = validRows.length - toInsert.length
 
   let inserted = 0
+  let inserted_as_alumni = 0
   const errors: Array<{ email: string; error: string }> = []
   const now = new Date().toISOString()
   const INSERT_BATCH = 100
 
   for (let i = 0; i < toInsert.length; i += INSERT_BATCH) {
-    const batch = toInsert.slice(i, i + INSERT_BATCH).map((r) => ({
+    const slice = toInsert.slice(i, i + INSERT_BATCH)
+    const batch = slice.map((r) => ({
       stripe_customer_id: null,
       email: r.email,
       name: r.name,
-      skool_status: 'active' as const,
+      skool_status: r.status,
       skool_access_started_at: now,
       skool_access_expires_at: r.expires_at,
       source: 'csv',
@@ -135,6 +150,7 @@ export async function POST(req: Request) {
       })
     } else {
       inserted += batch.length
+      inserted_as_alumni += slice.filter((r) => r.status === 'alumni').length
     }
   }
 
@@ -179,6 +195,7 @@ export async function POST(req: Request) {
     invalid,
     skipped_existing,
     inserted,
+    inserted_as_alumni,
     auto_linked: autoLinked,
     errors: errors.length > 0 ? errors : undefined,
   })

@@ -146,6 +146,7 @@ export function PricingModal({
           ok?: boolean
           action?: string
           effectiveAt?: string
+          url?: string
           error?: string
         } = {}
         try {
@@ -156,9 +157,12 @@ export function PricingModal({
         if (!res.ok || !data.ok) {
           throw new Error(data.error || 'Plan-Wechsel fehlgeschlagen')
         }
-        if (data.action === 'upgraded') {
-          setSuccessInfo('Upgrade erfolgreich! Dein neuer Plan ist sofort aktiv.')
-        } else if (data.action === 'downgrade_scheduled') {
+        // Upgrade → Stripe Customer Portal (Proration + Karte + Bezahlen)
+        if (data.action === 'upgrade_portal' && data.url) {
+          window.location.href = data.url
+          return
+        }
+        if (data.action === 'downgrade_scheduled') {
           setSuccessInfo(
             `Downgrade für ${formatDate(data.effectiveAt)} geplant. Bis dahin behältst du deinen aktuellen Plan.`
           )
@@ -334,7 +338,7 @@ export function PricingModal({
                 displayCents != null
               ) {
                 if (displayCents > currentCentsRaw) {
-                  changeLabel = 'Sofort upgraden'
+                  changeLabel = 'Upgraden'
                 } else if (displayCents < currentCentsRaw) {
                   changeLabel = `Zum ${formatDate(currentPeriodEnd)} wechseln`
                 } else {
@@ -503,16 +507,17 @@ export function PricingModal({
               <div>
                 <h3 className="text-lg font-semibold text-foreground">
                   {confirming.action === 'upgrade'
-                    ? 'Jetzt sofort upgraden?'
+                    ? 'Plan upgraden?'
                     : 'Plan-Wechsel planen?'}
                 </h3>
                 <p className="text-sm text-muted mt-2 leading-relaxed">
                   {confirming.action === 'upgrade' ? (
                     <>
-                      Dein neuer Plan ist <strong>sofort aktiv</strong>. Der Rest deines
-                      aktuellen Zeitraums wird dir anteilig gutgeschrieben und mit dem neuen
-                      Preis verrechnet. Dein Abrechnungszyklus startet heute neu. Die neuen
-                      Monats-Credits werden sofort gutgeschrieben.
+                      Du wirst zu <strong>Stripe</strong> weitergeleitet. Dort siehst du
+                      den genauen Betrag, der heute fällig wird (Rest des aktuellen Zeitraums
+                      wird angerechnet), und deine hinterlegte Zahlungsmethode. Du kannst dort
+                      bestätigen oder abbrechen — bei Abbruch bleibt dein aktueller Plan
+                      aktiv.
                     </>
                   ) : (
                     <>
@@ -540,7 +545,7 @@ export function PricingModal({
                 {loadingPlan === confirming.planId && (
                   <Loader2 size={14} className="animate-spin" />
                 )}
-                {confirming.action === 'upgrade' ? 'Sofort upgraden' : 'Wechsel planen'}
+                {confirming.action === 'upgrade' ? 'Weiter zu Stripe' : 'Wechsel planen'}
               </button>
             </div>
           </div>
