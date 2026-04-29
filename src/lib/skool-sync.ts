@@ -1374,44 +1374,67 @@ export async function syncSkoolMembersFromStripe(
       }
     }
 
-    // Email-Konflikte: per id updaten (alten Eintrag mit neuer Customer-ID)
-    for (const { id, payload } of emailUpdates) {
-      const { error: updErr } = await admin
-        .from('community_members')
-        .update(payload)
-        .eq('id', id)
-      if (updErr) {
-        errors.push({
-          member: payload.email as string,
-          error: `Email-Update: ${updErr.message}`,
+    // Email-Konflikte: per id updaten — in 50er-Batches PARALLEL
+    // (sequentiell wäre bei 1000 Konflikten ~50s extra)
+    const PARALLEL_UPDATE = 50
+    for (let i = 0; i < emailUpdates.length; i += PARALLEL_UPDATE) {
+      const slice = emailUpdates.slice(i, i + PARALLEL_UPDATE)
+      const results = await Promise.all(
+        slice.map(async ({ id, payload }) => {
+          const { error: updErr } = await admin
+            .from('community_members')
+            .update(payload)
+            .eq('id', id)
+          return { error: updErr, email: payload.email as string }
         })
-      } else {
-        upserted += 1
+      )
+      for (const r of results) {
+        if (r.error) {
+          errors.push({
+            member: r.email,
+            error: `Email-Update: ${r.error.message}`,
+          })
+        } else {
+          upserted += 1
+        }
       }
     }
 
-    // Plan-S Reaktivierungen für claimed user (sequenziell, kann nicht gebatcht werden)
-    for (const r of planSReactivations) {
-      try {
-        await ensureSkoolPlanS(admin, r)
-      } catch (err) {
-        errors.push({
-          member: r.profileId,
-          error: err instanceof Error ? err.message : String(err),
+    // Plan-S Reaktivierungen — parallel in 20er-Chunks (sonst Bottleneck)
+    const PLAN_PARALLEL = 20
+    for (let i = 0; i < planSReactivations.length; i += PLAN_PARALLEL) {
+      const slice = planSReactivations.slice(i, i + PLAN_PARALLEL)
+      await Promise.all(
+        slice.map(async (r) => {
+          try {
+            await ensureSkoolPlanS(admin, r)
+          } catch (err) {
+            errors.push({
+              member: r.profileId,
+              error: err instanceof Error ? err.message : String(err),
+            })
+          }
         })
-      }
+      )
     }
 
-    // Refund-Cases aus dem Aggregations-Loop abarbeiten
-    for (const memberId of refundCancelMemberIds) {
-      try {
-        await cancelSkoolMembership(admin, memberId)
-      } catch (err) {
-        errors.push({
-          member: memberId,
-          error: err instanceof Error ? err.message : String(err),
+    // Refund-Cases — parallel in 10er-Chunks (cancelSkoolMembership macht
+    // intern 4-5 DB-Calls, daher kleinerer Batch)
+    const CANCEL_PARALLEL = 10
+    for (let i = 0; i < refundCancelMemberIds.length; i += CANCEL_PARALLEL) {
+      const slice = refundCancelMemberIds.slice(i, i + CANCEL_PARALLEL)
+      await Promise.all(
+        slice.map(async (memberId) => {
+          try {
+            await cancelSkoolMembership(admin, memberId)
+          } catch (err) {
+            errors.push({
+              member: memberId,
+              error: err instanceof Error ? err.message : String(err),
+            })
+          }
         })
-      }
+      )
     }
 
     // Auto-Link wird am Ende des Syncs als Bulk-Operation ausgeführt
@@ -1446,15 +1469,27 @@ export async function syncSkoolMembersFromStripe(
         toCancelOrDelete.push(row.id)
       }
     }
-    for (const memberId of toCancelOrDelete) {
-      try {
-        await cancelSkoolMembership(admin, memberId)
-        refundCleanedCount += 1
-      } catch (err) {
-        errors.push({
-          member: memberId,
-          error: err instanceof Error ? err.message : String(err),
+    // Parallel in 10er-Chunks
+    const CLEAN_PARALLEL = 10
+    for (let i = 0; i < toCancelOrDelete.length; i += CLEAN_PARALLEL) {
+      const slice = toCancelOrDelete.slice(i, i + CLEAN_PARALLEL)
+      const results = await Promise.all(
+        slice.map(async (memberId) => {
+          try {
+            await cancelSkoolMembership(admin, memberId)
+            return { ok: true as const, memberId }
+          } catch (err) {
+            return {
+              ok: false as const,
+              memberId,
+              error: err instanceof Error ? err.message : String(err),
+            }
+          }
         })
+      )
+      for (const r of results) {
+        if (r.ok) refundCleanedCount += 1
+        else errors.push({ member: r.memberId, error: r.error })
       }
     }
   }
@@ -1469,15 +1504,27 @@ export async function syncSkoolMembersFromStripe(
     .lt('skool_access_expires_at', nowIso)
 
   let expiredCount = 0
-  for (const m of toExpire ?? []) {
-    try {
-      await expireSkoolMembership(admin, m.id)
-      expiredCount += 1
-    } catch (err) {
-      errors.push({
-        member: m.id,
-        error: err instanceof Error ? err.message : String(err),
+  const toExpireList = toExpire ?? []
+  const EXPIRE_PARALLEL = 10
+  for (let i = 0; i < toExpireList.length; i += EXPIRE_PARALLEL) {
+    const slice = toExpireList.slice(i, i + EXPIRE_PARALLEL)
+    const results = await Promise.all(
+      slice.map(async (m) => {
+        try {
+          await expireSkoolMembership(admin, m.id)
+          return { ok: true as const }
+        } catch (err) {
+          return {
+            ok: false as const,
+            memberId: m.id as string,
+            error: err instanceof Error ? err.message : String(err),
+          }
+        }
       })
+    )
+    for (const r of results) {
+      if (r.ok) expiredCount += 1
+      else errors.push({ member: r.memberId, error: r.error })
     }
   }
 
