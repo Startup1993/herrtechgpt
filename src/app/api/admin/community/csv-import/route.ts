@@ -17,6 +17,10 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
+import {
+  autoLinkProfileIfExists,
+  buildAuthUserEmailMap,
+} from '@/lib/skool-sync'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -134,12 +138,48 @@ export async function POST(req: Request) {
     }
   }
 
+  // Auto-Link: bereits existierende auth.users direkt verknüpfen
+  let autoLinked = 0
+  if (inserted > 0) {
+    try {
+      const userMap = await buildAuthUserEmailMap(admin)
+      const insertedEmails = toInsert.map((r) => r.email)
+      // In Batches die frisch eingefügten Members lesen + linken
+      const READ = 500
+      for (let i = 0; i < insertedEmails.length; i += READ) {
+        const emailBatch = insertedEmails.slice(i, i + READ)
+        const { data: rows } = await admin
+          .from('community_members')
+          .select(
+            'id, email, name, skool_status, skool_access_expires_at, profile_id'
+          )
+          .in('email', emailBatch)
+          .is('profile_id', null)
+        for (const row of rows ?? []) {
+          try {
+            const res = await autoLinkProfileIfExists(
+              admin,
+              row as Parameters<typeof autoLinkProfileIfExists>[1],
+              userMap
+            )
+            if (res.linked) autoLinked += 1
+          } catch {
+            // ignore — Insert war schon erfolgreich
+          }
+        }
+      }
+    } catch {
+      // Auto-Link best-effort; Fehler nicht blocken
+    }
+  }
+
   return NextResponse.json({
     received: rows.length,
     valid: validRows.length,
     invalid,
     skipped_existing,
     inserted,
+    auto_linked: autoLinked,
     errors: errors.length > 0 ? errors : undefined,
   })
 }

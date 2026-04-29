@@ -20,6 +20,7 @@ import {
   Square,
   X,
   Layers,
+  Link2,
 } from 'lucide-react'
 import { EditMemberModal, type EditMember } from './EditMemberModal'
 
@@ -133,6 +134,7 @@ export function CommunityTable({ members }: { members: MemberRow[] }) {
   const [selectionMode, setSelectionMode] = useState(false)
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
   const [dedupeBusy, setDedupeBusy] = useState(false)
+  const [linkBusy, setLinkBusy] = useState(false)
 
   // Bulk-Invite-Progress (Chunking in 50er-Batches)
   const [bulkProgress, setBulkProgress] = useState<{
@@ -480,6 +482,34 @@ export function CommunityTable({ members }: { members: MemberRow[] }) {
     clearSelection()
   }
 
+  async function runAutoLink() {
+    if (
+      !confirm(
+        'Mit existierenden Konten verknüpfen?\n\nProft alle KMC-Mitglieder ohne Account-Verknüpfung — wenn die Email bereits einen User hat (z.B. Admin / Self-Signup), wird automatisch verknüpft. Plan S / Alumni-Tier wird gesetzt. Admin-Rolle bleibt unangetastet.'
+      )
+    )
+      return
+    setLinkBusy(true)
+    setMessage(null)
+    try {
+      const res = await fetch('/api/admin/community/auto-link', { method: 'POST' })
+      const data = await res.json().catch(() => null)
+      if (!res.ok) {
+        setMessage({ type: 'err', text: data?.error ?? 'Auto-Link fehlgeschlagen' })
+      } else {
+        setMessage({
+          type: 'ok',
+          text: `${data.scanned} geprüft · ${data.linked} verknüpft · ${data.skipped} ohne Match`,
+        })
+        router.refresh()
+      }
+    } catch {
+      setMessage({ type: 'err', text: 'Netzwerk-Fehler' })
+    } finally {
+      setLinkBusy(false)
+    }
+  }
+
   async function runDedupe() {
     if (
       !confirm(
@@ -685,6 +715,19 @@ export function CommunityTable({ members }: { members: MemberRow[] }) {
             <Layers className="w-4 h-4" />
           )}
           Duplikate
+        </button>
+        <button
+          onClick={runAutoLink}
+          disabled={linkBusy}
+          className="inline-flex items-center gap-2 px-3 py-2 rounded-lg border border-border hover:bg-surface-hover text-foreground font-medium text-sm transition disabled:opacity-50"
+          title="KMC-Mitglieder mit existierenden Plattform-Konten verknüpfen"
+        >
+          {linkBusy ? (
+            <Loader2 className="w-4 h-4 animate-spin" />
+          ) : (
+            <Link2 className="w-4 h-4" />
+          )}
+          Konten verknüpfen
         </button>
         <button
           onClick={toggleSelectionMode}
