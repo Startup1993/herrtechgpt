@@ -343,6 +343,8 @@ export function CommunityTable({ members }: { members: MemberRow[] }) {
               invoices: { scanned: number; matched: number; capped: boolean }
             }
             refunds?: { detected: number; cleaned_up: number }
+            deduped?: number
+            auto_linked?: number
           }
         | null = null
       try {
@@ -366,6 +368,10 @@ export function CommunityTable({ members }: { members: MemberRow[] }) {
         if (data.expired) summary.push(`${data.expired} auf Alumni gesetzt`)
         if (data.refunds?.cleaned_up) {
           summary.push(`${data.refunds.cleaned_up} Refunds bereinigt`)
+        }
+        if (data.deduped) summary.push(`${data.deduped} Duplikate entfernt`)
+        if (data.auto_linked) {
+          summary.push(`${data.auto_linked} mit Konten verknüpft`)
         }
         if (data.errors?.length) summary.push(`${data.errors.length} Fehler`)
 
@@ -707,7 +713,7 @@ export function CommunityTable({ members }: { members: MemberRow[] }) {
           onClick={runDedupe}
           disabled={dedupeBusy}
           className="inline-flex items-center gap-2 px-3 py-2 rounded-lg border border-border hover:bg-surface-hover text-foreground font-medium text-sm transition disabled:opacity-50"
-          title="Doppelte Einträge zusammenführen (Stripe-Quelle gewinnt)"
+          title="Notfall-Trigger: doppelte Einträge zusammenführen. Läuft automatisch nach jedem Sync und CSV-Import."
         >
           {dedupeBusy ? (
             <Loader2 className="w-4 h-4 animate-spin" />
@@ -720,7 +726,7 @@ export function CommunityTable({ members }: { members: MemberRow[] }) {
           onClick={runAutoLink}
           disabled={linkBusy}
           className="inline-flex items-center gap-2 px-3 py-2 rounded-lg border border-border hover:bg-surface-hover text-foreground font-medium text-sm transition disabled:opacity-50"
-          title="KMC-Mitglieder mit existierenden Plattform-Konten verknüpfen"
+          title="Notfall-Trigger: KMC-Mitglieder mit existierenden Plattform-Konten verknüpfen. Läuft automatisch nach jedem Sync."
         >
           {linkBusy ? (
             <Loader2 className="w-4 h-4 animate-spin" />
