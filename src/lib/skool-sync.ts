@@ -1318,10 +1318,52 @@ export async function syncSkoolMembersFromStripe(
       }
     }
 
-    // Bulk-Upsert in 100er-Batches
+    // Email-Konflikt-Vorab-Check: ein User kann mehrere Stripe-Customer-IDs
+    // haben (z.B. neue Karte → neuer Customer). Wir wollen NICHT 2 Einträge,
+    // sondern den existing per Email finden und diesen mit der neuen Customer-ID
+    // updaten. Sonst kracht der UNIQUE-Index auf lower(email).
+    const emailToExistingId = new Map<string, { id: string; profile_id: string | null }>()
+    {
+      const allEmails = payloads.map((p) => (p.email as string).toLowerCase())
+      const READ = 500
+      for (let i = 0; i < allEmails.length; i += READ) {
+        const batch = allEmails.slice(i, i + READ)
+        const { data: rows } = await admin
+          .from('community_members')
+          .select('id, email, stripe_customer_id, profile_id')
+          .in('email', batch)
+        for (const r of rows ?? []) {
+          emailToExistingId.set((r.email as string).toLowerCase(), {
+            id: r.id as string,
+            profile_id: (r.profile_id as string | null) ?? null,
+          })
+        }
+      }
+    }
+
+    // Aufteilen: payloads die per stripe_customer_id existieren → normaler upsert.
+    // Payloads ohne customer-match aber mit email-match → UPDATE per id (alten
+    // Eintrag mit neuer customer_id refreshen). Komplett neue → insert via upsert.
+    const upsertable: typeof payloads = []
+    const emailUpdates: Array<{ id: string; payload: (typeof payloads)[number] }> = []
+    for (const p of payloads) {
+      const cid = p.stripe_customer_id as string
+      if (existingMap.has(cid)) {
+        upsertable.push(p)
+        continue
+      }
+      const byEmail = emailToExistingId.get((p.email as string).toLowerCase())
+      if (byEmail) {
+        emailUpdates.push({ id: byEmail.id, payload: p })
+        continue
+      }
+      upsertable.push(p)
+    }
+
+    // Bulk-Upsert für non-conflicts (auf stripe_customer_id)
     const UPSERT_BATCH = 100
-    for (let i = 0; i < payloads.length; i += UPSERT_BATCH) {
-      const batch = payloads.slice(i, i + UPSERT_BATCH)
+    for (let i = 0; i < upsertable.length; i += UPSERT_BATCH) {
+      const batch = upsertable.slice(i, i + UPSERT_BATCH)
       const { error: upErr } = await admin
         .from('community_members')
         .upsert(batch, { onConflict: 'stripe_customer_id' })
@@ -1329,6 +1371,22 @@ export async function syncSkoolMembersFromStripe(
         errors.push({ error: `Bulk-Upsert: ${upErr.message}` })
       } else {
         upserted += batch.length
+      }
+    }
+
+    // Email-Konflikte: per id updaten (alten Eintrag mit neuer Customer-ID)
+    for (const { id, payload } of emailUpdates) {
+      const { error: updErr } = await admin
+        .from('community_members')
+        .update(payload)
+        .eq('id', id)
+      if (updErr) {
+        errors.push({
+          member: payload.email as string,
+          error: `Email-Update: ${updErr.message}`,
+        })
+      } else {
+        upserted += 1
       }
     }
 
