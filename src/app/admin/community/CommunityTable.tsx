@@ -420,12 +420,27 @@ export function CommunityTable({ members }: { members: MemberRow[] }) {
             ? '\nEine Phase hat das Pagination-Cap erreicht — nochmal Sync drücken.'
             : ''
 
+        // Fehler-Details: zeige die ersten 5 unique Fehler-Texte
+        let errorDetails = ''
+        if (data.errors?.length) {
+          const unique = [
+            ...new Set(data.errors.map((e) => e.error).filter(Boolean)),
+          ].slice(0, 5)
+          if (unique.length > 0) {
+            errorDetails = '\n\nFehler:\n• ' + unique.join('\n• ')
+            if (data.errors.length > unique.length) {
+              errorDetails += `\n(+${data.errors.length - unique.length} weitere)`
+            }
+          }
+        }
+
         setMessage({
-          type: 'ok',
+          type: data.errors?.length ? 'err' : 'ok',
           text:
             summary.join(' · ') +
             (phaseLines.length ? '\n\n' + phaseLines.join('\n') : '') +
-            cap,
+            cap +
+            errorDetails,
         })
         router.refresh()
       } else {
