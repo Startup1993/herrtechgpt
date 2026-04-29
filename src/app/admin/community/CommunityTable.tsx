@@ -7,8 +7,6 @@ import {
   Mail,
   CheckCircle2,
   Send,
-  RefreshCw,
-  Stethoscope,
   ChevronUp,
   ChevronDown,
   ChevronLeft,
@@ -126,10 +124,7 @@ export function CommunityTable({ members }: { members: MemberRow[] }) {
   >('all')
   const [loading, setLoading] = useState<string | null>(null)
   const [bulkBusy, setBulkBusy] = useState(false)
-  const [syncBusy, setSyncBusy] = useState(false)
-  const [diagBusy, setDiagBusy] = useState(false)
   const [deleteBusy, setDeleteBusy] = useState<string | null>(null)
-  const [syncDays, setSyncDays] = useState(90)
   const [editing, setEditing] = useState<EditMember | null>(null)
   const [selectionMode, setSelectionMode] = useState(false)
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
@@ -254,159 +249,6 @@ export function CommunityTable({ members }: { members: MemberRow[] }) {
     )
     .map((m) => m.id)
 
-  async function runDiagnose() {
-    setDiagBusy(true)
-    setMessage(null)
-    try {
-      const res = await fetch(`/api/admin/community/diagnose?days=${syncDays}`)
-      const txt = await res.text()
-      let data: {
-        mode?: string
-        days?: number
-        stripe?: {
-          sessions_in_range: { count: number; has_more: boolean }
-          invoices_paid_in_range: { count: number; has_more: boolean }
-          subscriptions_active: { count: number; has_more: boolean }
-          subscriptions_all: { count: number; has_more: boolean }
-        }
-        hint?: string | null
-        errors?: string[]
-        error?: string
-      } | null = null
-      try {
-        data = JSON.parse(txt)
-      } catch {
-        // ignore — we'll show the raw text below
-      }
-      if (!res.ok) {
-        const detail = data?.error ?? txt.slice(0, 300)
-        setMessage({ type: 'err', text: `HTTP ${res.status}: ${detail}` })
-        return
-      }
-      if (!data?.stripe) {
-        setMessage({ type: 'err', text: data?.error ?? 'Diagnose-Antwort unvollständig' })
-        return
-      }
-      const s = data.stripe
-      const more = (snap: { count: number; has_more: boolean }) =>
-        snap.has_more ? `${snap.count}+` : `${snap.count}`
-      const lines = [
-        `Stripe-Mode: ${(data.mode ?? '?').toUpperCase()}`,
-        `Sessions (${data.days}d): ${more(s.sessions_in_range)}`,
-        `Paid Invoices (${data.days}d): ${more(s.invoices_paid_in_range)}`,
-        `Active Subs: ${more(s.subscriptions_active)}`,
-        `All Subs: ${more(s.subscriptions_all)}`,
-      ]
-      const hint = data.hint ? `\n${data.hint}` : ''
-      const errs = data.errors?.length ? `\nFehler: ${data.errors.join('; ')}` : ''
-      setMessage({
-        type: data.mode === 'live' && !data.errors?.length ? 'ok' : 'err',
-        text: lines.join(' · ') + hint + errs,
-      })
-    } catch (err) {
-      setMessage({
-        type: 'err',
-        text: err instanceof Error ? err.message : 'Netzwerk-Fehler',
-      })
-    } finally {
-      setDiagBusy(false)
-    }
-  }
-
-  async function runSync() {
-    if (
-      !confirm(
-        `Sync der letzten ${syncDays} Tage starten?\n\nDurchsucht Stripe nach KMC-Käufen (Checkout-Sessions + Subscriptions + bezahlte Rechnungen), aktualisiert die Mitgliederliste und setzt abgelaufene Mitglieder auf Alumni.`
-      )
-    )
-      return
-    setSyncBusy(true)
-    setMessage(null)
-    try {
-      const res = await fetch('/api/admin/community/sync', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ days: syncDays }),
-      })
-      const txt = await res.text()
-      let data:
-        | {
-            scanned?: number
-            matched?: number
-            upserted?: number
-            expired?: number
-            errors?: { error: string }[]
-            error?: string
-            by_phase?: {
-              sessions: { scanned: number; matched: number; capped: boolean }
-              subscriptions: { scanned: number; matched: number; capped: boolean }
-              invoices: { scanned: number; matched: number; capped: boolean }
-            }
-            refunds?: { detected: number; cleaned_up: number }
-            deduped?: number
-            auto_linked?: number
-          }
-        | null = null
-      try {
-        data = JSON.parse(txt)
-      } catch {
-        // Body war kein JSON (z.B. Vercel-504-HTML-Fehlerseite)
-      }
-      if (!res.ok) {
-        const detail =
-          data?.error ??
-          (res.status === 504
-            ? 'Vercel-Timeout (5 Min) — versuch es nochmal mit kürzerem Lookback (z.B. 1 Jahr) oder mehrmals nacheinander.'
-            : txt.slice(0, 300))
-        setMessage({ type: 'err', text: `HTTP ${res.status}: ${detail}` })
-      } else if (data) {
-        const summary = [
-          `${data.scanned ?? 0} Stripe-Items geprüft`,
-          `${data.matched ?? 0} davon waren Skool-Käufe`,
-          `${data.upserted ?? 0} Mitglieder synchronisiert`,
-        ]
-        if (data.expired) summary.push(`${data.expired} auf Alumni gesetzt`)
-        if (data.refunds?.cleaned_up) {
-          summary.push(`${data.refunds.cleaned_up} Refunds bereinigt`)
-        }
-        if (data.deduped) summary.push(`${data.deduped} Duplikate entfernt`)
-        if (data.auto_linked) {
-          summary.push(`${data.auto_linked} mit Konten verknüpft`)
-        }
-        if (data.errors?.length) summary.push(`${data.errors.length} Fehler`)
-
-        const phase = data.by_phase
-        const phaseLines: string[] = []
-        if (phase) {
-          const fmt = (label: string, p: { scanned: number; matched: number; capped: boolean }) =>
-            `${label}: ${p.scanned} geprüft / ${p.matched} matched${p.capped ? ' (Cap erreicht — nochmal Sync drücken!)' : ''}`
-          phaseLines.push(fmt('Sessions', phase.sessions))
-          phaseLines.push(fmt('Subscriptions', phase.subscriptions))
-          phaseLines.push(fmt('Invoices', phase.invoices))
-        }
-
-        const hint =
-          (data.matched ?? 0) === 0 && (data.scanned ?? 0) > 0
-            ? '\nHinweis: keine Skool-Products getroffen — Product-IDs in Stripe checken oder weitere unter „Stripe-Produkte pflegen" hinzufügen.'
-            : phase &&
-              (phase.sessions.capped || phase.subscriptions.capped || phase.invoices.capped)
-            ? '\nEine oder mehrere Phasen haben das Pagination-Cap erreicht. Sync nochmal drücken um den Rest zu importieren.'
-            : ''
-
-        setMessage({
-          type: 'ok',
-          text: summary.join(' · ') + (phaseLines.length ? '\n\n' + phaseLines.join('\n') : '') + hint,
-        })
-        router.refresh()
-      } else {
-        setMessage({ type: 'err', text: 'Sync-Antwort konnte nicht gelesen werden' })
-      }
-    } catch {
-      setMessage({ type: 'err', text: 'Netzwerk-Fehler' })
-    } finally {
-      setSyncBusy(false)
-    }
-  }
 
   function toggleSelectionMode() {
     if (selectionMode) {
@@ -668,47 +510,9 @@ export function CommunityTable({ members }: { members: MemberRow[] }) {
 
   return (
     <div className="space-y-4">
-      {/* Zeile 1: Stripe-Sync-Tools — gehören thematisch zu den Admin-Tools im Page-Header */}
+      {/* Zeile 1: Bestand-Aufräumen + Bearbeiten — direkt über der Tabelle.
+          Sync-Tools sind im Page-Header (oben rechts). */}
       <div className="flex flex-wrap items-center justify-end gap-2">
-        <select
-          value={syncDays}
-          onChange={(e) => setSyncDays(parseInt(e.target.value, 10))}
-          disabled={syncBusy}
-          className="px-3 py-2 rounded-lg bg-surface border border-border text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-primary"
-          title="Wie weit zurück soll Stripe geprüft werden?"
-        >
-          <option value={30}>30 Tage</option>
-          <option value={90}>90 Tage</option>
-          <option value={180}>180 Tage</option>
-          <option value={365}>1 Jahr</option>
-          <option value={730}>2 Jahre</option>
-        </select>
-        <button
-          onClick={runDiagnose}
-          disabled={diagBusy || syncBusy}
-          className="inline-flex items-center gap-2 px-3 py-2 rounded-lg border border-border hover:bg-surface-hover text-foreground font-medium text-sm transition disabled:opacity-50"
-          title="Zählt Stripe-Sessions/Invoices/Subscriptions im Live-Account"
-        >
-          {diagBusy ? (
-            <Loader2 className="w-4 h-4 animate-spin" />
-          ) : (
-            <Stethoscope className="w-4 h-4" />
-          )}
-          Diagnose
-        </button>
-        <button
-          onClick={runSync}
-          disabled={syncBusy || diagBusy}
-          className="inline-flex items-center gap-2 px-3 py-2 rounded-lg border border-border hover:bg-surface-hover text-foreground font-medium text-sm transition disabled:opacity-50"
-          title="Pullt Stripe-Käufe (Sessions + Subs + Invoices) und cleant abgelaufene Mitglieder"
-        >
-          {syncBusy ? (
-            <Loader2 className="w-4 h-4 animate-spin" />
-          ) : (
-            <RefreshCw className="w-4 h-4" />
-          )}
-          Sync
-        </button>
         <button
           onClick={runDedupe}
           disabled={dedupeBusy}
