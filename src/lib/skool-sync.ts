@@ -1331,13 +1331,30 @@ export async function syncSkoolMembersFromStripe(
       }
     }
 
-    // Email-Konflikt-Vorab-Check: ein User kann mehrere Stripe-Customer-IDs
-    // haben (z.B. neue Karte → neuer Customer). Wir wollen NICHT 2 Einträge,
-    // sondern den existing per Email finden und diesen mit der neuen Customer-ID
-    // updaten. Sonst kracht der UNIQUE-Index auf lower(email).
+    // Pre-Dedupe nach Email: ein User kann mehrere Stripe-Customer-IDs haben
+    // (z.B. neue Karte → neuer Customer). Damit hätten wir mehrere Payloads
+    // mit gleicher Email aber verschiedenen Customer-IDs → würde den UNIQUE-
+    // Index auf lower(email) sprengen. Pro Email nur den jüngsten Kauf
+    // behalten (last_purchase_at).
+    const dedupedByEmail = new Map<string, (typeof payloads)[number]>()
+    for (const p of payloads) {
+      const email = (p.email as string).toLowerCase()
+      const existing = dedupedByEmail.get(email)
+      if (!existing) {
+        dedupedByEmail.set(email, p)
+      } else {
+        const a = new Date(p.last_purchase_at as string).getTime()
+        const b = new Date(existing.last_purchase_at as string).getTime()
+        if (a > b) dedupedByEmail.set(email, p)
+      }
+    }
+    const dedupedPayloads = [...dedupedByEmail.values()]
+
+    // Email-Konflikt-Vorab-Check: gibt's existing community_members mit
+    // dieser Email (ggf. anderer Customer-ID)? Dann UPDATE statt INSERT.
     const emailToExistingId = new Map<string, { id: string; profile_id: string | null }>()
     {
-      const allEmails = payloads.map((p) => (p.email as string).toLowerCase())
+      const allEmails = dedupedPayloads.map((p) => (p.email as string).toLowerCase())
       const READ = 500
       for (let i = 0; i < allEmails.length; i += READ) {
         const batch = allEmails.slice(i, i + READ)
@@ -1359,7 +1376,7 @@ export async function syncSkoolMembersFromStripe(
     // Eintrag mit neuer customer_id refreshen). Komplett neue → insert via upsert.
     const upsertable: typeof payloads = []
     const emailUpdates: Array<{ id: string; payload: (typeof payloads)[number] }> = []
-    for (const p of payloads) {
+    for (const p of dedupedPayloads) {
       const cid = p.stripe_customer_id as string
       if (existingMap.has(cid)) {
         upsertable.push(p)
