@@ -15,6 +15,7 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
+import { autoLinkProfileIfExists } from '@/lib/skool-sync'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -100,5 +101,22 @@ export async function POST(req: Request) {
     )
   }
 
-  return NextResponse.json({ ok: true, member: created })
+  // Auto-Link: falls schon ein auth.user mit dieser Email existiert,
+  // direkt verknüpfen (claimed_at + access_tier setzen, role bleibt).
+  let autoLinked = false
+  try {
+    const res = await autoLinkProfileIfExists(admin, {
+      id: created.id,
+      email,
+      name: body?.name?.trim() || null,
+      skool_status: status,
+      skool_access_expires_at: expiresAt,
+      profile_id: null,
+    })
+    autoLinked = res.linked
+  } catch {
+    // best-effort
+  }
+
+  return NextResponse.json({ ok: true, member: created, auto_linked: autoLinked })
 }

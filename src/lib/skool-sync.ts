@@ -183,6 +183,23 @@ export async function recordSkoolPurchase(
   if (error || !created) {
     throw new Error(`recordSkoolPurchase insert: ${error?.message ?? 'unknown'}`)
   }
+
+  // Auto-Link: falls schon ein auth.user mit dieser Email existiert,
+  // direkt verknüpfen (z.B. Admin oder Self-Signup-User, der jetzt KMC kauft).
+  // Best-effort — Webhook soll nicht failen, wenn der Lookup hakt.
+  try {
+    await autoLinkProfileIfExists(admin, {
+      id: created.id,
+      email: email.toLowerCase(),
+      name: name ?? null,
+      skool_status: 'active',
+      skool_access_expires_at: newExpiry.toISOString(),
+      profile_id: null,
+    })
+  } catch {
+    // ignore
+  }
+
   return { communityMemberId: created.id, wasRenewal: false }
 }
 
@@ -469,6 +486,111 @@ export async function getCommunityMemberByToken(
   if (new Date(data.invitation_token_expires) < new Date()) return null
 
   return data
+}
+
+/**
+ * Auto-Link: prüft ob für die Email schon ein auth.user existiert
+ * (z.B. Admin / Self-Signup) und verknüpft dann community_member damit
+ * direkt — ohne dass der User die Einladung claimen muss.
+ *
+ * - profiles.role wird NICHT angefasst (Admin bleibt Admin)
+ * - profiles.full_name wird nur gesetzt, wenn aktuell NULL
+ * - access_tier:
+ *   * skool_status='active' + Zugang gültig → ensureSkoolPlanS (premium,
+ *     paid-Subs werden nicht überschrieben)
+ *   * skool_status='alumni' → access_tier='alumni' (nur wenn aktuell basic)
+ *   * skool_status='cancelled' → kein Tier-Upgrade
+ *
+ * Optional: cachedUserMap für Bulk-Aufrufe (vermeidet N × listUsers).
+ */
+export async function autoLinkProfileIfExists(
+  admin: SupabaseClient,
+  member: {
+    id: string
+    email: string
+    name?: string | null
+    skool_status: 'active' | 'alumni' | 'cancelled'
+    skool_access_expires_at: string | null
+    profile_id: string | null
+  },
+  cachedUserMap?: Map<string, string>
+): Promise<{ linked: boolean; profileId?: string }> {
+  if (member.profile_id) return { linked: false }
+
+  const email = member.email.toLowerCase()
+
+  // User-ID per Email auflösen — entweder aus Cache oder live nachschlagen
+  let userId: string | undefined
+  if (cachedUserMap) {
+    userId = cachedUserMap.get(email)
+  } else {
+    const { data: page } = await admin.auth.admin.listUsers({ perPage: 1000 })
+    const found = page?.users?.find((u) => u.email?.toLowerCase() === email)
+    userId = found?.id
+  }
+
+  if (!userId) return { linked: false }
+
+  // community_member verknüpfen (Auto-Claim)
+  await admin
+    .from('community_members')
+    .update({
+      profile_id: userId,
+      claimed_at: new Date().toISOString(),
+      invitation_token: null,
+      invitation_token_expires: null,
+    })
+    .eq('id', member.id)
+
+  // Name nur befüllen wenn leer
+  if (member.name) {
+    await admin
+      .from('profiles')
+      .update({ full_name: member.name })
+      .eq('id', userId)
+      .is('full_name', null)
+  }
+
+  // Tier hochsetzen — paid Subs / admin_granted bleiben unangetastet
+  if (
+    member.skool_status === 'active' &&
+    member.skool_access_expires_at &&
+    new Date(member.skool_access_expires_at) > new Date()
+  ) {
+    await ensureSkoolPlanS(admin, {
+      profileId: userId,
+      periodEnd: new Date(member.skool_access_expires_at),
+    })
+  } else if (member.skool_status === 'alumni') {
+    await admin
+      .from('profiles')
+      .update({ access_tier: 'alumni' })
+      .eq('id', userId)
+      .eq('access_tier', 'basic')
+  }
+
+  return { linked: true, profileId: userId }
+}
+
+/**
+ * Hilfsfunktion: Map<emailLower, userId> aus auth.users bauen.
+ * Für Bulk-Aufrufe gedacht — listUsers liefert max 1000 pro Page.
+ */
+export async function buildAuthUserEmailMap(
+  admin: SupabaseClient
+): Promise<Map<string, string>> {
+  const map = new Map<string, string>()
+  let page = 1
+  while (page < 50) {
+    const { data } = await admin.auth.admin.listUsers({ perPage: 1000, page })
+    const users = data?.users ?? []
+    for (const u of users) {
+      if (u.email) map.set(u.email.toLowerCase(), u.id)
+    }
+    if (users.length < 1000) break
+    page += 1
+  }
+  return map
 }
 
 /**
@@ -1085,6 +1207,46 @@ export async function syncSkoolMembersFromStripe(
           error: err instanceof Error ? err.message : String(err),
         })
       }
+    }
+
+    // ─── Auto-Link: gerade upsertete Members, deren Email schon einem
+    //     auth.user gehört (z.B. Admin / Self-Signup), direkt verknüpfen.
+    //     Verhindert Doppel-Listings und gibt dem User direkt den richtigen
+    //     access_tier (premium für active, alumni für alumni). Admin-Rolle
+    //     wird NICHT verändert.
+    try {
+      const userMap = await buildAuthUserEmailMap(admin)
+      // Frisch gelandete Members (noch ohne profile_id) durchgehen
+      const customerIdsToCheck = [...perCustomer.keys()]
+      const READ_LINK_BATCH = 500
+      for (let i = 0; i < customerIdsToCheck.length; i += READ_LINK_BATCH) {
+        const batch = customerIdsToCheck.slice(i, i + READ_LINK_BATCH)
+        const { data: rows } = await admin
+          .from('community_members')
+          .select(
+            'id, email, name, skool_status, skool_access_expires_at, profile_id'
+          )
+          .in('stripe_customer_id', batch)
+          .is('profile_id', null)
+        for (const row of rows ?? []) {
+          try {
+            await autoLinkProfileIfExists(
+              admin,
+              row as Parameters<typeof autoLinkProfileIfExists>[1],
+              userMap
+            )
+          } catch (err) {
+            errors.push({
+              member: (row as { id: string }).id,
+              error: `auto-link: ${err instanceof Error ? err.message : String(err)}`,
+            })
+          }
+        }
+      }
+    } catch (err) {
+      errors.push({
+        error: `auto-link map: ${err instanceof Error ? err.message : String(err)}`,
+      })
     }
   }
 
