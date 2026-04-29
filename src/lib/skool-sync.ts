@@ -816,8 +816,6 @@ export async function syncSkoolMembersFromStripe(
     invoices: { scanned: number; matched: number; capped: boolean }
   }
   refunds: { detected: number; cleaned_up: number }
-  deduped: number
-  auto_linked: number
   errors: Array<{ session?: string; member?: string; error: string }>
 }> {
   const days = opts.days ?? 90
@@ -825,7 +823,9 @@ export async function syncSkoolMembersFromStripe(
   const stripe = getStripe()
 
   // Pagination-Caps pro Phase. Mit expand inline werden alle Quellen billig.
-  const SESSIONS_MAX_PAGES = 300 // 30.000 Sessions max — bei vielen Stripe-Sessions
+  // Dedupe + Auto-Link laufen getrennt (eigene API-Endpoints) → halten den
+  // Sync-Endpoint unter 5 Min Vercel-Timeout.
+  const SESSIONS_MAX_PAGES = 100 // 10.000 Sessions max
   const SUBS_MAX_PAGES = 100 // 10.000 Subscriptions max
   const INVOICES_MAX_PAGES = 100 // 10.000 Invoices max
   const REFUNDS_MAX_PAGES = 50 // 5.000 Refunds max
@@ -853,8 +853,6 @@ export async function syncSkoolMembersFromStripe(
         invoices: { scanned: 0, matched: 0, capped: false },
       },
       refunds: { detected: 0, cleaned_up: 0 },
-      deduped: 0,
-      auto_linked: 0,
       errors: [{ error: 'Keine Skool-Products in der Whitelist' }],
     }
   }
@@ -1425,31 +1423,8 @@ export async function syncSkoolMembersFromStripe(
     }
   }
 
-  // ─── Automatisches Aufräumen am Ende jedes Sync ───────────────────────
-  // 1. Dedupe: doppelte Einträge nach lower(email) → Stripe gewinnt
-  let dedupedCount = 0
-  try {
-    const r = await dedupeCommunityMembers(admin)
-    dedupedCount = r.deleted
-    for (const e of r.errors) errors.push({ error: `dedupe: ${e}` })
-  } catch (err) {
-    errors.push({
-      error: `dedupe: ${err instanceof Error ? err.message : String(err)}`,
-    })
-  }
-
-  // 2. Auto-Link: alle Bestand ohne profile_id mit existierenden auth.users
-  //    verknüpfen (Admin / Self-Signup → KMC). Verhindert Doppel-Listings.
-  let autoLinkedCount = 0
-  try {
-    const r = await autoLinkAllUnclaimed(admin)
-    autoLinkedCount = r.linked
-    for (const e of r.errors) errors.push({ error: `auto-link: ${e}` })
-  } catch (err) {
-    errors.push({
-      error: `auto-link: ${err instanceof Error ? err.message : String(err)}`,
-    })
-  }
+  // Dedupe + Auto-Link laufen jetzt im Frontend als separate API-Calls
+  // nach dem Sync — verhindert Vercel-Timeout bei vielen Mitgliedern.
 
   return {
     scanned: sessionsScanned + subsScanned + invScanned,
@@ -1465,8 +1440,6 @@ export async function syncSkoolMembersFromStripe(
       detected: refundsByCustomer.size,
       cleaned_up: refundCleanedCount,
     },
-    deduped: dedupedCount,
-    auto_linked: autoLinkedCount,
     errors,
   }
 }

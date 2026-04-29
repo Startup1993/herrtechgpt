@@ -20,7 +20,6 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import {
   autoLinkProfileIfExists,
   buildAuthUserEmailMap,
-  dedupeCommunityMembers,
 } from '@/lib/skool-sync'
 
 export const runtime = 'nodejs'
@@ -174,16 +173,6 @@ export async function POST(req: Request) {
     }
   }
 
-  // Dedupe automatisch nach jedem CSV-Import — falls case-Issues oder
-  // Race-Conditions Duplikate erzeugt haben.
-  let deduped = 0
-  try {
-    const r = await dedupeCommunityMembers(admin)
-    deduped = r.deleted
-  } catch {
-    // best-effort
-  }
-
   return NextResponse.json({
     received: rows.length,
     valid: validRows.length,
@@ -191,7 +180,6 @@ export async function POST(req: Request) {
     skipped_existing,
     inserted,
     auto_linked: autoLinked,
-    deduped,
     errors: errors.length > 0 ? errors : undefined,
   })
 }
