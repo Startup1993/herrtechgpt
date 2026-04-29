@@ -25,6 +25,7 @@ import {
 import { EditMemberModal, type EditMember } from './EditMemberModal'
 import { AddMemberModal } from './AddMemberModal'
 import { CsvImportModal } from './CsvImportModal'
+import { NewProductsReviewModal, type NewProduct } from './NewProductsReviewModal'
 
 type SkoolStatus = 'active' | 'alumni' | 'cancelled'
 type MemberSource = 'stripe' | 'manual' | 'csv' | 'skool' | null
@@ -137,6 +138,7 @@ export function CommunityTable({ members }: { members: MemberRow[] }) {
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
   const [dedupeBusy, setDedupeBusy] = useState(false)
   const [linkBusy, setLinkBusy] = useState(false)
+  const [newProductsToReview, setNewProductsToReview] = useState<NewProduct[] | null>(null)
 
   // Bulk-Invite-Progress (Chunking in 50er-Batches)
   const [bulkProgress, setBulkProgress] = useState<{
@@ -316,13 +318,43 @@ export function CommunityTable({ members }: { members: MemberRow[] }) {
     }
   }
 
+  /**
+   * Sync mit Pre-Check: prüft erst ob neue Stripe-Products in der
+   * Whitelist fehlen. Wenn ja → Modal mit Auswahl. Wenn nicht → direkt sync.
+   */
   async function runSync() {
     if (
       !confirm(
-        `Sync der letzten ${syncDays} Tage starten?\n\nDurchsucht Stripe nach KMC-Käufen, aktualisiert Mitglieder, räumt Duplikate auf und verknüpft mit existierenden Konten.`
+        `Sync der letzten ${syncDays} Tage starten?\n\nPrüft zuerst ob neue Stripe-Products gefunden wurden, dann durchsucht Stripe nach KMC-Käufen, aktualisiert Mitglieder, räumt Duplikate auf und verknüpft mit existierenden Konten.`
       )
     )
       return
+
+    setSyncBusy(true)
+    setMessage(null)
+
+    // Pre-Check: gibt's neue Products?
+    try {
+      const scanRes = await fetch('/api/admin/community/products/scan-new')
+      if (scanRes.ok) {
+        const scanData = (await scanRes.json()) as {
+          new_products?: NewProduct[]
+        } | null
+        if (scanData?.new_products && scanData.new_products.length > 0) {
+          // Modal öffnen — Sync wird nach User-Entscheidung in onConfirm gestartet
+          setNewProductsToReview(scanData.new_products)
+          setSyncBusy(false)
+          return
+        }
+      }
+    } catch {
+      // Pre-Check ist optional — wenn er fehlschlägt, weiter mit Sync
+    }
+
+    await executeSync()
+  }
+
+  async function executeSync() {
     setSyncBusy(true)
     setMessage(null)
     try {
@@ -1160,6 +1192,39 @@ export function CommunityTable({ members }: { members: MemberRow[] }) {
       )}
 
       <EditMemberModal member={editing} onClose={() => setEditing(null)} />
+
+      {newProductsToReview && (
+        <NewProductsReviewModal
+          products={newProductsToReview}
+          onClose={() => setNewProductsToReview(null)}
+          onConfirm={async (selectedIds) => {
+            // 1. Ausgewählte Products hinzufügen
+            if (selectedIds.length > 0) {
+              try {
+                const res = await fetch(
+                  '/api/admin/community/products/add-bulk',
+                  {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                      items: selectedIds.map((id) => ({ stripe_product_id: id })),
+                    }),
+                  }
+                )
+                if (!res.ok) {
+                  const data = await res.json().catch(() => null)
+                  throw new Error(data?.error ?? 'Hinzufügen fehlgeschlagen')
+                }
+              } catch (err) {
+                throw err
+              }
+            }
+            // 2. Modal schließen, dann Sync starten
+            setNewProductsToReview(null)
+            await executeSync()
+          }}
+        />
+      )}
     </div>
   )
 }
