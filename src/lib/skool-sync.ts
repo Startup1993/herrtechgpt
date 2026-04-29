@@ -871,51 +871,10 @@ export async function syncSkoolMembersFromStripe(
   let invMatched = 0
   let invCapped = false
 
-  // ─── Refund-Map vorab aufbauen ────────────────────────────────────────────
-  // Customers, deren letzte Zahlung refunded wurde, sollen NICHT als aktive
-  // Mitglieder gelten. Wir bauen Map<customerId, { date, amount }> mit dem
-  // jüngsten Refund pro Customer. Beim Aggregation prüfen wir: liegt der
-  // Refund NACH dem letzten Kauf? Dann Zugang weg.
-  const refundsByCustomer = new Map<string, { date: Date; amount: number }>()
-  let refundAfter: string | undefined = undefined
-  let refundPages = 0
-  while (refundPages < REFUNDS_MAX_PAGES) {
-    try {
-      const refundList = await stripe.refunds.list({
-        limit: 100,
-        starting_after: refundAfter,
-        created: { gte: since },
-        expand: ['data.payment_intent'],
-      })
-      refundPages += 1
-      for (const r of refundList.data) {
-        // payment_intent ist expanded → enthält customer als string
-        const pi = r.payment_intent
-        let customerId: string | null = null
-        if (pi && typeof pi !== 'string') {
-          customerId =
-            typeof pi.customer === 'string' ? pi.customer : pi.customer?.id ?? null
-        }
-        if (!customerId) continue
-
-        const refundDate = new Date((r.created ?? Date.now() / 1000) * 1000)
-        const existing = refundsByCustomer.get(customerId)
-        if (!existing || existing.date < refundDate) {
-          refundsByCustomer.set(customerId, {
-            date: refundDate,
-            amount: r.amount,
-          })
-        }
-      }
-      if (!refundList.has_more) break
-      refundAfter = refundList.data[refundList.data.length - 1]?.id
-    } catch (err) {
-      errors.push({
-        error: `refunds.list: ${err instanceof Error ? err.message : String(err)}`,
-      })
-      break
-    }
-  }
+  // ─── 4 Stripe-Phasen PARALLEL via Promise.all ────────────────────────────
+  // Vorher sequentiell: Refunds → Sessions → Subs → Invoices = ~120s+
+  // Jetzt parallel: max(jeweils ~30s) = ~30s.
+  // Pro Phase lokaler State + Hits-Array, Merge in shared state nach Promise.all.
 
   // Per Customer aggregieren — pro Customer nur einmal upserten (jüngster Kauf gewinnt)
   type Hit = {
@@ -930,299 +889,353 @@ export async function syncSkoolMembersFromStripe(
     purchasedAt: Date
   }
   const perCustomer = new Map<string, Hit[]>()
+  const refundsByCustomer = new Map<string, { date: Date; amount: number }>()
 
-  // ─── Phase 1: Checkout-Sessions ──────────────────────────────────────────
-  // Trick: expand line_items.data.price → keine Extra-API-Calls pro Session.
-  // Spart bei 1500 Sessions ~5 Minuten Zeit (von ~1500 × 200ms auf 0).
-  let sessionAfter: string | undefined = undefined
-  let sessionPages = 0
-  while (sessionPages < SESSIONS_MAX_PAGES) {
-    const sessionList = await stripe.checkout.sessions.list({
-      limit: 100,
-      starting_after: sessionAfter,
-      created: { gte: since },
-      expand: ['data.line_items.data.price'],
-    })
-    sessionPages += 1
-    for (const s of sessionList.data) {
-      sessionsScanned += 1
-      if (s.status !== 'complete') continue
-      if (s.mode !== 'payment') continue
-
-      try {
-        let hit: SkoolProduct | null = null
-        let priceId: string | null = null
-        const items = s.line_items?.data ?? []
-        for (const item of items) {
-          const productRef = item.price?.product
-          const pid =
-            typeof productRef === 'string'
-              ? productRef
-              : productRef && !('deleted' in productRef && productRef.deleted)
-              ? productRef.id
-              : null
-          if (pid && productMap.has(pid)) {
-            hit = productMap.get(pid)!
-            priceId = item.price?.id ?? null
-            break
-          }
-        }
-        if (!hit) continue
-
-        const customerId =
-          typeof s.customer === 'string' ? s.customer : s.customer?.id ?? null
-        const email = s.customer_details?.email ?? s.customer_email ?? null
-        if (!customerId || !email) continue
-
-        const paymentIntentId =
-          typeof s.payment_intent === 'string'
-            ? s.payment_intent
-            : s.payment_intent?.id ?? null
-
-        sessionsMatched += 1
-        const arr = perCustomer.get(customerId) ?? []
-        arr.push({
-          sessionId: s.id,
-          paymentIntentId,
-          email,
-          name: s.customer_details?.name ?? null,
-          customerId,
-          productId: hit.stripe_product_id,
-          priceId,
-          accessDays: hit.access_days,
-          purchasedAt: new Date((s.created ?? Date.now() / 1000) * 1000),
-        })
-        perCustomer.set(customerId, arr)
-      } catch (err) {
-        errors.push({
-          session: s.id,
-          error: err instanceof Error ? err.message : String(err),
-        })
-      }
-    }
-    if (!sessionList.has_more) break
-    sessionAfter = sessionList.data[sessionList.data.length - 1].id
-    if (sessionPages >= SESSIONS_MAX_PAGES) {
-      sessionsCapped = sessionList.has_more
-      break
-    }
+  type PhaseOut = {
+    hits: Hit[]
+    scanned: number
+    matched: number
+    capped: boolean
+    phaseErrors: Array<{ session?: string; error: string }>
   }
 
-  // ─── Phase 2: Subscriptions (für monatliche KMC oder Subs aus Ablefy/Co.) ──
-  // Subscriptions liefern Customer-IDs + Items mit Product-Referenz direkt.
-  // Status='all' fängt aktive, past_due, canceled (= alumni) gleichermaßen.
-  let subStartingAfter: string | undefined = undefined
-  let subPages = 0
-  while (subPages < SUBS_MAX_PAGES) {
-    const subList = await stripe.subscriptions.list({
-      limit: 100,
-      starting_after: subStartingAfter,
-      status: 'all',
-      expand: ['data.customer'],
-    })
-    subPages += 1
-    for (const sub of subList.data) {
-      subsScanned += 1
-      try {
-        let hit: SkoolProduct | null = null
-        let priceId: string | null = null
-        for (const item of sub.items.data) {
-          const productRef = item.price?.product
-          const pid =
-            typeof productRef === 'string'
-              ? productRef
-              : productRef && 'id' in productRef && !('deleted' in productRef && productRef.deleted)
-              ? productRef.id
-              : null
-          if (pid && productMap.has(pid)) {
-            hit = productMap.get(pid)!
-            priceId = item.price?.id ?? null
-            break
+  const [refundsR, sessionsR, subsR, invoicesR] = await Promise.all([
+    // ─── Refunds ───────────────────────────────────────────────────
+    (async (): Promise<{
+      map: typeof refundsByCustomer
+      phaseErrors: Array<{ error: string }>
+    }> => {
+      const map = new Map<string, { date: Date; amount: number }>()
+      const phaseErrors: Array<{ error: string }> = []
+      let after: string | undefined = undefined
+      let pages = 0
+      while (pages < REFUNDS_MAX_PAGES) {
+        try {
+          const list = await stripe.refunds.list({
+            limit: 100,
+            starting_after: after,
+            created: { gte: since },
+            expand: ['data.payment_intent'],
+          })
+          pages += 1
+          for (const r of list.data) {
+            const pi = r.payment_intent
+            let customerId: string | null = null
+            if (pi && typeof pi !== 'string') {
+              customerId =
+                typeof pi.customer === 'string'
+                  ? pi.customer
+                  : pi.customer?.id ?? null
+            }
+            if (!customerId) continue
+            const refundDate = new Date((r.created ?? Date.now() / 1000) * 1000)
+            const existing = map.get(customerId)
+            if (!existing || existing.date < refundDate) {
+              map.set(customerId, { date: refundDate, amount: r.amount })
+            }
           }
+          if (!list.has_more) break
+          after = list.data[list.data.length - 1]?.id
+        } catch (err) {
+          phaseErrors.push({
+            error: `refunds.list: ${err instanceof Error ? err.message : String(err)}`,
+          })
+          break
         }
-        if (!hit) continue
+      }
+      return { map, phaseErrors }
+    })(),
 
-        const cust = sub.customer
-        const customerId = typeof cust === 'string' ? cust : cust?.id ?? null
-        if (!customerId) continue
-
-        // Email/Name aus expanded customer ziehen
-        let email: string | null = null
-        let name: string | null = null
-        if (cust && typeof cust !== 'string' && !('deleted' in cust && cust.deleted)) {
-          email = cust.email ?? null
-          name = cust.name ?? null
-        }
-        if (!email) {
-          // Customer war nicht expanded oder hat keine Email → manuell laden
+    // ─── Sessions ──────────────────────────────────────────────────
+    (async (): Promise<PhaseOut> => {
+      const out: PhaseOut = { hits: [], scanned: 0, matched: 0, capped: false, phaseErrors: [] }
+      let after: string | undefined = undefined
+      let pages = 0
+      while (pages < SESSIONS_MAX_PAGES) {
+        const list = await stripe.checkout.sessions.list({
+          limit: 100,
+          starting_after: after,
+          created: { gte: since },
+          expand: ['data.line_items.data.price'],
+        })
+        pages += 1
+        for (const s of list.data) {
+          out.scanned += 1
+          if (s.status !== 'complete') continue
+          if (s.mode !== 'payment') continue
           try {
-            const full = await stripe.customers.retrieve(customerId)
-            if (!('deleted' in full) || !full.deleted) {
-              email = (full as Stripe.Customer).email ?? null
-              name = (full as Stripe.Customer).name ?? null
+            let hit: SkoolProduct | null = null
+            let priceId: string | null = null
+            const items = s.line_items?.data ?? []
+            for (const item of items) {
+              const productRef = item.price?.product
+              const pid =
+                typeof productRef === 'string'
+                  ? productRef
+                  : productRef && !('deleted' in productRef && productRef.deleted)
+                  ? productRef.id
+                  : null
+              if (pid && productMap.has(pid)) {
+                hit = productMap.get(pid)!
+                priceId = item.price?.id ?? null
+                break
+              }
             }
-          } catch {
-            // ignore, skip below
+            if (!hit) continue
+            const customerId =
+              typeof s.customer === 'string' ? s.customer : s.customer?.id ?? null
+            const email = s.customer_details?.email ?? s.customer_email ?? null
+            if (!customerId || !email) continue
+            const paymentIntentId =
+              typeof s.payment_intent === 'string'
+                ? s.payment_intent
+                : s.payment_intent?.id ?? null
+            out.matched += 1
+            out.hits.push({
+              sessionId: s.id,
+              paymentIntentId,
+              email,
+              name: s.customer_details?.name ?? null,
+              customerId,
+              productId: hit.stripe_product_id,
+              priceId,
+              accessDays: hit.access_days,
+              purchasedAt: new Date((s.created ?? Date.now() / 1000) * 1000),
+            })
+          } catch (err) {
+            out.phaseErrors.push({
+              session: s.id,
+              error: err instanceof Error ? err.message : String(err),
+            })
           }
         }
-        if (!email) continue
-
-        // purchasedAt = subscription.start_date (= erster Charge), als „Kaufdatum"
-        const purchasedAt = new Date((sub.start_date ?? sub.created) * 1000)
-        subsMatched += 1
-        const arr = perCustomer.get(customerId) ?? []
-        arr.push({
-          sessionId: sub.id,
-          paymentIntentId: null,
-          email,
-          name,
-          customerId,
-          productId: hit.stripe_product_id,
-          priceId,
-          accessDays: hit.access_days,
-          purchasedAt,
-        })
-        perCustomer.set(customerId, arr)
-      } catch (err) {
-        errors.push({
-          session: sub.id,
-          error: err instanceof Error ? err.message : String(err),
-        })
+        if (!list.has_more) break
+        after = list.data[list.data.length - 1].id
+        if (pages >= SESSIONS_MAX_PAGES) {
+          out.capped = list.has_more
+          break
+        }
       }
-    }
-    if (!subList.has_more) break
-    subStartingAfter = subList.data[subList.data.length - 1].id
-    if (subPages >= SUBS_MAX_PAGES) {
-      subsCapped = subList.has_more
-      break
-    }
-  }
+      return out
+    })(),
 
-  // ─── Phase 3: Paid Invoices (Ablefy / Hosted Invoices / direkt gerechnet) ──
-  // Invoices haben Lines mit Price → Product. Fängt alles, wo Stripe eine
-  // Rechnung erzeugt hat, unabhängig vom Verkaufsweg.
-  let invStartingAfter: string | undefined = undefined
-  let invPages = 0
-  while (invPages < INVOICES_MAX_PAGES) {
-    const invList = await stripe.invoices.list({
-      limit: 100,
-      starting_after: invStartingAfter,
-      status: 'paid',
-      created: { gte: since },
-    })
-    invPages += 1
-    for (const inv of invList.data) {
-      invScanned += 1
-      try {
-        let hit: SkoolProduct | null = null
-        let priceId: string | null = null
-        const lines = inv.lines?.data ?? []
-        for (const ln of lines) {
-          // Stripe API hat über die Versionen das Format gewechselt.
-          // Wir lesen 4 mögliche Quellen für Product-ID + Price-ID:
-          //   1. ln.pricing.price_details.{product, price}        (API 2025+/dahlia)
-          //   2. ln.price.product / ln.price.id                   (älteres API)
-          //   3. ln.parent.subscription_item_details              (für Subscription-Renewals)
-          //   4. ln.parent.invoice_item_details                   (für one-off Invoice-Items)
-          const lnRaw = ln as unknown as {
-            pricing?: {
-              price_details?: { product?: string | null; price?: string | null } | null
-            } | null
-            price?: {
-              id?: string | null
-              product?: string | { id: string; deleted?: boolean } | null
-            } | null
-            parent?: {
-              subscription_item_details?: { price?: string | null } | null
-              invoice_item_details?: { price?: string | null; product?: string | null } | null
-            } | null
-          }
-
-          let pid: string | null = null
-          let pri: string | null = null
-
-          // 1) pricing.price_details
-          const pd = lnRaw.pricing?.price_details
-          if (pd?.product) {
-            pid = pd.product
-            pri = pd.price ?? null
-          }
-
-          // 2) price.product (älter)
-          if (!pid && lnRaw.price) {
-            const productRef = lnRaw.price.product
-            pid =
-              typeof productRef === 'string'
-                ? productRef
-                : productRef && 'id' in productRef && !productRef.deleted
-                ? productRef.id
-                : null
-            pri = lnRaw.price.id ?? null
-          }
-
-          // 3) Fallback: invoice_item_details (oneoff-Rechnungen)
-          if (!pid) {
-            const iid = lnRaw.parent?.invoice_item_details
-            if (iid?.product) {
-              pid = iid.product
-              pri = iid.price ?? null
+    // ─── Subscriptions ─────────────────────────────────────────────
+    (async (): Promise<PhaseOut> => {
+      const out: PhaseOut = { hits: [], scanned: 0, matched: 0, capped: false, phaseErrors: [] }
+      let after: string | undefined = undefined
+      let pages = 0
+      while (pages < SUBS_MAX_PAGES) {
+        const list = await stripe.subscriptions.list({
+          limit: 100,
+          starting_after: after,
+          status: 'all',
+          expand: ['data.customer'],
+        })
+        pages += 1
+        for (const sub of list.data) {
+          out.scanned += 1
+          try {
+            let hit: SkoolProduct | null = null
+            let priceId: string | null = null
+            for (const item of sub.items.data) {
+              const productRef = item.price?.product
+              const pid =
+                typeof productRef === 'string'
+                  ? productRef
+                  : productRef && 'id' in productRef && !('deleted' in productRef && productRef.deleted)
+                  ? productRef.id
+                  : null
+              if (pid && productMap.has(pid)) {
+                hit = productMap.get(pid)!
+                priceId = item.price?.id ?? null
+                break
+              }
             }
-          }
-
-          if (pid && productMap.has(pid)) {
-            hit = productMap.get(pid)!
-            priceId = pri
-            break
+            if (!hit) continue
+            const cust = sub.customer
+            const customerId = typeof cust === 'string' ? cust : cust?.id ?? null
+            if (!customerId) continue
+            let email: string | null = null
+            let name: string | null = null
+            if (cust && typeof cust !== 'string' && !('deleted' in cust && cust.deleted)) {
+              email = cust.email ?? null
+              name = cust.name ?? null
+            }
+            if (!email) {
+              try {
+                const full = await stripe.customers.retrieve(customerId)
+                if (!('deleted' in full) || !full.deleted) {
+                  email = (full as Stripe.Customer).email ?? null
+                  name = (full as Stripe.Customer).name ?? null
+                }
+              } catch {
+                // ignore
+              }
+            }
+            if (!email) continue
+            const purchasedAt = new Date((sub.start_date ?? sub.created) * 1000)
+            out.matched += 1
+            out.hits.push({
+              sessionId: sub.id,
+              paymentIntentId: null,
+              email,
+              name,
+              customerId,
+              productId: hit.stripe_product_id,
+              priceId,
+              accessDays: hit.access_days,
+              purchasedAt,
+            })
+          } catch (err) {
+            out.phaseErrors.push({
+              session: sub.id,
+              error: err instanceof Error ? err.message : String(err),
+            })
           }
         }
-        if (!hit) continue
-
-        const customerId =
-          typeof inv.customer === 'string'
-            ? inv.customer
-            : inv.customer?.id ?? null
-        const email = inv.customer_email ?? null
-        if (!customerId || !email) continue
-
-        // Stripe API 2026-03: invoice.payment_intent ist aus dem Type entfernt,
-        // im Payload aber noch da. Defensiv lesen.
-        const piRaw = (inv as unknown as { payment_intent?: string | { id: string } | null })
-          .payment_intent
-        const paymentIntentId =
-          typeof piRaw === 'string' ? piRaw : piRaw && 'id' in piRaw ? piRaw.id : null
-        const paidAtUnix =
-          (inv.status_transitions && inv.status_transitions.paid_at) ||
-          inv.created ||
-          Math.floor(Date.now() / 1000)
-        const purchasedAt = new Date(paidAtUnix * 1000)
-
-        invMatched += 1
-        const arr = perCustomer.get(customerId) ?? []
-        arr.push({
-          sessionId: inv.id ?? `inv_${Date.now()}`,
-          paymentIntentId,
-          email,
-          name: inv.customer_name ?? null,
-          customerId,
-          productId: hit.stripe_product_id,
-          priceId,
-          accessDays: hit.access_days,
-          purchasedAt,
-        })
-        perCustomer.set(customerId, arr)
-      } catch (err) {
-        errors.push({
-          session: inv.id ?? 'unknown_invoice',
-          error: err instanceof Error ? err.message : String(err),
-        })
+        if (!list.has_more) break
+        after = list.data[list.data.length - 1].id
+        if (pages >= SUBS_MAX_PAGES) {
+          out.capped = list.has_more
+          break
+        }
       }
-    }
-    if (!invList.has_more) break
-    invStartingAfter = invList.data[invList.data.length - 1].id ?? undefined
-    if (invPages >= INVOICES_MAX_PAGES) {
-      invCapped = invList.has_more
-      break
-    }
+      return out
+    })(),
+
+    // ─── Paid Invoices ─────────────────────────────────────────────
+    (async (): Promise<PhaseOut> => {
+      const out: PhaseOut = { hits: [], scanned: 0, matched: 0, capped: false, phaseErrors: [] }
+      let after: string | undefined = undefined
+      let pages = 0
+      while (pages < INVOICES_MAX_PAGES) {
+        const list = await stripe.invoices.list({
+          limit: 100,
+          starting_after: after,
+          status: 'paid',
+          created: { gte: since },
+        })
+        pages += 1
+        for (const inv of list.data) {
+          out.scanned += 1
+          try {
+            let hit: SkoolProduct | null = null
+            let priceId: string | null = null
+            const lines = inv.lines?.data ?? []
+            for (const ln of lines) {
+              const lnRaw = ln as unknown as {
+                pricing?: {
+                  price_details?: { product?: string | null; price?: string | null } | null
+                } | null
+                price?: {
+                  id?: string | null
+                  product?: string | { id: string; deleted?: boolean } | null
+                } | null
+                parent?: {
+                  subscription_item_details?: { price?: string | null } | null
+                  invoice_item_details?: { price?: string | null; product?: string | null } | null
+                } | null
+              }
+              let pid: string | null = null
+              let pri: string | null = null
+              const pd = lnRaw.pricing?.price_details
+              if (pd?.product) {
+                pid = pd.product
+                pri = pd.price ?? null
+              }
+              if (!pid && lnRaw.price) {
+                const productRef = lnRaw.price.product
+                pid =
+                  typeof productRef === 'string'
+                    ? productRef
+                    : productRef && 'id' in productRef && !productRef.deleted
+                    ? productRef.id
+                    : null
+                pri = lnRaw.price.id ?? null
+              }
+              if (!pid) {
+                const iid = lnRaw.parent?.invoice_item_details
+                if (iid?.product) {
+                  pid = iid.product
+                  pri = iid.price ?? null
+                }
+              }
+              if (pid && productMap.has(pid)) {
+                hit = productMap.get(pid)!
+                priceId = pri
+                break
+              }
+            }
+            if (!hit) continue
+            const customerId =
+              typeof inv.customer === 'string'
+                ? inv.customer
+                : inv.customer?.id ?? null
+            const email = inv.customer_email ?? null
+            if (!customerId || !email) continue
+            const piRaw = (inv as unknown as { payment_intent?: string | { id: string } | null })
+              .payment_intent
+            const paymentIntentId =
+              typeof piRaw === 'string' ? piRaw : piRaw && 'id' in piRaw ? piRaw.id : null
+            const paidAtUnix =
+              (inv.status_transitions && inv.status_transitions.paid_at) ||
+              inv.created ||
+              Math.floor(Date.now() / 1000)
+            const purchasedAt = new Date(paidAtUnix * 1000)
+            out.matched += 1
+            out.hits.push({
+              sessionId: inv.id ?? `inv_${Date.now()}`,
+              paymentIntentId,
+              email,
+              name: inv.customer_name ?? null,
+              customerId,
+              productId: hit.stripe_product_id,
+              priceId,
+              accessDays: hit.access_days,
+              purchasedAt,
+            })
+          } catch (err) {
+            out.phaseErrors.push({
+              session: inv.id ?? 'unknown_invoice',
+              error: err instanceof Error ? err.message : String(err),
+            })
+          }
+        }
+        if (!list.has_more) break
+        after = list.data[list.data.length - 1].id ?? undefined
+        if (pages >= INVOICES_MAX_PAGES) {
+          out.capped = list.has_more
+          break
+        }
+      }
+      return out
+    })(),
+  ])
+
+  // Merge results in shared state
+  for (const [k, v] of refundsR.map) refundsByCustomer.set(k, v)
+  for (const e of refundsR.phaseErrors) errors.push(e)
+
+  sessionsScanned = sessionsR.scanned
+  sessionsMatched = sessionsR.matched
+  sessionsCapped = sessionsR.capped
+  for (const e of sessionsR.phaseErrors) errors.push(e)
+
+  subsScanned = subsR.scanned
+  subsMatched = subsR.matched
+  subsCapped = subsR.capped
+  for (const e of subsR.phaseErrors) errors.push(e)
+
+  invScanned = invoicesR.scanned
+  invMatched = invoicesR.matched
+  invCapped = invoicesR.capped
+  for (const e of invoicesR.phaseErrors) errors.push(e)
+
+  // Hits in perCustomer mergen (perCustomer ist oben vor Promise.all deklariert)
+  for (const hit of [...sessionsR.hits, ...subsR.hits, ...invoicesR.hits]) {
+    const arr = perCustomer.get(hit.customerId) ?? []
+    arr.push(hit)
+    perCustomer.set(hit.customerId, arr)
   }
 
   // ─── Bulk-Persistenz: alle Customer-Daten in einem Schwung ──────────────
