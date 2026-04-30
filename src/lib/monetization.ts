@@ -133,27 +133,44 @@ export async function handleAccessTierChange(params: {
 // ─── Server-side Access Check ───────────────────────────────────────────
 
 /**
- * Prüft serverseitig ob ein User Aktions-Zugriff hat (aktives Abo oder Admin).
+ * Prüft serverseitig ob ein User Aktions-Zugriff hat (aktives Abo, Admin,
+ * oder in NoSubs-Welt: tier=premium/alumni).
+ *
  * Wird in API-Routes aufgerufen, bevor teure Claude/Stripe/Fal-Calls laufen,
  * damit niemand per curl die UI-Paywall umgeht.
  *
- * Gibt true/false zurück. Admin-Check per role='admin' in profiles.
+ * Logik je Modus:
+ *   - Subs-aktiv: Admin ODER aktives Abo
+ *   - NoSubs:     Admin ODER tier='premium' ODER tier='alumni'
+ *                 (basic ist via Permission-Matrix schon auf Page-Layer
+ *                 abgefangen, aber als Defense-in-Depth blocken wir hier auch)
  */
 export async function hasActionAccess(
   supabase: SupabaseClient,
   userId: string
 ): Promise<boolean> {
-  const [{ data: profile }, { data: sub }] = await Promise.all([
-    supabase.from('profiles').select('role').eq('id', userId).single(),
+  const { getAppSettings } = await import('./app-settings')
+  const [{ data: profile }, { data: sub }, settings] = await Promise.all([
+    supabase.from('profiles').select('role, access_tier').eq('id', userId).single(),
     supabase
       .from('subscriptions')
       .select('status')
       .eq('user_id', userId)
       .in('status', ['active', 'trialing'])
       .maybeSingle(),
+    getAppSettings(),
   ])
   if (profile?.role === 'admin') return true
-  return !!sub
+  if (sub) return true
+
+  // NoSubs-Welt: premium + alumni haben Toolbox-Zugriff (basic muss erst
+  // Community beitreten, siehe CommunityRequiredView auf Page-Layer).
+  if (!settings.subscriptionsEnabled) {
+    const tier = profile?.access_tier as string | undefined
+    return tier === 'premium' || tier === 'alumni'
+  }
+
+  return false
 }
 
 // ─── Price Band ─────────────────────────────────────────────────────────
