@@ -6,6 +6,7 @@ import {
   generateInvitationToken,
   markInvitationSent,
 } from '@/lib/skool-sync'
+import { getAppSettings } from '@/lib/app-settings'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -63,14 +64,22 @@ export async function POST(request: Request) {
     )
   }
 
-  // Credits-pro-Monat aus Plan S laden — wird in der Mail angezeigt.
-  // Fällt auf 200 zurück falls Plan-Eintrag fehlt.
-  const { data: planS } = await admin
-    .from('plans')
-    .select('credits_per_month')
-    .eq('id', 'plan_s')
-    .maybeSingle()
-  const creditsPerMonth = planS?.credits_per_month ?? 200
+  // Credits-pro-Monat dynamisch laden — wird in der Mail angezeigt.
+  // - subscriptions_enabled=true (Legacy): aus plans.credits_per_month (Plan S)
+  // - subscriptions_enabled=false: aus app_settings.community_monthly_credits
+  // Fallback: 200.
+  const settings = await getAppSettings()
+  let creditsPerMonth: number
+  if (settings.subscriptionsEnabled) {
+    const { data: planS } = await admin
+      .from('plans')
+      .select('credits_per_month')
+      .eq('id', 'plan_s')
+      .maybeSingle()
+    creditsPerMonth = planS?.credits_per_month ?? settings.communityMonthlyCredits
+  } else {
+    creditsPerMonth = settings.communityMonthlyCredits
+  }
 
   let invited = 0
   let failed = 0
