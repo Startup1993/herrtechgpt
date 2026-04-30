@@ -779,12 +779,15 @@ export default function DashboardView({
     !isAdmin &&
     hasActiveSubscription &&
     (currentPlanTier === 'S' || currentPlanTier === 'M')
-  // In NoSubs-Welt zeigen wir die Community-Card auch ohne aktives Abo —
-  // weil "Abo" nicht mehr das Tor ist. Nur Community-Mitglieder bekommen
-  // gar keine Upsell-Card (sie sind schon drin).
+  // In NoSubs-Welt zeigen wir Nicht-Community-Usern den KMC-Block GANZ
+  // OBEN auf dem Dashboard — über Lernpfad und Tool-Tiles. Das ist der
+  // wichtigste Call-to-Action: ohne Community kein Toolbox-Zugang.
+  // → showFullUpsell unten wird in NoSubs-Welt deaktiviert, sonst doppelt.
   const showFullUpsell = subscriptionsEnabled
     ? !isAdmin && hasActiveSubscription && !isCommunity
-    : !isAdmin && !isCommunity
+    : false // NoSubs: KMC-Block kommt oben, nicht zweimal
+  const showTopMarketingClub =
+    !subscriptionsEnabled && !isAdmin && !isCommunity
   const showCompactCommunity = isAdmin
 
   return (
@@ -805,6 +808,14 @@ export default function DashboardView({
           <MarketingClubCompact upsell={upsell} communityUrl={communityUrl} />
         )}
       </div>
+
+      {/* KMC-Top-Block — für Nicht-Community-User in NoSubs-Welt:
+          Hauptaktion über Lernpfad + Tools. Ohne Community kein Zugang. */}
+      {showTopMarketingClub && (
+        <div className="mb-8">
+          <MarketingClubFull upsell={upsell} />
+        </div>
+      )}
 
       {/* Learning Path Widget */}
       <div className="mb-8">

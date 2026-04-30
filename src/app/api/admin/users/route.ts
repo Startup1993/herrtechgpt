@@ -202,9 +202,77 @@ export async function PATCH(request: Request) {
     } catch (err) {
       console.error('[admin/users] tier-change hook failed:', err)
     }
+
+    // Community-Members-Sync: tier-Änderung in der Nutzerverwaltung muss
+    // auf community_members durchschlagen, sonst zeigt /admin/community
+    // einen veralteten Status. Fire-and-forget.
+    try {
+      await syncCommunityMemberFromTierChange(admin, userId, access_tier as AccessTier)
+    } catch (err) {
+      console.error('[admin/users] community-sync failed:', err)
+    }
   }
 
   return NextResponse.json(data)
+}
+
+/**
+ * Spiegelt eine tier-Änderung im Profil auf den verknüpften
+ * community_members-Eintrag (falls vorhanden):
+ *
+ *   tier = 'premium' → skool_status = 'active' + Ablauf 1 Jahr in Zukunft
+ *     (Admin schaltet User aktiv, also Mitgliedschaft "wieder voll gültig")
+ *   tier = 'alumni'  → skool_status = 'alumni'
+ *     (Mitgliedschaft beendet, aber User ehemaliges Mitglied)
+ *   tier = 'basic'   → un-claim (profile_id=NULL, claimed_at=NULL)
+ *     (User ist kein Community-Member mehr; Eintrag wird wieder einladbar
+ *      wenn er ursprünglich von Stripe-Sync kam)
+ *
+ * Wenn kein community_members-Eintrag existiert, machen wir nichts —
+ * der Admin müsste den dann manuell in /admin/community anlegen.
+ */
+async function syncCommunityMemberFromTierChange(
+  admin: ReturnType<typeof createAdminClient>,
+  userId: string,
+  newTier: AccessTier
+): Promise<void> {
+  const { data: member } = await admin
+    .from('community_members')
+    .select('id, skool_status')
+    .eq('profile_id', userId)
+    .maybeSingle()
+
+  if (!member) return
+
+  if (newTier === 'premium' && member.skool_status !== 'active') {
+    const newExpiry = new Date()
+    newExpiry.setFullYear(newExpiry.getFullYear() + 1)
+    await admin
+      .from('community_members')
+      .update({
+        skool_status: 'active',
+        skool_access_expires_at: newExpiry.toISOString(),
+      })
+      .eq('id', member.id)
+    return
+  }
+
+  if (newTier === 'alumni' && member.skool_status === 'active') {
+    await admin
+      .from('community_members')
+      .update({ skool_status: 'alumni' })
+      .eq('id', member.id)
+    return
+  }
+
+  if (newTier === 'basic') {
+    // Un-claim: User aus Community ausloggen, Eintrag bleibt wenn er von
+    // Stripe-Sync kam (für Re-Invite). Token bleibt unangetastet.
+    await admin
+      .from('community_members')
+      .update({ claimed_at: null, profile_id: null })
+      .eq('id', member.id)
+  }
 }
 
 export async function DELETE(request: Request) {
@@ -217,6 +285,21 @@ export async function DELETE(request: Request) {
   if (userId === currentUser.id) return NextResponse.json({ error: 'Cannot delete yourself' }, { status: 400 })
 
   const admin = createAdminClient()
+
+  // Pre-Delete-Sync: community_members un-claimen, damit der Admin den
+  // Member im /admin/community-Tab wiedersieht und neu einladen kann.
+  // ON DELETE SET NULL kümmert sich um profile_id, aber claimed_at muss
+  // explizit zurückgesetzt werden — sonst zeigt die UI fälschlich
+  // "geclaimed" obwohl der User weg ist.
+  try {
+    await admin
+      .from('community_members')
+      .update({ claimed_at: null })
+      .eq('profile_id', userId)
+  } catch (err) {
+    console.error('[admin/users] community-unclaim before delete failed:', err)
+  }
+
   const { error } = await admin.auth.admin.deleteUser(userId)
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
   return NextResponse.json({ success: true })
