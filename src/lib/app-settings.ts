@@ -55,13 +55,25 @@ export const SETTING_KEYS_DB_TO_CAMEL: Record<string, keyof AppSettings> = Objec
 /**
  * Lädt alle App-Settings aus der DB. Werte werden mit Defaults gemerged —
  * fehlende Keys oder Lesefehler führen NIE zu undefined, sondern zum Default.
+ *
+ * Spezialfall communityUrl: Quelle ist NICHT mehr app_settings, sondern
+ * tier_upsell_copy.cta_url WHERE tier='premium' — der "Zur Community"-CTA
+ * den der Admin im Upsell-Tab pflegt. So gibt es nur EINEN Ort an dem die
+ * Skool-/Community-URL editiert wird (Jacobs W12-Wunsch).
+ * Fallback-Reihenfolge: tier_upsell_copy.premium.cta_url → app_settings →
+ * Code-Default.
  */
 export async function getAppSettings(): Promise<AppSettings> {
   try {
     const admin = createAdminClient()
-    const { data, error } = await admin
-      .from('app_settings')
-      .select('key, value')
+    const [{ data, error }, { data: upsell }] = await Promise.all([
+      admin.from('app_settings').select('key, value'),
+      admin
+        .from('tier_upsell_copy')
+        .select('cta_url')
+        .eq('tier', 'premium')
+        .maybeSingle(),
+    ])
 
     if (error || !data) {
       console.error('[app-settings] Lesefehler — verwende Defaults:', error)
@@ -83,11 +95,20 @@ export async function getAppSettings(): Promise<AppSettings> {
       } else if (camelKey === 'starterTestCredits' && typeof value === 'number') {
         result.starterTestCredits = Math.max(0, Math.floor(value))
       } else if (camelKey === 'communityUrl' && typeof value === 'string') {
-        // Sehr permissive Validierung — verhindert nur leere Strings.
-        // URL-Format prüfen wäre zu strikt (Subdomains, Tracking-Params etc.).
+        // app_settings.community_url als Fallback. Wird gleich von der
+        // tier_upsell_copy-Quelle überschrieben falls vorhanden.
         if (value.trim().length > 0) result.communityUrl = value.trim()
       }
     }
+
+    // tier_upsell_copy.premium.cta_url als finale Quelle für communityUrl
+    // — überschreibt app_settings + Default. So pflegt der Admin nur an
+    // einer Stelle (/admin/groups → Upsell-Texte → Community-Card → CTA-URL).
+    const upsellUrl = upsell?.cta_url
+    if (typeof upsellUrl === 'string' && upsellUrl.trim().length > 0) {
+      result.communityUrl = upsellUrl.trim()
+    }
+
     return result
   } catch (err) {
     console.error('[app-settings] Unerwarteter Fehler — verwende Defaults:', err)
