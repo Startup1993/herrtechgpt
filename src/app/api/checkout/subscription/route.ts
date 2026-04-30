@@ -22,11 +22,27 @@ import {
 } from '@/lib/monetization'
 import { getStripe } from '@/lib/stripe'
 import { getAppUrl } from '@/lib/urls'
+import { getAppSettings } from '@/lib/app-settings'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
 
 export async function POST(req: Request) {
+  // Master-Switch: Wenn das Abo-System global deaktiviert ist, blocken
+  // wir hier — auch wenn jemand direkt POST'et oder eine alte Pricing-
+  // Seite zwischengespeichert wurde. Frontend zeigt PricingDisabledView,
+  // diese API ist die zweite Verteidigungslinie.
+  const settings = await getAppSettings()
+  if (!settings.subscriptionsEnabled) {
+    return NextResponse.json(
+      {
+        error:
+          'Das Abo-System ist aktuell deaktiviert. Bitte tritt der Community bei oder kaufe Credit-Pakete.',
+      },
+      { status: 403 }
+    )
+  }
+
   const supabase = await createClient()
   const {
     data: { user },
