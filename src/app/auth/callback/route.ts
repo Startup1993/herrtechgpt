@@ -3,6 +3,7 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import { linkUserToCommunityMember } from '@/lib/skool-sync'
 import { NextResponse } from 'next/server'
 import type { EmailOtpType } from '@supabase/supabase-js'
+import type { SupabaseClient } from '@supabase/supabase-js'
 
 /**
  * Auto-Link nach erfolgreichem Login: prüft ob es einen unclaimed
@@ -21,6 +22,49 @@ async function tryAutoLinkSkoolMember() {
   }
 }
 
+/**
+ * Wohin redirecten wir nach erfolgreichem Auth?
+ *
+ * Wir wollen den Welcome-Screen NUR bei Erst-Registrierung zeigen, nicht
+ * bei jedem Login. Indikator: profiles.welcomed_at IS NULL.
+ *
+ * - welcomed_at IS NULL → User klickt zum ersten Mal auf Magic-Link →
+ *   /welcome (dort wird welcomed_at gesetzt beim "Los geht's"-Klick)
+ * - welcomed_at gesetzt → User loggt sich ein → /dashboard direkt
+ *
+ * Falls die Page einen expliziten next-Param mitschickt (z.B. nach
+ * Invite oder Deep-Link), respektieren wir den. Default-Routes
+ * /welcome und /dashboard werden gegen welcomed_at re-evaluiert.
+ */
+async function resolveRedirectAfterAuth(
+  supabase: SupabaseClient,
+  explicitNext: string
+): Promise<string> {
+  const isDefaultNext = explicitNext === '/welcome' || explicitNext === '/dashboard'
+
+  // Expliziter Deep-Link (nicht /welcome oder /dashboard) hat Vorrang
+  if (!isDefaultNext) return explicitNext
+
+  try {
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user) return explicitNext
+
+    const { data: profile } = await supabase
+      .from('profiles')
+      .select('welcomed_at')
+      .eq('id', user.id)
+      .maybeSingle()
+
+    // Erst-Registrierung → Welcome-Screen einmalig
+    if (!profile?.welcomed_at) return '/welcome'
+
+    // Existierender User → direkt aufs Dashboard
+    return '/dashboard'
+  } catch {
+    return explicitNext
+  }
+}
+
 export async function GET(request: Request) {
   const { searchParams, origin } = new URL(request.url)
   const code = searchParams.get('code')
@@ -35,7 +79,8 @@ export async function GET(request: Request) {
     const { error } = await supabase.auth.verifyOtp({ token_hash: tokenHash, type })
     if (!error) {
       await tryAutoLinkSkoolMember()
-      return NextResponse.redirect(`${origin}${next}`)
+      const target = await resolveRedirectAfterAuth(supabase, next)
+      return NextResponse.redirect(`${origin}${target}`)
     }
   }
 
@@ -44,7 +89,8 @@ export async function GET(request: Request) {
     const { error } = await supabase.auth.exchangeCodeForSession(code)
     if (!error) {
       await tryAutoLinkSkoolMember()
-      return NextResponse.redirect(`${origin}${next}`)
+      const target = await resolveRedirectAfterAuth(supabase, next)
+      return NextResponse.redirect(`${origin}${target}`)
     }
   }
 

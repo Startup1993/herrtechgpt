@@ -15,7 +15,7 @@ export default async function WelcomePage() {
 
   const { data: profile } = await supabase
     .from('profiles')
-    .select('welcomed_at')
+    .select('welcomed_at, access_tier')
     .eq('id', user.id)
     .single()
 
@@ -24,5 +24,7 @@ export default async function WelcomePage() {
     redirect('/dashboard')
   }
 
-  return <WelcomeScreen />
+  const isCommunityMember = profile?.access_tier === 'premium'
+
+  return <WelcomeScreen isCommunityMember={isCommunityMember} />
 }

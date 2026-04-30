@@ -1,8 +1,10 @@
 import { createAdminClient } from '@/lib/supabase/admin'
+import { getAppSettings } from '@/lib/app-settings'
 import UsersTable from './UsersTable'
 
 export default async function AdminUsersPage() {
   const admin = createAdminClient()
+  const settings = await getAppSettings()
 
   const [
     { data: profiles },
@@ -112,7 +114,7 @@ export default async function AdminUsersPage() {
           <p className="text-sm text-muted mt-1">{users.length} registrierte Nutzer</p>
         </div>
       </div>
-      <UsersTable users={users} />
+      <UsersTable users={users} subscriptionsEnabled={settings.subscriptionsEnabled} />
     </div>
   )
 }

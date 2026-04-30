@@ -120,7 +120,14 @@ function subRank(s: SubscriptionInfo | null): number {
   return s.plan_tier === 'S' ? 3 : s.plan_tier === 'M' ? 4 : 5
 }
 
-export default function UsersTable({ users }: { users: UserRow[] }) {
+export default function UsersTable({
+  users,
+  subscriptionsEnabled,
+}: {
+  users: UserRow[]
+  /** Wenn false (NoSubs-Welt), werden Abo-Spalte/-Filter/-Sortierung versteckt. */
+  subscriptionsEnabled: boolean
+}) {
   const router = useRouter()
   const [search, setSearch] = useState('')
   const [loading, setLoading] = useState<string | null>(null)
@@ -324,21 +331,23 @@ export default function UsersTable({ users }: { users: UserRow[] }) {
             { value: 'basic', label: 'Basic' },
           ]}
         />
-        <FilterSelect
-          label="Abo"
-          value={filterSub}
-          onChange={(v) => setFilterSub(v as SubFilter)}
-          options={[
-            { value: 'all', label: 'Alle' },
-            { value: 'any_active', label: `Mit aktivem Abo (${activeSubCount})` },
-            { value: 'none', label: 'Ohne Abo' },
-            { value: 'plan_s', label: 'Plan S' },
-            { value: 'plan_m', label: 'Plan M' },
-            { value: 'plan_l', label: 'Plan L' },
-            { value: 'cancelling', label: 'Läuft aus (gekündigt)' },
-            { value: 'past_due', label: 'Zahlung offen' },
-          ]}
-        />
+        {subscriptionsEnabled && (
+          <FilterSelect
+            label="Abo"
+            value={filterSub}
+            onChange={(v) => setFilterSub(v as SubFilter)}
+            options={[
+              { value: 'all', label: 'Alle' },
+              { value: 'any_active', label: `Mit aktivem Abo (${activeSubCount})` },
+              { value: 'none', label: 'Ohne Abo' },
+              { value: 'plan_s', label: 'Plan S' },
+              { value: 'plan_m', label: 'Plan M' },
+              { value: 'plan_l', label: 'Plan L' },
+              { value: 'cancelling', label: 'Läuft aus (gekündigt)' },
+              { value: 'past_due', label: 'Zahlung offen' },
+            ]}
+          />
+        )}
         <FilterSelect
           label="Status"
           value={filterStatus}
@@ -395,7 +404,9 @@ export default function UsersTable({ users }: { users: UserRow[] }) {
             { value: 'conversation_count:desc', label: 'Chats (meisten)' },
             { value: 'conversation_count:asc', label: 'Chats (wenigsten)' },
             { value: 'access_tier:desc', label: 'Zugang (höchster)' },
-            { value: 'subscription:desc', label: 'Abo (höchstes)' },
+            ...(subscriptionsEnabled
+              ? [{ value: 'subscription:desc', label: 'Abo (höchstes)' }]
+              : []),
           ]}
         />
         {filtersActive && (
@@ -433,7 +444,9 @@ export default function UsersTable({ users }: { users: UserRow[] }) {
             <tr className="border-b border-border bg-surface-secondary">
               <SortableTh label="Name / E-Mail" sortKey="email" current={sortKey} dir={sortDir} onClick={toggleSort} align="left" />
               <SortableTh label="Zugang" sortKey="access_tier" current={sortKey} dir={sortDir} onClick={toggleSort} align="left" />
-              <SortableTh label="Abo" sortKey="subscription" current={sortKey} dir={sortDir} onClick={toggleSort} align="left" />
+              {subscriptionsEnabled && (
+                <SortableTh label="Abo" sortKey="subscription" current={sortKey} dir={sortDir} onClick={toggleSort} align="left" />
+              )}
               <SortableTh label="Registriert" sortKey="created_at" current={sortKey} dir={sortDir} onClick={toggleSort} align="left" />
               <SortableTh label="Status" sortKey="last_active" current={sortKey} dir={sortDir} onClick={toggleSort} align="left" />
               <SortableTh label="Chats" sortKey="conversation_count" current={sortKey} dir={sortDir} onClick={toggleSort} align="center" />
@@ -445,7 +458,7 @@ export default function UsersTable({ users }: { users: UserRow[] }) {
           <tbody className="divide-y divide-border">
             {sorted.length === 0 && (
               <tr>
-                <td colSpan={9} className="px-5 py-8 text-center text-sm text-muted">
+                <td colSpan={subscriptionsEnabled ? 9 : 8} className="px-5 py-8 text-center text-sm text-muted">
                   Keine Nutzer gefunden.
                 </td>
               </tr>
@@ -478,9 +491,11 @@ export default function UsersTable({ users }: { users: UserRow[] }) {
                       {tier.label}
                     </span>
                   </td>
-                  <td className="px-4 py-3.5 whitespace-nowrap">
-                    <SubscriptionBadge sub={u.subscription} />
-                  </td>
+                  {subscriptionsEnabled && (
+                    <td className="px-4 py-3.5 whitespace-nowrap">
+                      <SubscriptionBadge sub={u.subscription} />
+                    </td>
+                  )}
                   <td className="px-4 py-3.5 whitespace-nowrap text-xs text-muted">{formatDate(u.created_at)}</td>
                   <td className="px-4 py-3.5 whitespace-nowrap">
                     <div className="flex items-center gap-2">
