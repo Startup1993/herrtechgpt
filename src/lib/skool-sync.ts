@@ -615,6 +615,48 @@ export async function autoLinkProfileIfExists(
 }
 
 /**
+ * Auto-Link nach Login: prüft ob ein unclaimed community_member mit der Email
+ * des frisch eingeloggten Users existiert und claimt ihn (Plan S / alumni).
+ *
+ * Wird aus /auth/callback nach jedem Login aufgerufen, deckt zwei Cases ab:
+ *  1. Neu-Registrierung nach Skool-Kauf (Webhook hat community_member angelegt,
+ *     User registriert sich danach selbst → automatisch verknüpft)
+ *  2. Bestehender User, der erst später Skool kauft (nächster Login claimt)
+ *
+ * Idempotent: wenn kein unclaimed member mit der Email existiert → no-op.
+ */
+export async function linkUserToCommunityMember(
+  admin: SupabaseClient,
+  params: { userId: string; email: string }
+): Promise<{ linked: boolean }> {
+  const email = params.email.toLowerCase()
+
+  const { data: member } = await admin
+    .from('community_members')
+    .select('id, email, name, skool_status, skool_access_expires_at, profile_id')
+    .eq('email', email)
+    .is('profile_id', null)
+    .maybeSingle()
+
+  if (!member) return { linked: false }
+
+  const result = await autoLinkProfileIfExists(
+    admin,
+    {
+      id: member.id,
+      email: member.email,
+      name: member.name,
+      skool_status: member.skool_status as 'active' | 'alumni' | 'cancelled',
+      skool_access_expires_at: member.skool_access_expires_at,
+      profile_id: member.profile_id,
+    },
+    new Map([[email, params.userId]])
+  )
+
+  return { linked: result.linked }
+}
+
+/**
  * Backfill: alle community_members ohne profile_id durchgehen und mit
  * existierenden auth.users verknüpfen. Nutzt einen Email-Map-Cache —
  * 1× listUsers vorab statt N×.
