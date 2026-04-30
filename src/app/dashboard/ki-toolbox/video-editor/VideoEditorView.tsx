@@ -1,11 +1,15 @@
 'use client'
 
-import { useState } from 'react'
+import { useCallback, useState } from 'react'
 import { Upload, FileVideo, Loader2, Scissors, CheckCircle2, AlertCircle, ChevronLeft } from 'lucide-react'
 import Link from 'next/link'
 import dynamic from 'next/dynamic'
 import type { TranscriptSegment, SceneAnalysis } from '@/lib/video/types'
-import { PaywallBanner, type SubscriptionGateState } from '@/components/subscription-gate'
+import {
+  CreditTopupModal,
+  PaywallBanner,
+  type SubscriptionGateState,
+} from '@/components/subscription-gate'
 
 const PricingModal = dynamic(
   () => import('@/components/pricing-modal').then((m) => m.PricingModal),
@@ -16,7 +20,18 @@ type Step = 'upload' | 'transcribe' | 'analyze' | 'review' | 'error'
 
 export default function VideoEditorView({ gateState }: { gateState?: SubscriptionGateState }) {
   const [pricingOpen, setPricingOpen] = useState(false)
+  const [creditsOpen, setCreditsOpen] = useState(false)
   const hasAccess = !gateState || gateState.hasActiveSubscription
+
+  // In NoSubs-Welt nur CreditTopupModal zeigen, NIE PricingModal — siehe
+  // CarouselWorkflow Comment.
+  const openPaywall = useCallback(() => {
+    if (gateState && !gateState.subscriptionsEnabled) {
+      setCreditsOpen(true)
+      return
+    }
+    setPricingOpen(true)
+  }, [gateState])
 
   const [step, setStep] = useState<Step>('upload')
   const [transcript, setTranscript] = useState<TranscriptSegment[]>([])
@@ -29,7 +44,7 @@ export default function VideoEditorView({ gateState }: { gateState?: Subscriptio
   const handleTranscriptSubmit = async () => {
     if (!pastedText.trim()) return
     if (!hasAccess) {
-      setPricingOpen(true)
+      openPaywall()
       return
     }
 
@@ -55,7 +70,7 @@ export default function VideoEditorView({ gateState }: { gateState?: Subscriptio
         body: JSON.stringify({ segments, videoTitle }),
       })
       if (res.status === 402) {
-        setPricingOpen(true)
+        openPaywall()
         setStep('upload')
         return
       }
@@ -87,11 +102,11 @@ export default function VideoEditorView({ gateState }: { gateState?: Subscriptio
         </div>
       </div>
 
-      {gateState && (
+      {gateState && gateState.subscriptionsEnabled && (
         <PaywallBanner
           state={gateState}
           message="Zum Analysieren brauchst du ein aktives Abo. Du kannst den Editor aber gerne durchklicken."
-          onOpenPricing={() => setPricingOpen(true)}
+          onOpenPricing={openPaywall}
         />
       )}
 
@@ -245,7 +260,8 @@ export default function VideoEditorView({ gateState }: { gateState?: Subscriptio
         </div>
       )}
 
-      {gateState && (
+      {/* PricingModal nur in Legacy-Subs-Welt rendern. */}
+      {gateState && gateState.subscriptionsEnabled && (
         <PricingModal
           open={pricingOpen}
           onClose={() => setPricingOpen(false)}
@@ -255,6 +271,25 @@ export default function VideoEditorView({ gateState }: { gateState?: Subscriptio
           currentPlanId={gateState.currentPlanId}
           currentCycle={gateState.currentCycle}
           hasActiveSubscription={gateState.hasActiveSubscription}
+        />
+      )}
+
+      {gateState && (
+        <CreditTopupModal
+          open={creditsOpen}
+          onClose={() => setCreditsOpen(false)}
+          needed={0}
+          available={gateState.credits}
+          packs={gateState.packs}
+          priceBand={gateState.priceBand}
+          currentPlanTier={gateState.currentPlanTier}
+          subscriptionsEnabled={gateState.subscriptionsEnabled}
+          nextCreditRefreshAt={gateState.nextCreditRefreshAt}
+          isCommunity={gateState.isCommunity}
+          onOpenPricing={() => {
+            setCreditsOpen(false)
+            if (gateState.subscriptionsEnabled) setPricingOpen(true)
+          }}
         />
       )}
     </div>

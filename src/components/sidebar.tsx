@@ -62,6 +62,8 @@ interface SidebarProps {
   states?: Record<FeatureKey, FeatureState>
   newTicketCount?: number
   helpUnreadCount?: number
+  /** Beeinflusst nur das Profil-Menü-Label ("Mitgliedschaft & Credits" vs "Abrechnung & Abo"). */
+  subscriptionsEnabled?: boolean
 }
 
 // ═══════════════════════════════════════════════════════════
@@ -176,7 +178,15 @@ function ConversationItem({ conv, isActive }: { conv: Conversation; isActive: bo
 // USER MENU (Bottom Dropdown)
 // ═══════════════════════════════════════════════════════════
 
-function UserMenu({ userEmail, userName }: { userEmail: string; userName: string }) {
+function UserMenu({
+  userEmail,
+  userName,
+  subscriptionsEnabled,
+}: {
+  userEmail: string
+  userName: string
+  subscriptionsEnabled: boolean
+}) {
   const [open, setOpen] = useState(false)
   const menuRef = useRef<HTMLDivElement>(null)
   const router = useRouter()
@@ -234,7 +244,7 @@ function UserMenu({ userEmail, userName }: { userEmail: string; userName: string
               className="flex items-center gap-2.5 px-4 py-2.5 text-sm text-foreground hover:bg-surface-hover transition-colors"
             >
               <CreditCard size={15} className="text-muted" />
-              Abrechnung & Abo
+              {subscriptionsEnabled ? 'Abrechnung & Abo' : 'Mitgliedschaft & Credits'}
             </Link>
           </div>
           <div className="border-t border-border py-1">
@@ -1316,7 +1326,7 @@ function ToolboxSidebar({
 // MAIN SIDEBAR EXPORT
 // ═══════════════════════════════════════════════════════════
 
-export function Sidebar({ conversations, userEmail, userName, isAdmin, realIsAdmin, accessTier, viewAs, states, newTicketCount, helpUnreadCount }: SidebarProps) {
+export function Sidebar({ conversations, userEmail, userName, isAdmin, realIsAdmin, accessTier, viewAs, states, newTicketCount, helpUnreadCount, subscriptionsEnabled = false }: SidebarProps) {
   const pathname = usePathname()
   const router = useRouter()
   const { theme, toggleTheme } = useTheme()
@@ -1491,6 +1501,7 @@ export function Sidebar({ conversations, userEmail, userName, isAdmin, realIsAdm
         <UserMenu
           userEmail={userEmail ?? ''}
           userName={userName ?? ''}
+          subscriptionsEnabled={subscriptionsEnabled}
         />
       </div>
     </aside>

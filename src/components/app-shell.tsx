@@ -21,10 +21,12 @@ interface AppShellProps {
   states?: Record<FeatureKey, FeatureState>
   newTicketCount?: number
   helpUnreadCount?: number
+  /** Master-Switch — beeinflusst Profil-Menü-Label "Abrechnung" vs "Mitgliedschaft". */
+  subscriptionsEnabled?: boolean
   children: React.ReactNode
 }
 
-export function AppShell({ conversations, userEmail, userName, isAdmin, realIsAdmin, accessTier, viewAs, states, newTicketCount, helpUnreadCount, children }: AppShellProps) {
+export function AppShell({ conversations, userEmail, userName, isAdmin, realIsAdmin, accessTier, viewAs, states, newTicketCount, helpUnreadCount, subscriptionsEnabled, children }: AppShellProps) {
   const [sidebarOpen, setSidebarOpen] = useState(false)       // mobile overlay
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false) // desktop collapse
   const pathname = usePathname()
@@ -64,6 +66,7 @@ export function AppShell({ conversations, userEmail, userName, isAdmin, realIsAd
           states={states}
           newTicketCount={newTicketCount}
           helpUnreadCount={helpUnreadCount}
+          subscriptionsEnabled={subscriptionsEnabled}
         />
       </div>
 

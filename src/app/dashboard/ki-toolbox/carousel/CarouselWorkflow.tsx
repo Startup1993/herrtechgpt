@@ -11,7 +11,11 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import dynamic from 'next/dynamic'
-import { PaywallBanner, type SubscriptionGateState } from '@/components/subscription-gate'
+import {
+  CreditTopupModal,
+  PaywallBanner,
+  type SubscriptionGateState,
+} from '@/components/subscription-gate'
 
 const PricingModal = dynamic(
   () => import('@/components/pricing-modal').then((m) => m.PricingModal),
@@ -436,7 +440,21 @@ function PalettePreview({ primary }: { primary: string }) {
 
 export default function CarouselWorkflow({ gateState }: { gateState?: SubscriptionGateState }) {
   const [pricingOpen, setPricingOpen] = useState(false)
+  const [creditsOpen, setCreditsOpen] = useState(false)
   const hasAccess = !gateState || gateState.hasActiveSubscription
+
+  // Zentrale Paywall-Trigger-Funktion: in NoSubs-Welt zeigen wir IMMER nur
+  // den Credit-Topup-Modal (weil PricingModal inhaltlich nichts taugt) —
+  // egal ob die API "kein Abo" oder "zu wenig Credits" zurueckgibt.
+  // Der Topup-Modal zeigt fuer Community-Member zusaetzlich den
+  // Auto-Refresh-Termin an.
+  const openPaywall = useCallback(() => {
+    if (gateState && !gateState.subscriptionsEnabled) {
+      setCreditsOpen(true)
+      return
+    }
+    setPricingOpen(true)
+  }, [gateState])
 
   const [step, setStep] = useState<'input' | 'preview'>('input')
   const [blogPost, setBlogPost] = useState('')
@@ -471,7 +489,7 @@ export default function CarouselWorkflow({ gateState }: { gateState?: Subscripti
     if (!blogPost.trim()) return
     // Paywall-Gate
     if (!hasAccess) {
-      setPricingOpen(true)
+      openPaywall()
       return
     }
     setLoading(true)
@@ -488,7 +506,7 @@ export default function CarouselWorkflow({ gateState }: { gateState?: Subscripti
       })
       // 402 von der API = kein Abo / zu wenig Credits → Pricing öffnen
       if (res.status === 402) {
-        setPricingOpen(true)
+        openPaywall()
         return
       }
       const data = await res.json()
@@ -514,7 +532,7 @@ export default function CarouselWorkflow({ gateState }: { gateState?: Subscripti
   const refineSlides = useCallback(async () => {
     if (!refineInput.trim() || refining) return
     if (!hasAccess) {
-      setPricingOpen(true)
+      openPaywall()
       return
     }
     const prompt = refineInput.trim()
@@ -531,7 +549,7 @@ export default function CarouselWorkflow({ gateState }: { gateState?: Subscripti
         }),
       })
       if (res.status === 402) {
-        setPricingOpen(true)
+        openPaywall()
         return
       }
       const data = await res.json()
@@ -586,8 +604,13 @@ export default function CarouselWorkflow({ gateState }: { gateState?: Subscripti
     }
   }, [slides, palette, pairing, ci.brandName, ci.handle])
 
-  // Wird am Ende sowohl im Input- als auch Preview-Step gerendert
-  const pricingModal = gateState && (
+  // Wird am Ende sowohl im Input- als auch Preview-Step gerendert.
+  //
+  // PricingModal nur in Legacy-Subs-Welt rendern. In NoSubs-Welt waere er
+  // inhaltlich falsch ("Plan waehlen" wenn es keine Plaene gibt).
+  // CreditTopupModal wird in beiden Welten gerendert (zeigt Auto-Refresh-
+  // Termin in NoSubs-Welt).
+  const pricingModal = gateState && gateState.subscriptionsEnabled && (
     <PricingModal
       open={pricingOpen}
       onClose={() => setPricingOpen(false)}
@@ -597,6 +620,25 @@ export default function CarouselWorkflow({ gateState }: { gateState?: Subscripti
       currentPlanId={gateState.currentPlanId}
       currentCycle={gateState.currentCycle}
       hasActiveSubscription={gateState.hasActiveSubscription}
+    />
+  )
+
+  const creditsModal = gateState && (
+    <CreditTopupModal
+      open={creditsOpen}
+      onClose={() => setCreditsOpen(false)}
+      needed={0}
+      available={gateState.credits}
+      packs={gateState.packs}
+      priceBand={gateState.priceBand}
+      currentPlanTier={gateState.currentPlanTier}
+      subscriptionsEnabled={gateState.subscriptionsEnabled}
+      nextCreditRefreshAt={gateState.nextCreditRefreshAt}
+      isCommunity={gateState.isCommunity}
+      onOpenPricing={() => {
+        setCreditsOpen(false)
+        if (gateState.subscriptionsEnabled) setPricingOpen(true)
+      }}
     />
   )
 
@@ -611,11 +653,11 @@ export default function CarouselWorkflow({ gateState }: { gateState?: Subscripti
           </p>
         </div>
 
-        {gateState && (
+        {gateState && gateState.subscriptionsEnabled && (
           <PaywallBanner
             state={gateState}
             message="Zum Generieren brauchst du ein aktives Abo. Du kannst den Generator aber gerne durchklicken."
-            onOpenPricing={() => setPricingOpen(true)}
+            onOpenPricing={openPaywall}
           />
         )}
 
@@ -686,6 +728,7 @@ export default function CarouselWorkflow({ gateState }: { gateState?: Subscripti
           ) : '🎠 Karussell generieren'}
         </button>
         {pricingModal}
+        {creditsModal}
       </div>
     )
   }

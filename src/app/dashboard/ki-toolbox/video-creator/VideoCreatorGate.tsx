@@ -3,7 +3,7 @@
 import { useState } from 'react'
 import Link from 'next/link'
 import dynamic from 'next/dynamic'
-import { ChevronLeft, Video, Sparkles, ArrowRight } from 'lucide-react'
+import { ChevronLeft, Video, Sparkles, ArrowRight, ExternalLink } from 'lucide-react'
 import type { SubscriptionGateState } from '@/components/subscription-gate'
 
 const PricingModal = dynamic(
@@ -71,13 +71,23 @@ export default function VideoCreatorGate({
         </ul>
 
         <div className="flex flex-col sm:flex-row gap-2">
-          <button
-            onClick={() => setPricingOpen(true)}
-            className="inline-flex items-center justify-center gap-2 px-5 py-2.5 bg-primary hover:bg-primary-hover text-primary-foreground font-semibold rounded-xl text-sm"
-          >
-            Plan wählen
-            <ArrowRight size={14} />
-          </button>
+          {gateState.subscriptionsEnabled ? (
+            <button
+              onClick={() => setPricingOpen(true)}
+              className="inline-flex items-center justify-center gap-2 px-5 py-2.5 bg-primary hover:bg-primary-hover text-primary-foreground font-semibold rounded-xl text-sm"
+            >
+              Plan wählen
+              <ArrowRight size={14} />
+            </button>
+          ) : (
+            <Link
+              href="/dashboard/credits"
+              className="inline-flex items-center justify-center gap-2 px-5 py-2.5 bg-primary hover:bg-primary-hover text-primary-foreground font-semibold rounded-xl text-sm"
+            >
+              Credits kaufen
+              <ExternalLink size={14} />
+            </Link>
+          )}
           <Link
             href="/dashboard/ki-toolbox"
             className="inline-flex items-center justify-center gap-2 px-5 py-2.5 border border-border text-foreground hover:border-primary hover:text-primary font-medium rounded-xl text-sm"
@@ -87,16 +97,19 @@ export default function VideoCreatorGate({
         </div>
       </div>
 
-      <PricingModal
-        open={pricingOpen}
-        onClose={() => setPricingOpen(false)}
-        plans={gateState.plans}
-        defaultPriceBand={gateState.priceBand}
-        isCommunity={gateState.isCommunity}
-        currentPlanId={gateState.currentPlanId}
-        currentCycle={gateState.currentCycle}
-        hasActiveSubscription={gateState.hasActiveSubscription}
-      />
+      {/* PricingModal nur in Legacy-Subs-Welt rendern. */}
+      {gateState.subscriptionsEnabled && (
+        <PricingModal
+          open={pricingOpen}
+          onClose={() => setPricingOpen(false)}
+          plans={gateState.plans}
+          defaultPriceBand={gateState.priceBand}
+          isCommunity={gateState.isCommunity}
+          currentPlanId={gateState.currentPlanId}
+          currentCycle={gateState.currentCycle}
+          hasActiveSubscription={gateState.hasActiveSubscription}
+        />
+      )}
     </div>
   )
 }
