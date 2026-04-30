@@ -2,21 +2,24 @@
  * Zentraler Helper für Admin-Einladungen — wählt das richtige Mail-Template
  * je nach access_tier:
  *
- *   - tier='premium' → Skool-Active-Invite (volle Community-Mitgliedschaft)
- *   - tier='alumni'  → Skool-Alumni-Invite (Classroom-Zugang ohne Live Calls)
- *   - tier='basic'   → generischer Magic-Link (Self-Signup-User)
+ *   - tier='premium' → Skool-Active-Invite (Template 'skool_active')
+ *                      Volle Community-Mitgliedschaft mit Claim-Token-Link.
+ *   - tier='alumni'  → Skool-Alumni-Invite (Template 'skool_alumni')
+ *                      Mit Classroom-Zugang-Hinweis + Claim-Token-Link.
+ *   - tier='basic'   → Admin-Invite (Template 'admin_invite')
+ *                      Magic-Link-Mail die der Admin im /admin/emails-Tab
+ *                      pflegt (Subject, Headline, Intro, CTA, etc.).
+ *                      Klick auf Link → Auto-Login + /dashboard.
+ *
+ * Alle drei Templates sind in /admin/emails editierbar.
  *
  * Wird genutzt von:
  *   - /api/admin/users POST           (Nutzer anlegen + erste Einladung)
  *   - /api/admin/users/send-invite    (Re-Invite für existierende User)
  *   - /api/admin/users/bulk           (Bulk-Invite mehrerer User)
  *
- * Damit sehen alumni-User die Mail mit dem richtigen Inhalt — Jacob:
- * "damit dem user auch klar wird daass er hier den zugang zum classroom
- * weiter hat".
- *
- * Idempotent: legt community_members-Eintrag an wenn nötig + generiert
- * Token für den Claim-Flow.
+ * Idempotent: bei alumni/premium wird ein community_members-Eintrag
+ * angelegt wenn nötig + Token für den Claim-Flow generiert.
  */
 
 import type { SupabaseClient } from '@supabase/supabase-js'
@@ -30,7 +33,7 @@ import { getAppSettings } from './app-settings'
 
 interface AdminInviteResult {
   ok: true
-  type: 'magic_link' | 'skool_active' | 'skool_alumni'
+  type: 'admin_invite' | 'skool_active' | 'skool_alumni'
 }
 interface AdminInviteError {
   ok: false
@@ -98,11 +101,13 @@ export async function sendAdminInviteForUser(
     }
   }
 
-  // basic-User → generischer Magic-Link
-  const result = await sendInvitationEmail(admin, email)
+  // basic-User → Admin-Invite-Mail (Template 'admin_invite' aus /admin/emails).
+  // sendInvitationEmail() nutzt intern dieses Template — der Inhalt ist
+  // vollständig durch den Admin pflegbar (Subject, Hero, Benefits, CTA).
+  const result = await sendInvitationEmail(admin, email, { firstName })
   if (!result.ok) return { ok: false, error: result.error }
   await recordInvitationSent(admin, userId)
-  return { ok: true, type: 'magic_link' }
+  return { ok: true, type: 'admin_invite' }
 }
 
 /**
