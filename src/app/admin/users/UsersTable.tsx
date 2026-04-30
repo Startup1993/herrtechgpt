@@ -604,10 +604,27 @@ export default function UsersTable({
 
       {/* Bulk-Action-Bar — nur sichtbar im Bearbeiten-Modus mit Auswahl */}
       {editMode && selectedIds.size > 0 && (
-        <div className="sticky top-2 z-20 flex items-center gap-3 p-3 rounded-xl bg-primary/10 border border-primary/30 shadow-sm">
+        <div className="sticky top-2 z-20 flex items-center gap-3 p-3 rounded-xl bg-primary/10 border border-primary/30 shadow-sm flex-wrap">
           <span className="text-sm font-medium text-foreground">
             {selectedIds.size} ausgewählt
+            {sorted.length > selectedIds.size && (
+              <span className="text-muted ml-1.5">
+                (von {sorted.length} gefiltert)
+              </span>
+            )}
           </span>
+          {/* "Alle auswählen" über alle Seiten — sichtbar wenn nicht alle
+              gefilterten ausgewählt sind. Spart dem Admin das manuelle
+              Ankreuzen über mehrere Pages. */}
+          {selectedIds.size < sorted.length && (
+            <button
+              onClick={() => setSelectedIds(new Set(sorted.map((u) => u.id)))}
+              disabled={bulkBusy}
+              className="text-xs font-medium text-primary hover:text-primary-hover underline disabled:opacity-50"
+            >
+              Alle {sorted.length} auswählen
+            </button>
+          )}
           <div className="h-5 w-px bg-border" />
           <select
             disabled={bulkBusy}

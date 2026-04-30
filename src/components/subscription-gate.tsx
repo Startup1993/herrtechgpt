@@ -142,7 +142,7 @@ export function SubscriptionGate({ state, creditCost = 0, onAction, children }: 
 
 // ─── Credit Top-up / Upgrade Modal ────────────────────────────────────────
 
-function CreditTopupModal({
+export function CreditTopupModal({
   open,
   onClose,
   needed,

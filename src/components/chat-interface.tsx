@@ -9,7 +9,11 @@ import { ChatMessage } from './chat-message'
 import type { AgentDefinition } from '@/lib/agents'
 import { VoiceRecordingUI } from './voice-recording-ui'
 import { useVoiceDictation } from '@/hooks/use-voice-dictation'
-import { PaywallBanner, type SubscriptionGateState } from './subscription-gate'
+import {
+  CreditTopupModal,
+  PaywallBanner,
+  type SubscriptionGateState,
+} from './subscription-gate'
 
 const PricingModal = dynamic(
   () => import('./pricing-modal').then((m) => m.PricingModal),
@@ -32,7 +36,21 @@ export function ChatInterface({
   gateState,
 }: ChatInterfaceProps) {
   const [pricingOpen, setPricingOpen] = useState(false)
+  const [creditsOpen, setCreditsOpen] = useState(false)
   const hasAccess = !gateState || gateState.hasActiveSubscription
+
+  // In NoSubs-Welt nur CreditTopupModal zeigen, NIE PricingModal.
+  // Aber: Chat ist community-only (siehe Permission-Matrix), basic-User
+  // kommen gar nicht hierher (CommunityRequiredView in der Page-Layer).
+  // Premium-Member duerfen IMMER chatten — Chat braucht keine Credits.
+  // Trotzdem als Sicherheitsnetz: kein PricingModal in NoSubs-Welt.
+  const openPaywall = () => {
+    if (gateState && !gateState.subscriptionsEnabled) {
+      setCreditsOpen(true)
+      return
+    }
+    setPricingOpen(true)
+  }
   const router = useRouter()
   const scrollRef = useRef<HTMLDivElement>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
@@ -74,7 +92,7 @@ export function ChatInterface({
       if (hasAccess) {
         sendMessage({ text: autoSend })
       } else {
-        setPricingOpen(true)
+        openPaywall()
       }
       router.replace(`/dashboard/herr-tech-gpt/${conversationId}`)
     }
@@ -254,19 +272,20 @@ export function ChatInterface({
 
       {/* Input area */}
       <div className="border-t border-border px-3 py-3 md:px-6 md:py-4 bg-surface">
-        {gateState && (
+        {gateState && gateState.subscriptionsEnabled && (
           <div className="max-w-3xl mx-auto">
             <PaywallBanner
               state={gateState}
               message="Zum Senden brauchst du ein aktives Abo. Du kannst aber gerne alles ansehen."
-              onOpenPricing={() => setPricingOpen(true)}
+              onOpenPricing={openPaywall}
             />
           </div>
         )}
         {renderInputBar()}
       </div>
 
-      {gateState && (
+      {/* PricingModal nur in Legacy-Subs-Welt rendern. */}
+      {gateState && gateState.subscriptionsEnabled && (
         <PricingModal
           open={pricingOpen}
           onClose={() => setPricingOpen(false)}
@@ -276,6 +295,25 @@ export function ChatInterface({
           currentPlanId={gateState.currentPlanId}
           currentCycle={gateState.currentCycle}
           hasActiveSubscription={gateState.hasActiveSubscription}
+        />
+      )}
+
+      {gateState && (
+        <CreditTopupModal
+          open={creditsOpen}
+          onClose={() => setCreditsOpen(false)}
+          needed={0}
+          available={gateState.credits}
+          packs={gateState.packs}
+          priceBand={gateState.priceBand}
+          currentPlanTier={gateState.currentPlanTier}
+          subscriptionsEnabled={gateState.subscriptionsEnabled}
+          nextCreditRefreshAt={gateState.nextCreditRefreshAt}
+          isCommunity={gateState.isCommunity}
+          onOpenPricing={() => {
+            setCreditsOpen(false)
+            if (gateState.subscriptionsEnabled) setPricingOpen(true)
+          }}
         />
       )}
     </div>
