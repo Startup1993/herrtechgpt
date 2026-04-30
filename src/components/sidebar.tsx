@@ -272,6 +272,7 @@ function NavItem({
   label,
   isActive,
   locked,
+  comingSoon,
   onClick,
   description,
   badge,
@@ -280,16 +281,20 @@ function NavItem({
   icon: React.ElementType
   label: string
   isActive?: boolean
+  /** Sperrt den Eintrag (Lock-Icon, eventuell href = Upgrade-Page). */
   locked?: boolean
+  /** "Coming Soon"-Sperre — nicht klickbar, zeigt "Bald verfügbar"-Badge. */
+  comingSoon?: boolean
   onClick?: () => void
   description?: string
   badge?: number
 }) {
+  const isDisabled = locked || comingSoon
   const baseClass = `flex items-center gap-3 px-3 py-2.5 rounded-[var(--radius-lg)] text-sm transition-all w-full text-left ${
     isActive
       ? 'bg-primary/12 text-primary font-medium'
       : 'text-muted hover:bg-surface-hover hover:text-foreground'
-  } ${locked ? 'opacity-60' : ''}`
+  } ${isDisabled ? 'opacity-60' : ''} ${comingSoon ? 'cursor-not-allowed' : ''}`
 
   const content = (
     <>
@@ -305,9 +310,29 @@ function NavItem({
           {badge > 99 ? '99+' : badge}
         </span>
       )}
-      {locked && <Lock size={14} className="text-muted shrink-0" />}
+      {comingSoon ? (
+        <span className="inline-flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wider px-1.5 py-0.5 rounded-full bg-amber-100 text-amber-700 dark:bg-amber-950/30 dark:text-amber-400 shrink-0">
+          Soon
+        </span>
+      ) : locked ? (
+        <Lock size={14} className="text-muted shrink-0" />
+      ) : null}
     </>
   )
+
+  // Coming Soon: NICHT klickbar — als button ohne Handler rendern
+  if (comingSoon) {
+    return (
+      <button
+        type="button"
+        disabled
+        className={baseClass}
+        title="Bald verfügbar"
+      >
+        {content}
+      </button>
+    )
+  }
 
   // If locked with an href (upgrade link), render as Link
   if (locked && href) {
@@ -360,18 +385,32 @@ function MainSidebar({
   pathname: string
   onDrillDown: (mode: SidebarMode) => void
 }) {
-  // Lock-Logik: Middleware blockiert nur 'community' und 'paid'.
-  // 'coming_soon' und 'open' sind in der Nav zug\u00e4nglich (Seite zeigt Coming-Soon-UI selbst).
-  const isLocked = (feature: FeatureKey): boolean => {
-    if (isAdmin) return false
+  // Sidebar-Lock-Logik (NEU): unterscheidet drei Zust\u00e4nde.
+  //   - 'upgrade'     \u2192 User kann reinklicken zur Upgrade-/Community-Page
+  //   - 'coming_soon' \u2192 Eintrag NICHT klickbar (Soon-Badge statt Lock)
+  //   - null          \u2192 frei
+  // Admin sieht alles frei (kein Lock).
+  type NavLock = 'upgrade' | 'coming_soon' | null
+  const getNavLock = (feature: FeatureKey): NavLock => {
+    if (isAdmin) return null
     const state = states?.[feature]
-    if (!state) return false
-    return requiresUpgrade(state)
+    if (!state) return null
+    if (state === 'coming_soon') return 'coming_soon'
+    if (requiresUpgrade(state)) return 'upgrade'
+    return null
   }
 
-  const classroomLocked = isLocked('classroom')
-  const chatLocked = isLocked('chat')
-  const toolboxLocked = isLocked('toolbox')
+  const classroomLock = getNavLock('classroom')
+  const chatLock = getNavLock('chat')
+  const toolboxLock = getNavLock('toolbox')
+
+  // Backwards-compat-Helper f\u00fcr die NavItem-Calls weiter unten.
+  const classroomLocked = classroomLock === 'upgrade'
+  const chatLocked = chatLock === 'upgrade'
+  const toolboxLocked = toolboxLock === 'upgrade'
+  const classroomComingSoon = classroomLock === 'coming_soon'
+  const chatComingSoon = chatLock === 'coming_soon'
+  const toolboxComingSoon = toolboxLock === 'coming_soon'
 
   return (
     <nav className="flex-1 overflow-y-auto px-3 py-4">
@@ -389,7 +428,8 @@ function MainSidebar({
           label="Classroom"
           isActive={pathname.startsWith('/dashboard/classroom')}
           locked={classroomLocked}
-          onClick={() => classroomLocked ? undefined : onDrillDown('classroom')}
+          comingSoon={classroomComingSoon}
+          onClick={() => (classroomLocked || classroomComingSoon) ? undefined : onDrillDown('classroom')}
           href={classroomLocked ? '/dashboard/upgrade?feature=classroom' : undefined}
         />
         <NavItem
@@ -397,7 +437,8 @@ function MainSidebar({
           label="Herr Tech GPT"
           isActive={pathname.startsWith('/dashboard/herr-tech-gpt')}
           locked={chatLocked}
-          onClick={() => chatLocked ? undefined : onDrillDown('chat')}
+          comingSoon={chatComingSoon}
+          onClick={() => (chatLocked || chatComingSoon) ? undefined : onDrillDown('chat')}
           href={chatLocked ? '/dashboard/upgrade?feature=chat' : undefined}
         />
         <NavItem
@@ -405,7 +446,8 @@ function MainSidebar({
           label="KI Toolbox"
           isActive={pathname.startsWith('/dashboard/ki-toolbox')}
           locked={toolboxLocked}
-          onClick={() => toolboxLocked ? undefined : onDrillDown('toolbox')}
+          comingSoon={toolboxComingSoon}
+          onClick={() => (toolboxLocked || toolboxComingSoon) ? undefined : onDrillDown('toolbox')}
           href={toolboxLocked ? '/dashboard/upgrade?feature=toolbox' : undefined}
         />
         <NavItem
@@ -1264,6 +1306,10 @@ function ToolboxSidebar({
 }) {
   const [tools, setTools] = useState<ToolboxTool[]>([])
 
+  // Tools werden bei jedem Pathname-Wechsel neu geladen — sonst sieht der
+  // User nach Admin-Edit (z.B. Coming-Soon-Toggle) den alten Status weiter,
+  // bis er einen Hard-Reload macht. pathname als Dependency sorgt dafür
+  // dass beim Navigieren zwischen Admin und Toolbox die Liste frisch ist.
   useEffect(() => {
     const supabase = createClient()
     supabase
@@ -1274,7 +1320,7 @@ function ToolboxSidebar({
       .then(({ data }) => {
         if (data) setTools(data as ToolboxTool[])
       })
-  }, [])
+  }, [pathname])
 
   return (
     <div className="flex-1 overflow-y-auto">

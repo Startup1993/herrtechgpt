@@ -7,6 +7,12 @@ import { getPermissionMatrix } from '@/lib/permissions'
 import { getAppSettings } from '@/lib/app-settings'
 import { getAuthedUser, getProfileCached } from '@/lib/server-cache'
 
+// Layout darf nicht statisch gecached werden — sonst sehen User nach
+// Berechtigungs-/Settings-Änderungen den alten Stand bis Hard-Reload.
+// Permissions, Settings, Tools sind alle dynamisch und sollen sofort
+// durchschlagen wenn Admin sie ändert.
+export const dynamic = 'force-dynamic'
+
 export default async function DashboardLayout({
   children,
 }: {

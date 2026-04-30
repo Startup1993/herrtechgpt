@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { revalidatePath } from 'next/cache'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { createClient } from '@/lib/supabase/server'
 
@@ -32,6 +33,13 @@ export async function POST(req: NextRequest) {
   )
   const firstError = results.find((r) => r.error)?.error
   if (firstError) return NextResponse.json({ error: firstError.message }, { status: 500 })
+
+  // Cache invalidieren wenn die Sortierung Auswirkungen aufs Frontend hat.
+  // Toolbox-Reorder beeinflusst Sidebar + Toolbox-Page direkt.
+  if (table === 'toolbox_tools') {
+    revalidatePath('/dashboard', 'layout')
+    revalidatePath('/dashboard/ki-toolbox')
+  }
 
   return NextResponse.json({ success: true, updated: items.length })
 }
