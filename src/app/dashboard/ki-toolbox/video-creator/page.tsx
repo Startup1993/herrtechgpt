@@ -9,8 +9,8 @@ import {
 } from '@/lib/monetization'
 import { getFeatureState } from '@/lib/permissions'
 import { getAppSettings } from '@/lib/app-settings'
+import { buildGateState } from '@/lib/gate-state'
 import type { Plan, CreditPack } from '@/lib/types'
-import type { SubscriptionGateState } from '@/components/subscription-gate'
 import CommunityRequiredView from '@/components/community-required'
 import VideoCreatorGate from './VideoCreatorGate'
 import SSORedirect from './SSORedirect'
@@ -73,21 +73,13 @@ export default async function VideoCreatorPage() {
     return <SSORedirect workerUrl={workerUrl} />
   }
 
-  const gateState: SubscriptionGateState = {
-    hasActiveSubscription: false,
-    currentPlanId: monetization.planId,
-    currentPlanTier: monetization.planTier,
-    currentCycle: monetization.subscription?.billing_cycle ?? null,
-    currentPeriodEnd: monetization.subscription?.current_period_end ?? null,
-    scheduledPlanId: monetization.subscription?.scheduled_plan_id ?? null,
-    scheduledCycle: monetization.subscription?.scheduled_billing_cycle ?? null,
-    scheduledChangeAt: monetization.subscription?.scheduled_change_at ?? null,
-    priceBand: monetization.priceBand,
-    isCommunity: access.tier === 'premium',
-    credits: monetization.totalCredits,
+  const gateState = await buildGateState({
+    supabase,
+    userId: user.id,
+    access,
     plans: plans as Plan[],
     packs: packs as CreditPack[],
-  }
+  })
 
   return <VideoCreatorGate gateState={gateState} />
 }

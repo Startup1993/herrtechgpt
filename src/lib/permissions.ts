@@ -120,6 +120,12 @@ export async function getPermissionMatrix(supabase: SupabaseClient): Promise<Per
     const t = row.tier as AccessTier
     const f = row.feature as FeatureKey
     const s = row.state as FeatureState
+    // In NoSubs-Welt ist 'paid' kein gültiger State — der Begriff "Abo"
+    // existiert nicht mehr. Solche Legacy-DB-Werte ignorieren wir, der
+    // NoSubs-Default greift dann (basic.toolbox=community,
+    // alumni.toolbox=open, premium.toolbox=open). Bei Re-Aktivierung
+    // (subs back on) leben die DB-Werte wieder weiter.
+    if (!settings.subscriptionsEnabled && s === 'paid') continue
     if (matrix[t] && FEATURES.includes(f)) matrix[t][f] = s
   }
   return matrix
@@ -141,7 +147,12 @@ export async function getFeatureState(
     .eq('tier', tier)
     .eq('feature', feature)
     .maybeSingle()
-  return (data?.state as FeatureState) ?? defaults[tier][feature]
+  const dbState = data?.state as FeatureState | undefined
+  // 'paid' in NoSubs-Welt → ignorieren (siehe getPermissionMatrix-Comment)
+  if (!settings.subscriptionsEnabled && dbState === 'paid') {
+    return defaults[tier][feature]
+  }
+  return dbState ?? defaults[tier][feature]
 }
 
 export async function getAllUpsellCopy(supabase: SupabaseClient): Promise<Record<AccessTier, UpsellCopy>> {

@@ -51,6 +51,10 @@ export interface SubscriptionGateState {
   credits: number
   plans: Plan[]
   packs: CreditPack[]
+  /** Master-Switch — wenn false, niemals PricingModal zeigen, nur Credit-Topup. */
+  subscriptionsEnabled: boolean
+  /** Wann werden Credits automatisch erneuert (für Community-Member). ISO-String. */
+  nextCreditRefreshAt: string | null
 }
 
 interface Props {
@@ -68,6 +72,21 @@ export function SubscriptionGate({ state, creditCost = 0, onAction, children }: 
   const [creditsOpen, setCreditsOpen] = useState(false)
 
   function triggerGuarded() {
+    // ─── NoSubs-Welt: PricingModal NIE öffnen ─────────────────────
+    // hasActiveSubscription wird in Tool-Pages für premium/alumni-User
+    // auf true gesetzt (siehe noSubsAllowed-Flag). Wenn es trotzdem false
+    // ist (Edge-Case), ist Credit-Refill der richtige Weg — kein Plan-Modal.
+    if (!state.subscriptionsEnabled) {
+      if (creditCost > 0 && state.credits < creditCost) {
+        setCreditsOpen(true)
+        return
+      }
+      // 0-Credits-Aktion ohne Cost-Check → durchlassen
+      void onAction()
+      return
+    }
+
+    // ─── Legacy Subs-Welt ─────────────────────────────────────────
     if (!state.hasActiveSubscription) {
       setPricingOpen(true)
       return
@@ -83,20 +102,24 @@ export function SubscriptionGate({ state, creditCost = 0, onAction, children }: 
   return (
     <>
       {children(triggerGuarded)}
-      <PricingModal
-        open={pricingOpen}
-        onClose={() => setPricingOpen(false)}
-        plans={state.plans}
-        defaultPriceBand={state.priceBand}
-        isCommunity={state.isCommunity}
-        currentPlanId={state.currentPlanId}
-        currentCycle={state.currentCycle}
-        currentPeriodEnd={state.currentPeriodEnd}
-        hasActiveSubscription={state.hasActiveSubscription}
-        scheduledPlanId={state.scheduledPlanId}
-        scheduledCycle={state.scheduledCycle}
-        scheduledChangeAt={state.scheduledChangeAt}
-      />
+      {/* PricingModal nur in Legacy-Welt rendern. In NoSubs-Welt unsichtbar — sodass kein
+          versehentlicher Aufruf ein leeres oder verwirrendes Modal anzeigt. */}
+      {state.subscriptionsEnabled && (
+        <PricingModal
+          open={pricingOpen}
+          onClose={() => setPricingOpen(false)}
+          plans={state.plans}
+          defaultPriceBand={state.priceBand}
+          isCommunity={state.isCommunity}
+          currentPlanId={state.currentPlanId}
+          currentCycle={state.currentCycle}
+          currentPeriodEnd={state.currentPeriodEnd}
+          hasActiveSubscription={state.hasActiveSubscription}
+          scheduledPlanId={state.scheduledPlanId}
+          scheduledCycle={state.scheduledCycle}
+          scheduledChangeAt={state.scheduledChangeAt}
+        />
+      )}
       <CreditTopupModal
         open={creditsOpen}
         onClose={() => setCreditsOpen(false)}
@@ -105,6 +128,9 @@ export function SubscriptionGate({ state, creditCost = 0, onAction, children }: 
         packs={state.packs}
         priceBand={state.priceBand}
         currentPlanTier={state.currentPlanTier}
+        subscriptionsEnabled={state.subscriptionsEnabled}
+        nextCreditRefreshAt={state.nextCreditRefreshAt}
+        isCommunity={state.isCommunity}
         onOpenPricing={() => {
           setCreditsOpen(false)
           setPricingOpen(true)
@@ -125,6 +151,9 @@ function CreditTopupModal({
   priceBand,
   currentPlanTier,
   onOpenPricing,
+  subscriptionsEnabled,
+  nextCreditRefreshAt,
+  isCommunity,
 }: {
   open: boolean
   onClose: () => void
@@ -134,6 +163,9 @@ function CreditTopupModal({
   priceBand: PriceBand
   currentPlanTier: 'S' | 'M' | 'L' | null
   onOpenPricing: () => void
+  subscriptionsEnabled: boolean
+  nextCreditRefreshAt: string | null
+  isCommunity: boolean
 }) {
   const [loadingPack, setLoadingPack] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -169,8 +201,22 @@ function CreditTopupModal({
     return euro % 1 === 0 ? `${euro}` : euro.toFixed(2).replace('.', ',')
   }
 
-  const canUpgradePlan = currentPlanTier === 'S' || currentPlanTier === 'M'
+  // "Plan upgraden"-CTA nur in Legacy-Subs-Welt zeigen.
+  const canUpgradePlan =
+    subscriptionsEnabled && (currentPlanTier === 'S' || currentPlanTier === 'M')
   const upgradeTarget = currentPlanTier === 'S' ? 'M' : 'L'
+
+  // "Auto-Refresh am ..."-Hinweis nur in NoSubs-Welt für Community-Mitglieder.
+  const showAutoRefreshHint =
+    !subscriptionsEnabled && isCommunity && nextCreditRefreshAt
+  const formatRefreshDate = (iso: string | null): string => {
+    if (!iso) return ''
+    return new Date(iso).toLocaleDateString('de-DE', {
+      day: '2-digit',
+      month: 'long',
+      year: 'numeric',
+    })
+  }
 
   return (
     <div
@@ -202,6 +248,23 @@ function CreditTopupModal({
               </p>
             </div>
           </div>
+
+          {showAutoRefreshHint && (
+            <div className="mb-5 rounded-xl border border-emerald-500/30 bg-emerald-500/5 p-4 flex items-start gap-3">
+              <Sparkles size={18} className="text-emerald-600 dark:text-emerald-400 shrink-0 mt-0.5" />
+              <div>
+                <div className="font-semibold text-foreground">
+                  Deine Credits laden sich automatisch wieder auf
+                </div>
+                <div className="text-sm text-muted mt-0.5">
+                  Als Community-Mitglied bekommst du am{' '}
+                  <strong>{formatRefreshDate(nextCreditRefreshAt)}</strong> deine
+                  monatlichen Credits gutgeschrieben. Bis dahin kannst du Credit-
+                  Pakete nachkaufen, wenn du nicht warten willst.
+                </div>
+              </div>
+            </div>
+          )}
 
           {canUpgradePlan && (
             <div className="mb-5 rounded-xl border border-primary/25 bg-gradient-to-r from-primary/5 to-primary/10 p-4 flex items-start sm:items-center flex-col sm:flex-row gap-3">

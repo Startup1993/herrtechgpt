@@ -10,6 +10,7 @@ interface BalanceResponse {
   purchased: number
   total: number
   allowance: number
+  tier?: string
 }
 
 export function CreditBadge() {
@@ -38,8 +39,16 @@ export function CreditBadge() {
   }, [pathname])
 
   if (loading || !balance) return null
-  // Free-User ohne Wallet-Einträge nicht nerven
-  if (balance.total === 0 && balance.allowance === 0) return null
+
+  // Anzeige-Logik:
+  //   - Premium / Alumni: IMMER zeigen (auch bei 0 Credits — User soll sehen
+  //     dass die Toolbox kostet und nachkaufen oder warten kann).
+  //   - Basic: nur zeigen wenn er Credits hat (sonst wirkt es wie Werbung
+  //     auf einer Seite die er nicht nutzen kann — Community-Required-View
+  //     übernimmt die Kommunikation).
+  const tier = balance.tier ?? 'basic'
+  const isPaidTier = tier === 'premium' || tier === 'alumni'
+  if (!isPaidTier && balance.total === 0 && balance.allowance === 0) return null
 
   const formatted = balance.total.toLocaleString('de-DE')
 
