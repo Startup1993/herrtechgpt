@@ -10,6 +10,7 @@ import {
   PaywallBanner,
   type SubscriptionGateState,
 } from '@/components/subscription-gate'
+import { CreditStatusBar } from '@/components/credit-status-bar'
 
 const PricingModal = dynamic(
   () => import('@/components/pricing-modal').then((m) => m.PricingModal),
@@ -107,6 +108,14 @@ export default function VideoEditorView({ gateState }: { gateState?: Subscriptio
           state={gateState}
           message="Zum Analysieren brauchst du ein aktives Abo. Du kannst den Editor aber gerne durchklicken."
           onOpenPricing={openPaywall}
+        />
+      )}
+
+      {gateState && !gateState.subscriptionsEnabled && (
+        <CreditStatusBar
+          credits={gateState.credits}
+          nextCreditRefreshAt={gateState.nextCreditRefreshAt}
+          isCommunity={gateState.isCommunity}
         />
       )}
 

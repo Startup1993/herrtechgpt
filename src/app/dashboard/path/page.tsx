@@ -82,18 +82,19 @@ export default async function LearningPathPage() {
             </h2>
             <div className="space-y-2">
               {path.videos.map((v, i) => (
-                <div
+                <Link
                   key={v.id}
-                  className="flex gap-4 p-4 rounded-xl border border-border bg-surface"
+                  href={`/dashboard/classroom?q=${encodeURIComponent(v.title)}`}
+                  className="flex gap-4 p-4 rounded-xl border border-border bg-surface hover:border-primary/40 hover:shadow-sm transition-all"
                 >
                   <div className="w-8 h-8 rounded-full bg-primary/10 text-primary flex items-center justify-center text-sm font-bold shrink-0">
                     {i + 1}
                   </div>
                   <div className="flex-1 min-w-0">
-                    <p className="text-sm font-semibold text-foreground mb-1">{v.title}</p>
+                    <p className="text-sm font-semibold text-foreground mb-1 group-hover:text-primary">{v.title}</p>
                     <p className="text-xs text-muted leading-relaxed">{v.why}</p>
                   </div>
-                </div>
+                </Link>
               ))}
             </div>
           </section>
@@ -109,7 +110,7 @@ export default async function LearningPathPage() {
               {recommendedAgents.map(({ agent, why }) => (
                 <Link
                   key={agent!.id}
-                  href={`/dashboard/${agent!.id}`}
+                  href={`/dashboard/herr-tech-gpt?agent=${agent!.id}`}
                   className="group flex gap-3 p-4 rounded-xl border border-border bg-surface hover:border-primary/40 hover:shadow-sm transition-all"
                 >
                   <div className="w-10 h-10 rounded-lg bg-surface-secondary flex items-center justify-center text-xl shrink-0">
