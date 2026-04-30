@@ -455,6 +455,15 @@ export async function cancelSkoolMembership(
       .eq('access_tier', 'premium')
   }
 
+  // Auto-Fillup-Anzeige stoppen: monthly_balance bleibt (User darf noch
+  // verbrauchen), aber reset_at = null entfernt die "erneuert sich am X"-
+  // Anzeige im Frontend. Auch der Cron-Job /api/cron/community-credit-grant
+  // springt diesen User dank skool_status='cancelled' nicht mehr an.
+  await admin
+    .from('credit_wallets')
+    .update({ reset_at: null })
+    .eq('user_id', member.profile_id)
+
   return { deleted: false, cancelled: true }
 }
 
@@ -462,8 +471,12 @@ export async function cancelSkoolMembership(
  * Beendet Skool-Zugang (Alumni-Werden, NACH 12-Monats-Ablauf).
  * - community_members.skool_status = 'alumni'
  * - Wenn profile_id vorhanden und Plan S aus Skool → beenden
- * - access_tier von 'premium' auf 'alumni' zurücksetzen (Classroom
- *   bleibt lebenslang erhalten — das ist der Unterschied zu cancel).
+ * - access_tier von 'premium' auf 'alumni' zurücksetzen
+ * - Auto-Fillup stoppt SOFORT (Cron skippt durch skool_status-Filter)
+ * - monthly_balance + purchased_balance BLEIBEN — User darf restliche
+ *   Credits in der Toolbox verbrauchen (Jacob: "credits bleiben erhalten
+ *   kann sie noch verbrauchen kann also noch in die ki toolbox").
+ * - reset_at wird auf null gesetzt → Frontend zeigt keine fake Erneuerung
  */
 export async function expireSkoolMembership(
   admin: SupabaseClient,
@@ -523,6 +536,14 @@ export async function expireSkoolMembership(
       .eq('id', member.profile_id)
       .eq('access_tier', 'premium')
   }
+
+  // Auto-Fillup-Anzeige stoppen (analog cancelSkoolMembership):
+  // monthly_balance bleibt zum Verbrauchen, aber reset_at = null entfernt
+  // die "erneuert sich am X"-Anzeige im Wallet-UI.
+  await admin
+    .from('credit_wallets')
+    .update({ reset_at: null })
+    .eq('user_id', member.profile_id)
 }
 
 /**
