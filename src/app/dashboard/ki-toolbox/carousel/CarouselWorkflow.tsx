@@ -439,16 +439,24 @@ function PalettePreview({ primary }: { primary: string }) {
 
 // ─── Main ────────────────────────────────────────────────────────────────────
 
-export default function CarouselWorkflow({ gateState }: { gateState?: SubscriptionGateState }) {
+export default function CarouselWorkflow({
+  gateState,
+  creditCost = 0,
+}: {
+  gateState?: SubscriptionGateState
+  /** Credit-Kosten pro Generate/Refine-Aktion (aus feature_credit_costs.carousel). */
+  creditCost?: number
+}) {
   const [pricingOpen, setPricingOpen] = useState(false)
   const [creditsOpen, setCreditsOpen] = useState(false)
+  // Wenn die API mit 402 ablehnt, speichern wir needed/available für die
+  // korrekte Anzeige im CreditTopupModal (sonst würde "0 Credits" stehen).
+  const [creditError, setCreditError] = useState<{ needed: number; available: number } | null>(null)
   const hasAccess = !gateState || gateState.hasActiveSubscription
 
   // Zentrale Paywall-Trigger-Funktion: in NoSubs-Welt zeigen wir IMMER nur
   // den Credit-Topup-Modal (weil PricingModal inhaltlich nichts taugt) —
   // egal ob die API "kein Abo" oder "zu wenig Credits" zurueckgibt.
-  // Der Topup-Modal zeigt fuer Community-Member zusaetzlich den
-  // Auto-Refresh-Termin an.
   const openPaywall = useCallback(() => {
     if (gateState && !gateState.subscriptionsEnabled) {
       setCreditsOpen(true)
@@ -505,8 +513,13 @@ export default function CarouselWorkflow({ gateState }: { gateState?: Subscripti
           handle: ci.handle,
         }),
       })
-      // 402 von der API = kein Abo / zu wenig Credits → Pricing öffnen
+      // 402 = zu wenig Credits / kein Zugriff → CreditTopup mit echter Cost öffnen
       if (res.status === 402) {
+        const errData = await res.json().catch(() => ({}))
+        setCreditError({
+          needed: typeof errData.needed === 'number' ? errData.needed : 0,
+          available: typeof errData.available === 'number' ? errData.available : (gateState?.credits ?? 0),
+        })
         openPaywall()
         return
       }
@@ -550,6 +563,11 @@ export default function CarouselWorkflow({ gateState }: { gateState?: Subscripti
         }),
       })
       if (res.status === 402) {
+        const errData = await res.json().catch(() => ({}))
+        setCreditError({
+          needed: typeof errData.needed === 'number' ? errData.needed : 0,
+          available: typeof errData.available === 'number' ? errData.available : (gateState?.credits ?? 0),
+        })
         openPaywall()
         return
       }
@@ -627,9 +645,12 @@ export default function CarouselWorkflow({ gateState }: { gateState?: Subscripti
   const creditsModal = gateState && (
     <CreditTopupModal
       open={creditsOpen}
-      onClose={() => setCreditsOpen(false)}
-      needed={0}
-      available={gateState.credits}
+      onClose={() => {
+        setCreditsOpen(false)
+        setCreditError(null)
+      }}
+      needed={creditError?.needed ?? 0}
+      available={creditError?.available ?? gateState.credits}
       packs={gateState.packs}
       priceBand={gateState.priceBand}
       currentPlanTier={gateState.currentPlanTier}
@@ -737,7 +758,16 @@ export default function CarouselWorkflow({ gateState }: { gateState?: Subscripti
               </svg>
               {progress}
             </>
-          ) : '🎠 Karussell generieren'}
+          ) : (
+            <>
+              🎠 Karussell generieren
+              {creditCost > 0 && (
+                <span className="text-xs font-normal opacity-80">
+                  ({creditCost} Credits)
+                </span>
+              )}
+            </>
+          )}
         </button>
         {pricingModal}
         {creditsModal}

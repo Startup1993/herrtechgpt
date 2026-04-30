@@ -13,6 +13,7 @@ import {
   Calendar,
   ChevronLeft,
   ChevronRight,
+  Mail,
 } from 'lucide-react'
 
 type AccessTier = 'basic' | 'alumni' | 'premium'
@@ -403,7 +404,7 @@ export default function UsersTable({
   }
 
   async function bulkAction(
-    action: 'set_tier' | 'delete',
+    action: 'set_tier' | 'delete' | 'invite',
     params: { access_tier?: AccessTier } = {}
   ) {
     if (selectedIds.size === 0) return
@@ -690,6 +691,15 @@ export default function UsersTable({
             <option value="alumni">Alumni</option>
             <option value="basic">Basic</option>
           </select>
+          <button
+            disabled={bulkBusy}
+            onClick={() => bulkAction('invite')}
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-border hover:border-primary hover:bg-primary/5 text-foreground text-sm font-medium transition-colors disabled:opacity-50"
+            title="Magic-Link-Einladung an alle ausgewählten User senden, die sich noch nicht eingeloggt haben"
+          >
+            {bulkBusy ? <Loader2 size={14} className="animate-spin" /> : <Mail size={14} />}
+            Einladen
+          </button>
           {bulkConfirmDelete ? (
             <>
               <button
@@ -721,9 +731,9 @@ export default function UsersTable({
           <div className="flex-1" />
           <button
             disabled={bulkBusy}
-            onClick={clearSelection}
+            onClick={exitEditMode}
             className="text-muted hover:text-foreground p-1"
-            title="Auswahl aufheben"
+            title="Bearbeiten beenden"
           >
             <X size={16} />
           </button>

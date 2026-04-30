@@ -133,27 +133,42 @@ export async function handleAccessTierChange(params: {
 // ─── Server-side Access Check ───────────────────────────────────────────
 
 /**
- * Prüft serverseitig ob ein User Aktions-Zugriff hat (aktives Abo oder Admin).
- * Wird in API-Routes aufgerufen, bevor teure Claude/Stripe/Fal-Calls laufen,
- * damit niemand per curl die UI-Paywall umgeht.
+ * Prüft serverseitig ob ein User Aktions-Zugriff hat.
  *
- * Gibt true/false zurück. Admin-Check per role='admin' in profiles.
+ * Logik je Modus:
+ *   - Subs-aktiv: Admin ODER aktives Abo
+ *   - NoSubs:     IMMER true (kein Abo-Konzept). Stattdessen entscheidet
+ *                 chargeCredits() ob der User genug Credits hat. Page-Layer
+ *                 fängt basic-User ohne Toolbox-Recht via CommunityRequired
+ *                 schon vorher ab — wer hier landet, darf zumindest die
+ *                 Credit-Prüfung machen.
+ *
+ * Vorher (W9): tier='premium'/'alumni' war Pflicht in NoSubs. Das blockte
+ * basic-User mit gekauften Credits am Server-Gate, obwohl sie über die
+ * Berechtigungs-Matrix hätten durchkommen können (toolbox='open' Override).
  */
 export async function hasActionAccess(
   supabase: SupabaseClient,
   userId: string
 ): Promise<boolean> {
-  const [{ data: profile }, { data: sub }] = await Promise.all([
-    supabase.from('profiles').select('role').eq('id', userId).single(),
+  const { getAppSettings } = await import('./app-settings')
+  const [{ data: profile }, { data: sub }, settings] = await Promise.all([
+    supabase.from('profiles').select('role, access_tier').eq('id', userId).single(),
     supabase
       .from('subscriptions')
       .select('status')
       .eq('user_id', userId)
       .in('status', ['active', 'trialing'])
       .maybeSingle(),
+    getAppSettings(),
   ])
   if (profile?.role === 'admin') return true
-  return !!sub
+  if (sub) return true
+
+  // NoSubs-Welt: kein Abo-Gate. chargeCredits + Page-Permission entscheiden.
+  if (!settings.subscriptionsEnabled) return true
+
+  return false
 }
 
 // ─── Price Band ─────────────────────────────────────────────────────────

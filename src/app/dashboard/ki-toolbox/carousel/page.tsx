@@ -2,7 +2,7 @@ import { cookies } from 'next/headers'
 import { redirect } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
 import { computeEffectiveAccess, VIEW_AS_COOKIE } from '@/lib/access'
-import { getActivePacks, getActivePlans } from '@/lib/monetization'
+import { getActivePacks, getActivePlans, getFeatureCost } from '@/lib/monetization'
 import { getFeatureState } from '@/lib/permissions'
 import { getAppSettings } from '@/lib/app-settings'
 import { buildGateState } from '@/lib/gate-state'
@@ -35,13 +35,16 @@ export default async function CarouselPage() {
     )
   }
 
-  const gateState = await buildGateState({
-    supabase,
-    userId: user.id,
-    access,
-    plans: plans as Plan[],
-    packs: packs as CreditPack[],
-  })
+  const [gateState, carouselCost] = await Promise.all([
+    buildGateState({
+      supabase,
+      userId: user.id,
+      access,
+      plans: plans as Plan[],
+      packs: packs as CreditPack[],
+    }),
+    getFeatureCost(supabase, 'carousel'),
+  ])
 
-  return <CarouselWorkflow gateState={gateState} />
+  return <CarouselWorkflow gateState={gateState} creditCost={carouselCost} />
 }

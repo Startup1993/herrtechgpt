@@ -85,7 +85,14 @@ function DashboardTile({
 interface LearningPath {
   greeting?: string
   focus_summary?: string
-  videos?: Array<{ id: string; title: string; why: string }>
+  videos?: Array<{
+    id: string
+    /** Modul-Slug für direkten Link (neu seit W10) — alte Pfade haben
+        noch keinen, dann fallback auf Search-Query. */
+    slug?: string
+    title: string
+    why: string
+  }>
   agents?: Array<{ id: string; why: string }>
   milestones?: { '30'?: string[]; '60'?: string[]; '90'?: string[] }
 }
@@ -168,77 +175,84 @@ function LearningPathWidget() {
   const circumference = 2 * Math.PI * radius
   const strokeDashoffset = circumference - (progress / 100) * circumference
 
-  // Wenn nextVideo vorhanden: ganzes Widget → direkt zum Video (Classroom-Search).
-  // Sonst → Übersicht. Jacob: "die [Videos] müssen verlinkt sein".
-  const widgetHref = nextVideo
-    ? `/dashboard/classroom?q=${encodeURIComponent(nextVideo.title)}`
-    : '/dashboard/path'
+  // Zwei separate Links: linke Hälfte (Progress) → Lernpfad-Übersicht.
+  // Rechte Hälfte (nextVideo) → direkt zur Lektion im Classroom.
+  // Bevorzugt slug + id (W10), fallback Search-Query (alte Lernpfade).
+  const videoHref = nextVideo
+    ? nextVideo.slug
+      ? `/dashboard/classroom/${nextVideo.slug}?video=${encodeURIComponent(nextVideo.id)}`
+      : `/dashboard/classroom?q=${encodeURIComponent(nextVideo.title)}`
+    : null
 
   return (
-    <Link href={widgetHref} className="group block">
-      <div className="card-static overflow-hidden hover:border-primary/30 transition-all">
-        <div className="flex flex-col sm:flex-row">
-          <div className="flex items-center gap-5 p-5 sm:p-6 flex-1 min-w-0">
-            <div className="relative shrink-0">
-              <svg width={ringSize} height={ringSize} className="-rotate-90">
-                <circle
-                  cx={ringSize / 2} cy={ringSize / 2} r={radius}
-                  fill="none" stroke="var(--color-border)" strokeWidth={strokeWidth}
-                />
-                <circle
-                  cx={ringSize / 2} cy={ringSize / 2} r={radius}
-                  fill="none" stroke="var(--color-primary)" strokeWidth={strokeWidth}
-                  strokeLinecap="round"
-                  strokeDasharray={circumference}
-                  strokeDashoffset={strokeDashoffset}
-                  className="transition-all duration-700"
-                />
-              </svg>
-              <div className="absolute inset-0 flex items-center justify-center">
-                <span className="text-sm font-bold text-foreground">{progress}%</span>
-              </div>
-            </div>
-
-            <div className="flex-1 min-w-0">
-              <div className="flex items-center gap-2 mb-1">
-                <h3 className="text-base font-semibold text-foreground">Dein Lernpfad</h3>
-                <span className="text-xs px-2 py-0.5 rounded-full bg-primary/10 text-primary font-medium">
-                  {completed}/{totalVideos} Videos
-                </span>
-              </div>
-              {path?.focus_summary && (
-                <p className="text-xs text-muted mb-2 line-clamp-1">{path.focus_summary}</p>
-              )}
-              <div className="flex items-center gap-1.5">
-                {Array.from({ length: totalVideos }).map((_, i) => (
-                  <div
-                    key={i}
-                    className={`w-2 h-2 rounded-full transition-all ${
-                      i < completed ? 'bg-primary' : 'bg-border'
-                    }`}
-                  />
-                ))}
-              </div>
+    <div className="card-static overflow-hidden">
+      <div className="flex flex-col sm:flex-row">
+        <Link
+          href="/dashboard/path"
+          className="group flex items-center gap-5 p-5 sm:p-6 flex-1 min-w-0 hover:bg-surface-hover transition-colors"
+        >
+          <div className="relative shrink-0">
+            <svg width={ringSize} height={ringSize} className="-rotate-90">
+              <circle
+                cx={ringSize / 2} cy={ringSize / 2} r={radius}
+                fill="none" stroke="var(--color-border)" strokeWidth={strokeWidth}
+              />
+              <circle
+                cx={ringSize / 2} cy={ringSize / 2} r={radius}
+                fill="none" stroke="var(--color-primary)" strokeWidth={strokeWidth}
+                strokeLinecap="round"
+                strokeDasharray={circumference}
+                strokeDashoffset={strokeDashoffset}
+                className="transition-all duration-700"
+              />
+            </svg>
+            <div className="absolute inset-0 flex items-center justify-center">
+              <span className="text-sm font-bold text-foreground">{progress}%</span>
             </div>
           </div>
 
-          {nextVideo && (
-            <div className="flex items-center gap-3 px-5 sm:px-6 pb-5 sm:pb-0 sm:border-l border-border sm:min-w-[260px]">
-              <div className="w-9 h-9 rounded-[var(--radius-lg)] bg-primary/10 flex items-center justify-center shrink-0">
-                <Play size={16} className="text-primary" />
-              </div>
-              <div className="flex-1 min-w-0">
-                <p className="text-[10px] uppercase tracking-wider text-muted font-semibold mb-0.5">
-                  {completed > 0 ? 'Weiter mit' : 'Starte mit'}
-                </p>
-                <p className="text-sm font-medium text-foreground truncate">{nextVideo.title}</p>
-              </div>
-              <ArrowRight size={16} className="text-muted group-hover:text-primary group-hover:translate-x-1 transition-all shrink-0" />
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center gap-2 mb-1">
+              <h3 className="text-base font-semibold text-foreground">Dein Lernpfad</h3>
+              <span className="text-xs px-2 py-0.5 rounded-full bg-primary/10 text-primary font-medium">
+                {completed}/{totalVideos} Videos
+              </span>
             </div>
-          )}
-        </div>
+            {path?.focus_summary && (
+              <p className="text-xs text-muted mb-2 line-clamp-1">{path.focus_summary}</p>
+            )}
+            <div className="flex items-center gap-1.5">
+              {Array.from({ length: totalVideos }).map((_, i) => (
+                <div
+                  key={i}
+                  className={`w-2 h-2 rounded-full transition-all ${
+                    i < completed ? 'bg-primary' : 'bg-border'
+                  }`}
+                />
+              ))}
+            </div>
+          </div>
+        </Link>
+
+        {nextVideo && videoHref && (
+          <Link
+            href={videoHref}
+            className="group flex items-center gap-3 px-5 sm:px-6 py-5 sm:py-6 sm:border-l border-border sm:min-w-[260px] hover:bg-surface-hover transition-colors"
+          >
+            <div className="w-9 h-9 rounded-[var(--radius-lg)] bg-primary/10 flex items-center justify-center shrink-0">
+              <Play size={16} className="text-primary" />
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="text-[10px] uppercase tracking-wider text-muted font-semibold mb-0.5">
+                {completed > 0 ? 'Weiter mit' : 'Starte mit'}
+              </p>
+              <p className="text-sm font-medium text-foreground truncate">{nextVideo.title}</p>
+            </div>
+            <ArrowRight size={16} className="text-muted group-hover:text-primary group-hover:translate-x-1 transition-all shrink-0" />
+          </Link>
+        )}
       </div>
-    </Link>
+    </div>
   )
 }
 
