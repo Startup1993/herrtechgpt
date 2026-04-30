@@ -22,21 +22,41 @@ export async function POST(req: NextRequest) {
 
   const answers = (await req.json()) as QuizAnswers
 
-  // Lade alle verfügbaren Videos aus der Wissensbasis (nur 1 Chunk pro Video als Preview)
-  const { data: videos } = await supabase
-    .from('knowledge_base')
-    .select('video_id, video_name, chunk_text, source, duration_minutes')
-    .eq('is_active', true)
-    .eq('chunk_index', 0)
-    .limit(100)
+  // Lade alle verfügbaren Videos aus dem Classroom (module_videos).
+  // Wichtig: das ist die Quelle, an die wir später verlinken — nicht
+  // knowledge_base (das sind alte Wistia-Chunks fürs Chat-Retrieval und
+  // matchen NICHT mit den Classroom-IDs).
+  // Wir holen pro Video Title + Beschreibung + Modul-Slug, sodass die KI
+  // einen sinnvollen Pfad bauen kann und der Frontend-Link direkt zum
+  // /dashboard/classroom/<slug>?video=<id> springt.
+  const { data: videoRows } = await supabase
+    .from('module_videos')
+    .select(
+      `id, title, description, duration_seconds, sort_order,
+       module:course_modules!inner(id, slug, title, is_published)`
+    )
+    .eq('is_published', true)
+    .order('sort_order', { ascending: true })
+    .limit(150)
 
-  const videoCatalog = (videos ?? []).map((v) => ({
-    id: v.video_id,
-    title: v.video_name,
-    preview: (v.chunk_text ?? '').slice(0, 300),
-    duration: v.duration_minutes,
-    tags: (v.source ?? '').split(',').filter((s: string) => s && s !== 'wistia'),
-  }))
+  type VideoRow = {
+    id: string
+    title: string
+    description: string | null
+    duration_seconds: number | null
+    module: { id: string; slug: string; title: string; is_published: boolean } | null
+  }
+
+  const videoCatalog = ((videoRows ?? []) as unknown as VideoRow[])
+    .filter((v) => v.module && v.module.is_published)
+    .map((v) => ({
+      id: v.id,
+      slug: v.module!.slug,
+      title: v.title,
+      preview: (v.description ?? '').slice(0, 300),
+      duration: v.duration_seconds ? Math.round(v.duration_seconds / 60) : null,
+      module_title: v.module!.title,
+    }))
 
   const agentList = agents.map((a) => ({
     id: a.id,
@@ -74,7 +94,7 @@ Antworte NUR mit valid JSON in diesem Format:
   "greeting": "Persönliche Begrüßung, max. 2 Sätze",
   "focus_summary": "In 1 Satz: Worauf sollte sich diese Person die nächsten 90 Tage fokussieren?",
   "videos": [
-    { "id": "videoId", "title": "Video-Titel", "why": "Warum genau dieses Video für dich, 1 Satz" }
+    { "id": "videoId", "slug": "modul-slug", "title": "Video-Titel", "why": "Warum genau dieses Video für dich, 1 Satz" }
   ],
   "agents": [
     { "id": "agent-id", "why": "Warum dieser Assistent für dich, 1 Satz" }

@@ -6,9 +6,23 @@ import { redirect } from 'next/navigation'
 interface LearningPath {
   greeting?: string
   focus_summary?: string
-  videos?: Array<{ id: string; title: string; why: string }>
+  videos?: Array<{
+    id: string
+    /** Modul-Slug für direkten Classroom-Link (neu seit W10) — kann bei
+        alten Lernpfaden noch fehlen, dann fallback auf Search-Query. */
+    slug?: string
+    title: string
+    why: string
+  }>
   agents?: Array<{ id: string; why: string }>
   milestones?: { '30'?: string[]; '60'?: string[]; '90'?: string[] }
+}
+
+/** Erzeugt den Direkt-Link zur Lektion. Fällt auf Suche zurück wenn der
+    alte Lernpfad noch keinen slug hat (Pre-W10 generiert). */
+function videoHref(v: { id: string; slug?: string; title: string }): string {
+  if (v.slug) return `/dashboard/classroom/${v.slug}?video=${encodeURIComponent(v.id)}`
+  return `/dashboard/classroom?q=${encodeURIComponent(v.title)}`
 }
 
 export default async function LearningPathPage() {
@@ -84,7 +98,7 @@ export default async function LearningPathPage() {
               {path.videos.map((v, i) => (
                 <Link
                   key={v.id}
-                  href={`/dashboard/classroom?q=${encodeURIComponent(v.title)}`}
+                  href={videoHref(v)}
                   className="flex gap-4 p-4 rounded-xl border border-border bg-surface hover:border-primary/40 hover:shadow-sm transition-all"
                 >
                   <div className="w-8 h-8 rounded-full bg-primary/10 text-primary flex items-center justify-center text-sm font-bold shrink-0">

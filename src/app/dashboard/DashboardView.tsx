@@ -85,7 +85,14 @@ function DashboardTile({
 interface LearningPath {
   greeting?: string
   focus_summary?: string
-  videos?: Array<{ id: string; title: string; why: string }>
+  videos?: Array<{
+    id: string
+    /** Modul-Slug für direkten Link (neu seit W10) — alte Pfade haben
+        noch keinen, dann fallback auf Search-Query. */
+    slug?: string
+    title: string
+    why: string
+  }>
   agents?: Array<{ id: string; why: string }>
   milestones?: { '30'?: string[]; '60'?: string[]; '90'?: string[] }
 }
@@ -169,11 +176,12 @@ function LearningPathWidget() {
   const strokeDashoffset = circumference - (progress / 100) * circumference
 
   // Zwei separate Links: linke Hälfte (Progress) → Lernpfad-Übersicht.
-  // Rechte Hälfte (nextVideo) → direkt ins Classroom mit Video-Suche.
-  // Jacob: "Klick auf Lernpfad → Lernpfad-Page. Klick auf nextVideo →
-  // direkt zur Class im Classroom."
+  // Rechte Hälfte (nextVideo) → direkt zur Lektion im Classroom.
+  // Bevorzugt slug + id (W10), fallback Search-Query (alte Lernpfade).
   const videoHref = nextVideo
-    ? `/dashboard/classroom?q=${encodeURIComponent(nextVideo.title)}`
+    ? nextVideo.slug
+      ? `/dashboard/classroom/${nextVideo.slug}?video=${encodeURIComponent(nextVideo.id)}`
+      : `/dashboard/classroom?q=${encodeURIComponent(nextVideo.title)}`
     : null
 
   return (
