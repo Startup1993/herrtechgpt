@@ -7,8 +7,11 @@ import {
   getActivePlans,
   getMonetizationState,
 } from '@/lib/monetization'
+import { getFeatureState } from '@/lib/permissions'
+import { getAppSettings } from '@/lib/app-settings'
 import type { Plan, CreditPack } from '@/lib/types'
 import type { SubscriptionGateState } from '@/components/subscription-gate'
+import CommunityRequiredView from '@/components/community-required'
 import VideoEditorView from './VideoEditorView'
 
 export default async function VideoEditorPage() {
@@ -16,17 +19,37 @@ export default async function VideoEditorPage() {
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) redirect('/login')
 
-  const [{ data: profile }, plans, packs, cookieStore] = await Promise.all([
+  const [{ data: profile }, plans, packs, cookieStore, settings] = await Promise.all([
     supabase.from('profiles').select('role, access_tier').eq('id', user.id).single(),
     getActivePlans(supabase),
     getActivePacks(supabase),
     cookies(),
+    getAppSettings(),
   ])
   const access = computeEffectiveAccess(profile, cookieStore.get(VIEW_AS_COOKIE)?.value)
+
+  // Permission-Gate: toolbox=community → User muss erst Community beitreten.
+  const toolboxState = await getFeatureState(supabase, access.tier, 'toolbox')
+  if (!access.isAdmin && toolboxState === 'community') {
+    return (
+      <CommunityRequiredView
+        featureLabel="KI Video Editor"
+        communityUrl={settings.communityUrl}
+      />
+    )
+  }
+
   const monetization = await getMonetizationState(supabase, user.id, access.tier)
 
+  // In NoSubs-Welt: premium + alumni dürfen die Tools nutzen (basic ist oben
+  // schon durch CommunityRequiredView abgefangen).
+  const noSubsAllowed =
+    !settings.subscriptionsEnabled &&
+    (access.tier === 'premium' || access.tier === 'alumni')
+
   const gateState: SubscriptionGateState = {
-    hasActiveSubscription: access.isAdmin || monetization.hasActiveSubscription,
+    hasActiveSubscription:
+      access.isAdmin || monetization.hasActiveSubscription || noSubsAllowed,
     currentPlanId: monetization.planId,
     currentPlanTier: monetization.planTier,
     currentCycle: monetization.subscription?.billing_cycle ?? null,

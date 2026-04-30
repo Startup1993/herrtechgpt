@@ -14,11 +14,6 @@ import PricingDisabledView from './PricingDisabledView'
 
 export const dynamic = 'force-dynamic'
 
-// Wo "Community beitreten" hinführt, wenn das Abo-System aus ist.
-// Bewusst hardcoded statt env-var, weil das die einzige Community-URL ist
-// und wir die nicht pro Environment unterscheiden.
-const COMMUNITY_URL = 'https://www.skool.com/herr-tech'
-
 export default async function PricingPage() {
   const supabase = await createClient()
   const {
@@ -31,7 +26,7 @@ export default async function PricingPage() {
   // den Plan-Load + Stripe-State-Aufruf.
   const settings = await getAppSettings()
   if (!settings.subscriptionsEnabled) {
-    return <PricingDisabledView communityUrl={COMMUNITY_URL} />
+    return <PricingDisabledView communityUrl={settings.communityUrl} />
   }
 
   const [{ data: profile }, plans, cookieStore] = await Promise.all([

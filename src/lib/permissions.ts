@@ -52,14 +52,22 @@ const DEFAULT_MATRIX_LEGACY: PermissionMatrix = {
 
 // ─── Defaults im Community-only Modell (subscriptions_enabled=false) ───
 // Jacob: "credits zählen nur für die toolbox! herr tech gpt bekomme ich
-// nur in der community". Übersetzt:
-// - Toolbox: 'open' für ALLE — Aktionen kosten Credits, nicht Abo
-// - Chat (Herr Tech GPT) + Classroom: 'community' = nur premium-Tier (= Skool aktiv)
+// nur in der community".
+//
+// - Toolbox: 'community' für basic (= Self-Registrierte ohne Mitgliedschaft).
+//   Sie müssen erst Community beitreten ODER (späteres Funnel-Paket) kaufen.
+// - Toolbox: 'open' für alumni (haben mal bezahlt, dürfen mit Resten weiter
+//   arbeiten + Credit-Packs nachkaufen) und premium (volle Mitgliedschaft).
+// - Chat (Herr Tech GPT) + Classroom: 'community' für alle Nicht-Premium.
 //   Alumni verlieren Classroom-Zugang (kein "lebenslang" mehr) — Jacob:
 //   "wenn sie weg sind sind sie dann weg, können dann der community auch
 //   beitreten um so zugriff auf alles zu bekommen"
+//
+// In NoSubs-Welt werden DB-Overrides aus feature_permissions zusätzlich
+// angewendet — Admin kann via "Gruppen & Rechte" einzelne Felder anpassen
+// (z.B. Toolbox auch für basic öffnen wenn ein Funnel-Paket lebt).
 const DEFAULT_MATRIX_NOSUBS: PermissionMatrix = {
-  basic:   { classroom: 'community',   chat: 'community', toolbox: 'open' },
+  basic:   { classroom: 'community',   chat: 'community', toolbox: 'community' },
   alumni:  { classroom: 'community',   chat: 'community', toolbox: 'open' },
   premium: { classroom: 'open',        chat: 'open',      toolbox: 'open' },
 }
@@ -98,16 +106,15 @@ const DEFAULT_UPSELL: Record<AccessTier, UpsellCopy> = {
 }
 
 export async function getPermissionMatrix(supabase: SupabaseClient): Promise<PermissionMatrix> {
-  // Im Community-only Modus ignorieren wir die DB-Overrides komplett —
-  // die NOSUBS-Matrix ist die einzige Wahrheit. Beim Re-Aktivieren der
-  // Abos (subscriptions_enabled=true) greifen Code-Defaults + DB-Overrides
-  // wieder wie vorher.
+  // Defaults wählen je nach Modus, dann DB-Overrides aus feature_permissions
+  // drauflegen. So kann Admin via "Gruppen & Rechte" einzelne Felder
+  // anpassen — funktioniert in beiden Modi.
   const settings = await getAppSettings()
-  if (!settings.subscriptionsEnabled) {
-    return JSON.parse(JSON.stringify(DEFAULT_MATRIX_NOSUBS))
-  }
+  const defaults = settings.subscriptionsEnabled
+    ? DEFAULT_MATRIX_LEGACY
+    : DEFAULT_MATRIX_NOSUBS
 
-  const matrix: PermissionMatrix = JSON.parse(JSON.stringify(DEFAULT_MATRIX_LEGACY))
+  const matrix: PermissionMatrix = JSON.parse(JSON.stringify(defaults))
   const { data } = await supabase.from('feature_permissions').select('tier, feature, state')
   for (const row of data ?? []) {
     const t = row.tier as AccessTier
@@ -123,11 +130,10 @@ export async function getFeatureState(
   tier: AccessTier,
   feature: FeatureKey,
 ): Promise<FeatureState> {
-  // Wie getPermissionMatrix: NoSubs-Welt ignoriert DB-Overrides.
   const settings = await getAppSettings()
-  if (!settings.subscriptionsEnabled) {
-    return DEFAULT_MATRIX_NOSUBS[tier][feature]
-  }
+  const defaults = settings.subscriptionsEnabled
+    ? DEFAULT_MATRIX_LEGACY
+    : DEFAULT_MATRIX_NOSUBS
 
   const { data } = await supabase
     .from('feature_permissions')
@@ -135,7 +141,7 @@ export async function getFeatureState(
     .eq('tier', tier)
     .eq('feature', feature)
     .maybeSingle()
-  return (data?.state as FeatureState) ?? DEFAULT_MATRIX_LEGACY[tier][feature]
+  return (data?.state as FeatureState) ?? defaults[tier][feature]
 }
 
 export async function getAllUpsellCopy(supabase: SupabaseClient): Promise<Record<AccessTier, UpsellCopy>> {

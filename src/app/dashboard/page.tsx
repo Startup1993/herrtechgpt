@@ -45,6 +45,7 @@ export default async function DashboardPage() {
       currentPlanTier={monetization.planTier}
       currentCycle={monetization.subscription?.billing_cycle ?? null}
       subscriptionsEnabled={settings.subscriptionsEnabled}
+      communityUrl={settings.communityUrl}
     />
   )
 }

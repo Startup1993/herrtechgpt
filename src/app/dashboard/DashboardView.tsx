@@ -240,10 +240,19 @@ function LearningPathWidget() {
 // KI MARKETING CLUB UPSELL
 // ═══════════════════════════════════════════════════════════
 
-function MarketingClubCompact({ upsell }: { upsell: UpsellCopy }) {
+function MarketingClubCompact({
+  upsell,
+  communityUrl,
+}: {
+  upsell: UpsellCopy
+  communityUrl: string
+}) {
   return (
     <Link
-      href={upsell.cta_url ?? 'https://www.skool.com/herr-tech'}
+      // Reihenfolge: Tier-spezifische cta_url aus tier_upsell_copy (admin-konfigurierbar
+      // pro Tier) → globale communityUrl aus app_settings (admin-konfigurierbar).
+      // Hardcoded Fallback ist Default in app-settings.ts.
+      href={upsell.cta_url ?? communityUrl}
       target="_blank"
       rel="noopener noreferrer"
       className="inline-flex items-center gap-2 text-sm text-muted hover:text-primary transition-colors"
@@ -728,6 +737,7 @@ export default function DashboardView({
   currentPlanTier,
   currentCycle,
   subscriptionsEnabled,
+  communityUrl,
 }: {
   tier: AccessTier
   isAdmin: boolean
@@ -741,6 +751,7 @@ export default function DashboardView({
   currentPlanTier: 'S' | 'M' | 'L' | null
   currentCycle: 'monthly' | 'yearly' | null
   subscriptionsEnabled: boolean
+  communityUrl: string
 }) {
   const [pricingOpen, setPricingOpen] = useState(false)
 
@@ -790,7 +801,9 @@ export default function DashboardView({
             Deine KI-Plattform für Content, Business & Wachstum.
           </p>
         </div>
-        {showCompactCommunity && <MarketingClubCompact upsell={upsell} />}
+        {showCompactCommunity && (
+          <MarketingClubCompact upsell={upsell} communityUrl={communityUrl} />
+        )}
       </div>
 
       {/* Learning Path Widget */}
