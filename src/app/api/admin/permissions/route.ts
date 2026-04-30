@@ -1,6 +1,7 @@
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { NextResponse } from 'next/server'
+import { revalidatePath } from 'next/cache'
 import { FEATURES, STATES, TIERS, type FeatureKey, type FeatureState } from '@/lib/permissions'
 import { getAppSettings } from '@/lib/app-settings'
 import type { AccessTier } from '@/lib/access'
@@ -48,6 +49,14 @@ export async function PATCH(request: Request) {
       .upsert({ tier, feature, state, updated_at: new Date().toISOString() }, { onConflict: 'tier,feature' })
 
     if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+
+    // Cache invalidieren — sonst sehen User in der Sidebar/Layout den
+    // alten Status weiter (Layout wird nicht bei jedem Page-Load neu
+    // gerendert in Next 16). Berechtigungsmatrix-Änderungen sollen
+    // SOFORT durchschlagen.
+    revalidatePath('/dashboard', 'layout')
+    revalidatePath('/admin/groups')
+
     return NextResponse.json({ success: true })
   }
 
