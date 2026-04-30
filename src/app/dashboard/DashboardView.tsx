@@ -168,8 +168,14 @@ function LearningPathWidget() {
   const circumference = 2 * Math.PI * radius
   const strokeDashoffset = circumference - (progress / 100) * circumference
 
+  // Wenn nextVideo vorhanden: ganzes Widget → direkt zum Video (Classroom-Search).
+  // Sonst → Übersicht. Jacob: "die [Videos] müssen verlinkt sein".
+  const widgetHref = nextVideo
+    ? `/dashboard/classroom?q=${encodeURIComponent(nextVideo.title)}`
+    : '/dashboard/path'
+
   return (
-    <Link href="/dashboard/path" className="group block">
+    <Link href={widgetHref} className="group block">
       <div className="card-static overflow-hidden hover:border-primary/30 transition-all">
         <div className="flex flex-col sm:flex-row">
           <div className="flex items-center gap-5 p-5 sm:p-6 flex-1 min-w-0">

@@ -77,6 +77,9 @@ export default function BillingClient({
   // eine eigene "Du bist Community-Mitglied"-Karte. Sie haben keinen Stripe-
   // Plan, also wäre "Aktueller Plan: Noch kein Abo" verwirrend.
   const showCommunityCard = !subscriptionsEnabled && !subscription && tier === 'premium'
+  // Für basic/alumni in NoSubs-Welt: KMC-Werbe-Banner mit Benefits (statt
+  // der trockenen "Aktueller Plan: Kein aktives Abo"-Karte).
+  const showJoinCard = !subscriptionsEnabled && !subscription && tier !== 'premium'
   const router = useRouter()
   const [confirming, setConfirming] = useState(false)
   const [loading, setLoading] = useState<'cancel' | 'reactivate' | 'portal' | 'cancel_scheduled' | null>(null)
@@ -332,9 +335,53 @@ export default function BillingClient({
         </div>
       )}
 
-      {/* Plan-Karte — nur wenn KEINE Community-Card gerendert wird (also
-          für basic/alumni/Subs-Welt). */}
-      {!showCommunityCard && (
+      {/* KMC-Join-Banner — basic/alumni in NoSubs-Welt: attraktive Werbe-
+          Card statt trockener "Kein aktives Abo"-Anzeige. */}
+      {showJoinCard && (
+        <div className="rounded-2xl border border-primary/30 bg-gradient-to-br from-primary/5 to-primary/10 p-6">
+          <div className="flex items-start justify-between gap-4 flex-wrap">
+            <div className="flex-1 min-w-0">
+              <div className="text-xs uppercase tracking-wider text-primary font-semibold mb-2">
+                KI Marketing Club
+              </div>
+              <h2 className="text-xl font-bold text-foreground mb-2">
+                Alles freischalten — im KI Marketing Club
+              </h2>
+              <p className="text-sm text-muted leading-relaxed mb-4 max-w-xl">
+                Werde Teil der Community und bekomme Zugriff auf alle KI-Agenten,
+                über 170 h Lernvideos, wöchentliche Live-Calls mit Herr Tech und
+                exklusive Inhalte.
+              </p>
+              <ul className="grid grid-cols-1 sm:grid-cols-2 gap-y-1.5 gap-x-4 mb-2">
+                {[
+                  'Wöchentliche Live-Calls mit Herr Tech',
+                  'Community, Austausch & direktes Feedback',
+                  'Über 170 h Lernvideos & exklusive Inhalte',
+                  'Alle 6 KI-Agenten inkl. monatliche Credits',
+                ].map((b) => (
+                  <li key={b} className="flex items-start gap-2 text-sm text-foreground">
+                    <span className="text-primary shrink-0 mt-0.5">✓</span>
+                    <span>{b}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+            <a
+              href={communityUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center justify-center gap-2 px-5 py-3 bg-primary hover:bg-primary-hover text-primary-foreground font-semibold rounded-xl text-sm whitespace-nowrap shrink-0"
+            >
+              Jetzt beitreten
+              <ExternalLink size={14} />
+            </a>
+          </div>
+        </div>
+      )}
+
+      {/* Plan-Karte — nur wenn KEINE Community-Card und KEIN KMC-Banner
+          gerendert wird (also Subs-Welt oder Bestandskunde mit Sub). */}
+      {!showCommunityCard && !showJoinCard && (
       <div className="rounded-2xl border border-border bg-surface p-6">
         <div className="flex items-start justify-between gap-4 flex-wrap">
           <div>

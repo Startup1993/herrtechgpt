@@ -49,6 +49,10 @@ interface UserRow {
   access_expires_at: string | null
   /** ID des verknüpften community_members-Eintrags — für Inline-Edit der Ablauf-Zeit. */
   community_member_id: string | null
+  /** Credits-Stand aus credit_wallets (monthly + purchased). */
+  credits_total: number
+  credits_monthly: number
+  credits_purchased: number
 }
 
 const SOURCE_META: Record<
@@ -166,6 +170,10 @@ export default function UsersTable({
   const [editingExpiry, setEditingExpiry] = useState<string | null>(null)
   const [savingExpiry, setSavingExpiry] = useState<string | null>(null)
   const [expiryDraft, setExpiryDraft] = useState('')
+  // ─── Inline-Edit fuer Credits (purchased_balance) ───
+  const [editingCredits, setEditingCredits] = useState<string | null>(null)
+  const [savingCredits, setSavingCredits] = useState<string | null>(null)
+  const [creditsDraft, setCreditsDraft] = useState('')
   const [sortKey, setSortKey] = useState<SortKey>('created_at')
   const [sortDir, setSortDir] = useState<SortDir>('desc')
   const [importOpen, setImportOpen] = useState(false)
@@ -312,6 +320,47 @@ export default function UsersTable({
   function exitEditMode() {
     setEditMode(false)
     clearSelection()
+  }
+
+  // Inline-Edit fuer Credits — speichert via /api/admin/users/credits.
+  // action='set' setzt purchased_balance absolute. monthly_balance bleibt
+  // (gehoert dem Cron, nicht dem Admin).
+  async function saveCredits(userId: string, totalNew: number) {
+    setSavingCredits(userId)
+    try {
+      // Wir setzen purchased = (totalNew - monthly), sodass die Anzeige
+      // total === totalNew ergibt, monthly_balance unangetastet bleibt.
+      const u = users.find((x) => x.id === userId)
+      const monthly = u?.credits_monthly ?? 0
+      const purchased = Math.max(0, totalNew - monthly)
+      const res = await fetch('/api/admin/users/credits', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          userId,
+          action: 'set',
+          amount: purchased,
+          note: `Admin-Anpassung via Nutzerverwaltung: total → ${totalNew}`,
+        }),
+      })
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}))
+        setBulkMessage({
+          type: 'err',
+          text: data.error ?? 'Credit-Update fehlgeschlagen',
+        })
+      } else {
+        router.refresh()
+      }
+    } catch (err) {
+      setBulkMessage({
+        type: 'err',
+        text: err instanceof Error ? err.message : 'Netzwerkfehler',
+      })
+    } finally {
+      setSavingCredits(null)
+      setEditingCredits(null)
+    }
   }
 
   // Inline-Edit fuer "Zugang bis" — speichert auf community_members.skool_access_expires_at
@@ -746,6 +795,7 @@ export default function UsersTable({
               <SortableTh label="Zugang bis" sortKey="access_expires_at" current={sortKey} dir={sortDir} onClick={toggleSort} align="left" />
               <SortableTh label="Status" sortKey="last_active" current={sortKey} dir={sortDir} onClick={toggleSort} align="left" />
               <SortableTh label="Chats" sortKey="conversation_count" current={sortKey} dir={sortDir} onClick={toggleSort} align="center" />
+              <th className="text-left px-4 py-3 text-xs font-semibold text-muted uppercase tracking-wider">Credits</th>
               <th className="text-left px-4 py-3 text-xs font-semibold text-muted uppercase tracking-wider">Rolle</th>
               <th className="text-left px-4 py-3 text-xs font-semibold text-muted uppercase tracking-wider">Quelle</th>
               <th className="px-4 py-3" />
@@ -754,7 +804,7 @@ export default function UsersTable({
           <tbody className="divide-y divide-border">
             {sorted.length === 0 && (
               <tr>
-                <td colSpan={(subscriptionsEnabled ? 10 : 9) + (editMode ? 1 : 0)} className="px-5 py-8 text-center text-sm text-muted">
+                <td colSpan={(subscriptionsEnabled ? 11 : 10) + (editMode ? 1 : 0)} className="px-5 py-8 text-center text-sm text-muted">
                   Keine Nutzer gefunden.
                 </td>
               </tr>
@@ -901,6 +951,68 @@ export default function UsersTable({
                   </td>
                   <td className="px-4 py-3.5 text-center whitespace-nowrap">
                     <span className="text-sm font-medium text-foreground">{u.conversation_count}</span>
+                  </td>
+                  <td
+                    className="px-4 py-3.5 whitespace-nowrap"
+                    onClick={(e) => {
+                      if (editMode) e.stopPropagation()
+                    }}
+                  >
+                    {editMode ? (
+                      editingCredits === u.id ? (
+                        <div className="flex items-center gap-1">
+                          <input
+                            type="number"
+                            min={0}
+                            value={creditsDraft}
+                            onChange={(e) => setCreditsDraft(e.target.value)}
+                            disabled={savingCredits === u.id}
+                            className="w-20 px-2 py-1 text-xs border border-border rounded bg-surface focus:outline-none focus:ring-2 focus:ring-primary/30"
+                          />
+                          <button
+                            onClick={() => {
+                              const n = parseInt(creditsDraft, 10)
+                              if (!isNaN(n) && n >= 0) saveCredits(u.id, n)
+                            }}
+                            disabled={savingCredits === u.id}
+                            className="text-primary hover:text-primary-hover px-1"
+                            title="Speichern"
+                          >
+                            {savingCredits === u.id ? (
+                              <Loader2 size={12} className="animate-spin" />
+                            ) : (
+                              '✓'
+                            )}
+                          </button>
+                          <button
+                            onClick={() => setEditingCredits(null)}
+                            disabled={savingCredits === u.id}
+                            className="text-muted hover:text-foreground px-1"
+                            title="Abbrechen"
+                          >
+                            ✕
+                          </button>
+                        </div>
+                      ) : (
+                        <button
+                          onClick={() => {
+                            setCreditsDraft(String(u.credits_total))
+                            setEditingCredits(u.id)
+                          }}
+                          className="inline-flex items-center gap-1 text-xs text-foreground hover:text-primary"
+                          title={`Monatlich: ${u.credits_monthly} | Gekauft: ${u.credits_purchased}`}
+                        >
+                          {u.credits_total.toLocaleString('de-DE')}
+                        </button>
+                      )
+                    ) : (
+                      <span
+                        className="text-xs text-muted"
+                        title={`Monatlich: ${u.credits_monthly} | Gekauft: ${u.credits_purchased}`}
+                      >
+                        {u.credits_total.toLocaleString('de-DE')}
+                      </span>
+                    )}
                   </td>
                   <td className="px-4 py-3.5 whitespace-nowrap">
                     <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium whitespace-nowrap ${
