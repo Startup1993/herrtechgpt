@@ -2,17 +2,18 @@ import type { SupabaseClient } from '@supabase/supabase-js'
 import type { AccessTier } from './access'
 import { getAppSettings } from './app-settings'
 
-export type FeatureKey = 'classroom' | 'chat' | 'toolbox'
+export type FeatureKey = 'classroom' | 'chat' | 'toolbox' | 'learning_path'
 export type FeatureState = 'open' | 'coming_soon' | 'community' | 'paid'
 
-export const FEATURES: FeatureKey[] = ['classroom', 'chat', 'toolbox']
+export const FEATURES: FeatureKey[] = ['classroom', 'chat', 'toolbox', 'learning_path']
 export const STATES: FeatureState[] = ['open', 'coming_soon', 'community', 'paid']
 export const TIERS: AccessTier[] = ['basic', 'alumni', 'premium']
 
 export const FEATURE_LABELS: Record<FeatureKey, { label: string; emoji: string }> = {
-  classroom: { label: 'Classroom', emoji: '🎓' },
-  chat:      { label: 'Herr Tech GPT', emoji: '🤖' },
-  toolbox:   { label: 'KI Toolbox', emoji: '🔧' },
+  classroom:     { label: 'Classroom', emoji: '🎓' },
+  chat:          { label: 'Herr Tech GPT', emoji: '🤖' },
+  toolbox:       { label: 'KI Toolbox', emoji: '🔧' },
+  learning_path: { label: 'Lernpfad', emoji: '🎯' },
 }
 
 export const STATE_META: Record<FeatureState, { label: string; hint: string; badge: string }> = {
@@ -41,35 +42,19 @@ export interface UpsellCopy {
 export type PermissionMatrix = Record<AccessTier, Record<FeatureKey, FeatureState>>
 
 // ─── Defaults im Abo-Modell (Legacy / wenn subscriptions_enabled=true) ───
-// - Classroom: Alumni lebenslang, Basic nur Community
-// - Chat + Toolbox: 'paid' = Seite sichtbar, Aktionen brauchen Abo
-//   Community-User haben Plan S gratis, müssen ihn aber aktivieren.
 const DEFAULT_MATRIX_LEGACY: PermissionMatrix = {
-  basic:   { classroom: 'community',   chat: 'paid', toolbox: 'paid' },
-  alumni:  { classroom: 'open',        chat: 'paid', toolbox: 'paid' },
-  premium: { classroom: 'open',        chat: 'paid', toolbox: 'paid' },
+  basic:   { classroom: 'community',   chat: 'paid', toolbox: 'paid', learning_path: 'open' },
+  alumni:  { classroom: 'open',        chat: 'paid', toolbox: 'paid', learning_path: 'open' },
+  premium: { classroom: 'open',        chat: 'paid', toolbox: 'paid', learning_path: 'open' },
 }
 
 // ─── Defaults im Community-only Modell (subscriptions_enabled=false) ───
-// Jacob: "credits zählen nur für die toolbox! herr tech gpt bekomme ich
-// nur in der community".
-//
-// - Toolbox: 'community' für basic (= Self-Registrierte ohne Mitgliedschaft).
-//   Sie müssen erst Community beitreten ODER (späteres Funnel-Paket) kaufen.
-// - Toolbox: 'open' für alumni (haben mal bezahlt, dürfen mit Resten weiter
-//   arbeiten + Credit-Packs nachkaufen) und premium (volle Mitgliedschaft).
-// - Chat (Herr Tech GPT) + Classroom: 'community' für alle Nicht-Premium.
-//   Alumni verlieren Classroom-Zugang (kein "lebenslang" mehr) — Jacob:
-//   "wenn sie weg sind sind sie dann weg, können dann der community auch
-//   beitreten um so zugriff auf alles zu bekommen"
-//
-// In NoSubs-Welt werden DB-Overrides aus feature_permissions zusätzlich
-// angewendet — Admin kann via "Gruppen & Rechte" einzelne Felder anpassen
-// (z.B. Toolbox auch für basic öffnen wenn ein Funnel-Paket lebt).
+// Jacob (W11): Lernpfad ist standardmäßig nur für premium, basic+alumni
+// sehen die Kachel nicht. Admin kann das via Gruppen & Rechte überschreiben.
 const DEFAULT_MATRIX_NOSUBS: PermissionMatrix = {
-  basic:   { classroom: 'community',   chat: 'community', toolbox: 'community' },
-  alumni:  { classroom: 'community',   chat: 'community', toolbox: 'open' },
-  premium: { classroom: 'open',        chat: 'open',      toolbox: 'open' },
+  basic:   { classroom: 'community',   chat: 'community', toolbox: 'community', learning_path: 'community' },
+  alumni:  { classroom: 'community',   chat: 'community', toolbox: 'open',      learning_path: 'community' },
+  premium: { classroom: 'open',        chat: 'open',      toolbox: 'open',      learning_path: 'open' },
 }
 
 // Backwards-compat Alias (alter Name, falls woanders importiert).
