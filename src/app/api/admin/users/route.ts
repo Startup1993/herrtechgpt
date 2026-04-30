@@ -4,6 +4,7 @@ import { NextResponse } from 'next/server'
 import { handleAccessTierChange } from '@/lib/monetization'
 import { notifyCommunityDowngrade } from '@/lib/email'
 import { sendInvitationEmail, recordInvitationSent } from '@/lib/invitations'
+import { syncCommunityMemberFromTierChange } from '@/lib/community-sync'
 import type { AccessTier } from '@/lib/access'
 
 const VALID_ROLES = ['user', 'admin'] as const
@@ -216,64 +217,8 @@ export async function PATCH(request: Request) {
   return NextResponse.json(data)
 }
 
-/**
- * Spiegelt eine tier-Änderung im Profil auf den verknüpften
- * community_members-Eintrag (falls vorhanden):
- *
- *   tier = 'premium' → skool_status = 'active' + Ablauf 1 Jahr in Zukunft
- *     (Admin schaltet User aktiv, also Mitgliedschaft "wieder voll gültig")
- *   tier = 'alumni'  → skool_status = 'alumni'
- *     (Mitgliedschaft beendet, aber User ehemaliges Mitglied)
- *   tier = 'basic'   → un-claim (profile_id=NULL, claimed_at=NULL)
- *     (User ist kein Community-Member mehr; Eintrag wird wieder einladbar
- *      wenn er ursprünglich von Stripe-Sync kam)
- *
- * Wenn kein community_members-Eintrag existiert, machen wir nichts —
- * der Admin müsste den dann manuell in /admin/community anlegen.
- */
-async function syncCommunityMemberFromTierChange(
-  admin: ReturnType<typeof createAdminClient>,
-  userId: string,
-  newTier: AccessTier
-): Promise<void> {
-  const { data: member } = await admin
-    .from('community_members')
-    .select('id, skool_status')
-    .eq('profile_id', userId)
-    .maybeSingle()
-
-  if (!member) return
-
-  if (newTier === 'premium' && member.skool_status !== 'active') {
-    const newExpiry = new Date()
-    newExpiry.setFullYear(newExpiry.getFullYear() + 1)
-    await admin
-      .from('community_members')
-      .update({
-        skool_status: 'active',
-        skool_access_expires_at: newExpiry.toISOString(),
-      })
-      .eq('id', member.id)
-    return
-  }
-
-  if (newTier === 'alumni' && member.skool_status === 'active') {
-    await admin
-      .from('community_members')
-      .update({ skool_status: 'alumni' })
-      .eq('id', member.id)
-    return
-  }
-
-  if (newTier === 'basic') {
-    // Un-claim: User aus Community ausloggen, Eintrag bleibt wenn er von
-    // Stripe-Sync kam (für Re-Invite). Token bleibt unangetastet.
-    await admin
-      .from('community_members')
-      .update({ claimed_at: null, profile_id: null })
-      .eq('id', member.id)
-  }
-}
+// Hinweis: syncCommunityMemberFromTierChange ist nach src/lib/community-sync.ts
+// gewandert, damit Bulk-Route den Helper teilt.
 
 export async function DELETE(request: Request) {
   const currentUser = await requireAdmin()
