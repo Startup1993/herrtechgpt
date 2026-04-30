@@ -11,6 +11,7 @@ import { cookies } from 'next/headers'
 import { createClient } from '@/lib/supabase/server'
 import { computeEffectiveAccess, VIEW_AS_COOKIE } from '@/lib/access'
 import { ensureStripeCustomer, priceBandForAccessTier } from '@/lib/monetization'
+import { getFeatureState } from '@/lib/permissions'
 import { getStripe } from '@/lib/stripe'
 import { getAppUrl } from '@/lib/urls'
 
@@ -38,6 +39,20 @@ export async function POST(req: Request) {
   ])
   const access = computeEffectiveAccess(profile, cookieStore.get(VIEW_AS_COOKIE)?.value)
   const priceBand = priceBandForAccessTier(access.tier)
+
+  // Server-side Tier-Gate: wer Toolbox nicht nutzen darf (basic in NoSubs-Welt),
+  // darf auch keine Credits kaufen. Frontend zeigt das eh, hier ist die zweite
+  // Verteidigungslinie gegen direkte POSTs.
+  const toolboxState = await getFeatureState(supabase, access.tier, 'toolbox')
+  if (!access.isAdmin && toolboxState === 'community') {
+    return NextResponse.json(
+      {
+        error:
+          'Credit-Kauf ist nur für Community-Mitglieder + Alumni verfügbar. Bitte tritt der Community bei.',
+      },
+      { status: 403 }
+    )
+  }
 
   const { data: pack } = await supabase
     .from('credit_packs')

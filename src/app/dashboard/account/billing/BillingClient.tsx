@@ -3,8 +3,9 @@
 import { useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
-import { CheckCircle2, FileText, AlertTriangle, Loader2, Coins, XCircle, Clock } from 'lucide-react'
+import { CheckCircle2, FileText, AlertTriangle, Loader2, Coins, XCircle, Clock, Users, ExternalLink } from 'lucide-react'
 import type { Subscription, CreditWallet } from '@/lib/monetization'
+import type { AccessTier } from '@/lib/access'
 
 interface Transaction {
   id: string
@@ -28,8 +29,14 @@ interface Props {
   scheduledCycle: 'monthly' | 'yearly' | null
   /** Master-Switch — versteckt Plan-CTAs wenn Abos global deaktiviert sind. */
   subscriptionsEnabled: boolean
-  /** Wo "Community beitreten" hinführt (Skool-URL). */
+  /** Wo "Community beitreten" hinführt (aus app_settings.community_url). */
   communityUrl: string
+  /** Aktueller access_tier für Community-Mitglieds-Anzeige. */
+  tier: AccessTier
+  /** Wenn Community-Mitglied: bis wann die Mitgliedschaft gültig ist (ISO). */
+  communityExpiresAt: string | null
+  /** Wenn Community-Mitglied: wann die nächsten monatl. Credits kommen (ISO). */
+  nextCreditGrantAt: string | null
 }
 
 function formatDate(iso: string): string {
@@ -62,7 +69,14 @@ export default function BillingClient({
   scheduledCycle,
   subscriptionsEnabled,
   communityUrl,
+  tier,
+  communityExpiresAt,
+  nextCreditGrantAt,
 }: Props) {
+  // In der NoSubs-Welt zeigen wir Community-Mitgliedern statt der "Plan"-Karte
+  // eine eigene "Du bist Community-Mitglied"-Karte. Sie haben keinen Stripe-
+  // Plan, also wäre "Aktueller Plan: Noch kein Abo" verwirrend.
+  const showCommunityCard = !subscriptionsEnabled && !subscription && tier === 'premium'
   const router = useRouter()
   const [confirming, setConfirming] = useState(false)
   const [loading, setLoading] = useState<'cancel' | 'reactivate' | 'portal' | 'cancel_scheduled' | null>(null)
@@ -151,13 +165,19 @@ export default function BillingClient({
     }
   }
 
+  // Header settings-konditional benennen
+  const pageTitle = subscriptionsEnabled
+    ? 'Abrechnung & Abo'
+    : 'Mitgliedschaft & Credits'
+  const pageSubtitle = subscriptionsEnabled
+    ? 'Dein aktueller Plan, Credits-Stand und Rechnungen.'
+    : 'Deine Community-Mitgliedschaft, Credits-Stand und Rechnungen.'
+
   return (
     <div className="max-w-4xl mx-auto px-4 sm:px-6 py-10 space-y-6">
       <div>
-        <h1 className="text-2xl font-bold text-foreground">Abrechnung & Abo</h1>
-        <p className="text-sm text-muted mt-1">
-          Dein aktueller Plan, Credits-Stand und Rechnungen.
-        </p>
+        <h1 className="text-2xl font-bold text-foreground">{pageTitle}</h1>
+        <p className="text-sm text-muted mt-1">{pageSubtitle}</p>
       </div>
 
       {/* Checkout-Success Banner */}
@@ -240,7 +260,81 @@ export default function BillingClient({
         </div>
       )}
 
-      {/* Plan-Karte */}
+      {/* Community-Mitglieds-Karte — nur in NoSubs-Welt für premium-User
+          ohne aktive Sub. Ersetzt die "Plan"-Karte konzeptionell. */}
+      {showCommunityCard && (
+        <div className="rounded-2xl border border-primary/30 bg-gradient-to-br from-primary/5 to-primary/10 p-6">
+          <div className="flex items-start justify-between gap-4 flex-wrap">
+            <div className="flex items-start gap-3">
+              <div className="w-12 h-12 rounded-xl bg-primary/15 flex items-center justify-center shrink-0">
+                <Users size={22} className="text-primary" />
+              </div>
+              <div>
+                <div className="text-xs uppercase tracking-wider text-primary font-semibold mb-1">
+                  Aktive Mitgliedschaft
+                </div>
+                <div className="text-lg font-semibold text-foreground">
+                  KI Marketing Club — Community-Mitglied
+                </div>
+                <div className="text-sm text-muted mt-1">
+                  Voller Zugriff auf Herr Tech GPT, Classroom, KI Toolbox und Live Calls.
+                </div>
+              </div>
+            </div>
+            <a
+              href={communityUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-2 px-4 py-2 border border-primary/40 text-primary hover:bg-primary/10 font-medium rounded-xl text-sm transition-colors"
+            >
+              Zur Community
+              <ExternalLink size={14} />
+            </a>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mt-6 pt-6 border-t border-primary/20">
+            <div>
+              <div className="text-xs uppercase tracking-wider text-muted mb-1">
+                Mitgliedschaft gültig bis
+              </div>
+              <div className="text-sm font-medium text-foreground">
+                {communityExpiresAt ? formatDate(communityExpiresAt) : '—'}
+              </div>
+            </div>
+            <div>
+              <div className="text-xs uppercase tracking-wider text-muted mb-1">
+                Nächster Credit-Refresh
+              </div>
+              <div className="text-sm font-medium text-foreground">
+                {nextCreditGrantAt ? formatDate(nextCreditGrantAt) : 'mit nächstem Cron-Lauf'}
+              </div>
+            </div>
+          </div>
+
+          {/* Rechnungen / Stripe-Portal — auch für Community-Member, wenn sie
+              schon mal Credit-Packs gekauft haben (hasStripeCustomer). */}
+          {hasStripeCustomer && (
+            <div className="mt-6 pt-6 border-t border-primary/20">
+              <button
+                onClick={openPortal}
+                disabled={loading === 'portal'}
+                className="inline-flex items-center justify-center gap-2 px-4 py-2 border border-border bg-background hover:border-primary hover:text-primary text-foreground font-medium rounded-xl text-sm transition-colors disabled:opacity-50"
+              >
+                {loading === 'portal' ? (
+                  <Loader2 size={14} className="animate-spin" />
+                ) : (
+                  <FileText size={14} />
+                )}
+                Rechnungen &amp; Zahlungsdaten
+              </button>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Plan-Karte — nur wenn KEINE Community-Card gerendert wird (also
+          für basic/alumni/Subs-Welt). */}
+      {!showCommunityCard && (
       <div className="rounded-2xl border border-border bg-surface p-6">
         <div className="flex items-start justify-between gap-4 flex-wrap">
           <div>
@@ -365,6 +459,7 @@ export default function BillingClient({
           </div>
         )}
       </div>
+      )}
 
       {/* Credits-Karte */}
       <div className="rounded-2xl border border-border bg-surface p-6">

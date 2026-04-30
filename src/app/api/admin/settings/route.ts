@@ -95,6 +95,20 @@ export async function PUT(request: Request) {
         { status: 400 }
       )
     }
+  } else if (typedKey === 'communityUrl') {
+    if (typeof value !== 'string' || value.trim().length === 0) {
+      return NextResponse.json(
+        { error: `'${key}' muss ein nicht-leerer String sein` },
+        { status: 400 }
+      )
+    }
+    // Permissive URL-Validierung: muss mit http(s):// anfangen.
+    if (!/^https?:\/\//i.test(value.trim())) {
+      return NextResponse.json(
+        { error: `'${key}' muss mit http:// oder https:// beginnen` },
+        { status: 400 }
+      )
+    }
   }
 
   try {

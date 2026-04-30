@@ -17,11 +17,13 @@ export default function SettingsManager({ initial }: Props) {
     subscriptionsEnabled: 'idle',
     communityMonthlyCredits: 'idle',
     starterTestCredits: 'idle',
+    communityUrl: 'idle',
   })
   const [errors, setErrors] = useState<Record<keyof AppSettings, string | null>>({
     subscriptionsEnabled: null,
     communityMonthlyCredits: null,
     starterTestCredits: null,
+    communityUrl: null,
   })
 
   async function save<K extends keyof AppSettings>(key: K, value: AppSettings[K]) {
@@ -115,6 +117,21 @@ export default function SettingsManager({ initial }: Props) {
           state={saveStates.starterTestCredits}
           error={errors.starterTestCredits}
           disabled={!subsOff}
+        />
+      </Section>
+
+      {/* ─── Community-URL ──────────────────────────────────── */}
+      <Section
+        title="Community-Link"
+        description="Wo alle 'Community beitreten'-Buttons hinführen — Pricing-Seite, Tool-Gates, Billing-Seite, Dashboard-Cards. Gilt unabhängig vom Master-Switch."
+      >
+        <TextField
+          label="Community-URL"
+          hint="Vollständige URL inkl. https://. Beispiel: https://www.skool.com/herr-tech"
+          value={settings.communityUrl}
+          onSave={(v) => save('communityUrl', v)}
+          state={saveStates.communityUrl}
+          error={errors.communityUrl}
         />
       </Section>
 
@@ -266,6 +283,71 @@ function NumberField({
             className="w-32 px-3 py-2 rounded-lg border border-border bg-background text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-primary/30 disabled:opacity-50"
           />
           <span className="text-xs text-muted">Credits</span>
+          <SaveStatus state={state} error={error} inline />
+        </div>
+        {hint && <p className="text-xs text-muted mt-1.5 max-w-xl">{hint}</p>}
+      </label>
+    </div>
+  )
+}
+
+function TextField({
+  label,
+  hint,
+  value,
+  onSave,
+  state,
+  error,
+}: {
+  label: string
+  hint?: string
+  value: string
+  onSave: (v: string) => void
+  state: SaveState
+  error: string | null
+}) {
+  const [draft, setDraft] = useState<string>(value)
+  const [dirty, setDirty] = useState(false)
+
+  useEffect(() => {
+    if (!dirty) setDraft(value)
+  }, [value, dirty])
+
+  function commit() {
+    const trimmed = draft.trim()
+    if (!trimmed) {
+      // Leerer String — zurück auf alten Wert (Pflichtfeld)
+      setDraft(value)
+      setDirty(false)
+      return
+    }
+    if (trimmed === value) {
+      setDirty(false)
+      return
+    }
+    onSave(trimmed)
+    setDirty(false)
+  }
+
+  return (
+    <div>
+      <label className="block">
+        <span className="text-sm font-medium text-foreground">{label}</span>
+        <div className="mt-1.5 flex items-center gap-2">
+          <input
+            type="url"
+            value={draft}
+            onChange={(e) => {
+              setDraft(e.target.value)
+              setDirty(true)
+            }}
+            onBlur={commit}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') (e.target as HTMLInputElement).blur()
+            }}
+            placeholder="https://www.skool.com/herr-tech"
+            className="flex-1 max-w-xl px-3 py-2 rounded-lg border border-border bg-background text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-primary/30 font-mono"
+          />
           <SaveStatus state={state} error={error} inline />
         </div>
         {hint && <p className="text-xs text-muted mt-1.5 max-w-xl">{hint}</p>}
