@@ -14,6 +14,8 @@ interface Props {
   currentBalance: number
   hasSubscription: boolean
   checkoutStatus: string | null
+  /** Master-Switch — versteckt Hinweis auf Starter-Plan in NoSubs-Welt. */
+  subscriptionsEnabled: boolean
 }
 
 function formatEuro(cents: number): string {
@@ -28,6 +30,7 @@ export default function CreditsClient({
   currentBalance,
   hasSubscription,
   checkoutStatus,
+  subscriptionsEnabled,
 }: Props) {
   const [loadingPack, setLoadingPack] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -102,7 +105,9 @@ export default function CreditsClient({
         </div>
       </div>
 
-      {!hasSubscription && (
+      {/* Hinweis auf Starter-Plan nur in der Legacy-Subs-Welt — in der
+          NoSubs-Welt ist der "Plan"-Begriff nicht mehr relevant. */}
+      {subscriptionsEnabled && !hasSubscription && (
         <div className="rounded-xl border border-amber-500/30 bg-amber-500/5 p-4 mb-6 text-sm">
           <strong className="text-foreground">Hinweis:</strong>{' '}
           <span className="text-muted">
@@ -186,7 +191,10 @@ export default function CreditsClient({
         </div>
       )}
 
-      {!isCommunity && (
+      {/* Community-Hinweis nur in Legacy-Subs-Welt (Community-Preise vs Basic-Preise).
+          In NoSubs-Welt ist Credit-Pack-Kauf für basic-User eh blockiert (CommunityRequiredView),
+          alumni + premium sehen die richtigen Preise schon. */}
+      {subscriptionsEnabled && !isCommunity && (
         <div className="text-center text-xs text-muted">
           <Link href="/dashboard/upgrade" className="text-primary hover:underline">
             Community-Mitglied werden

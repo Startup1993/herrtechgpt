@@ -7,9 +7,11 @@ import {
   getActivePlans,
   getMonetizationState,
 } from '@/lib/monetization'
+import { getFeatureState } from '@/lib/permissions'
 import { getAppSettings } from '@/lib/app-settings'
 import type { Plan, CreditPack } from '@/lib/types'
 import type { SubscriptionGateState } from '@/components/subscription-gate'
+import CommunityRequiredView from '@/components/community-required'
 import VideoCreatorGate from './VideoCreatorGate'
 import SSORedirect from './SSORedirect'
 
@@ -31,6 +33,26 @@ export default async function VideoCreatorPage() {
   ])
 
   const access = computeEffectiveAccess(profile, cookieStore.get(VIEW_AS_COOKIE)?.value)
+
+  // Permission-Gate: toolbox=community → User muss erst Community beitreten.
+  // Greift in NoSubs-Welt für basic-User (Default) und überall wo Admin
+  // im "Gruppen & Rechte"-Tab toolbox=community gesetzt hat.
+  const toolboxState = await getFeatureState(supabase, access.tier, 'toolbox')
+  if (!access.isAdmin && toolboxState === 'community') {
+    return (
+      <CommunityRequiredView
+        featureLabel="KI Video Creator"
+        communityUrl={settings.communityUrl}
+        benefits={[
+          'KI-generierte Szenen aus Text oder URL',
+          'Bild- & Voiceover-Generation automatisch',
+          'Export als MP4, Slide-Deck und mehr',
+          'Inklusive monatliche Credits für die Toolbox',
+        ]}
+      />
+    )
+  }
+
   const monetization = await getMonetizationState(supabase, user.id, access.tier)
 
   // Gate-Logik abhängig vom Master-Switch:
@@ -38,9 +60,9 @@ export default async function VideoCreatorPage() {
   // subscriptionsEnabled=true (Legacy): Admin oder aktives Abo → SSO-Redirect.
   //   Kein Abo → Gate-Seite mit Pricing-Popup ("Plan wählen").
   //
-  // subscriptionsEnabled=false (Community-only): IMMER SSO-Redirect.
-  //   Toolbox ist offen für alle, Credits werden pro Aktion vom Worker geprüft.
-  //   Wer 0 Credits hat sieht das im Worker — kann sie dort nachkaufen.
+  // subscriptionsEnabled=false (Community-only): wenn toolbox=open
+  //   (premium oder alumni mit Credits) → SSO-Redirect. basic ist oben
+  //   schon abgefangen mit CommunityRequiredView.
   const skipGate =
     !settings.subscriptionsEnabled ||
     access.isAdmin ||

@@ -1,13 +1,11 @@
 import { cookies } from 'next/headers'
 import { redirect } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
+import { createAdminClient } from '@/lib/supabase/admin'
 import { computeEffectiveAccess, VIEW_AS_COOKIE } from '@/lib/access'
 import { getMonetizationState } from '@/lib/monetization'
 import { getAppSettings } from '@/lib/app-settings'
 import BillingClient from './BillingClient'
-
-// Wo "Community beitreten" hinführt — gleiche URL wie auf Pricing-Page.
-const COMMUNITY_URL = 'https://www.skool.com/herr-tech'
 
 export const dynamic = 'force-dynamic'
 
@@ -24,16 +22,41 @@ export default async function BillingPage({
   } = await supabase.auth.getUser()
   if (!user) redirect('/login?redirect=/dashboard/account/billing')
 
-  const [{ data: profile }, cookieStore] = await Promise.all([
+  const [{ data: profile }, cookieStore, settings] = await Promise.all([
     supabase
       .from('profiles')
       .select('role, access_tier, stripe_customer_id')
       .eq('id', user.id)
       .single(),
     cookies(),
+    getAppSettings(),
   ])
   const access = computeEffectiveAccess(profile, cookieStore.get(VIEW_AS_COOKIE)?.value)
   const state = await getMonetizationState(supabase, user.id, access.tier)
+
+  // Community-Mitgliedschafts-Daten für premium-Tier laden:
+  // - skool_access_expires_at: bis wann die Mitgliedschaft gültig ist
+  // - last_credit_grant_at: wann der nächste monatliche Refresh ist
+  // Wir nutzen den admin-client weil community_members RLS-protected ist
+  // (admin + service_role only), und der User soll seine eigenen Daten sehen.
+  let communityExpiresAt: string | null = null
+  let nextCreditGrantAt: string | null = null
+  if (access.tier === 'premium') {
+    const admin = createAdminClient()
+    const { data: member } = await admin
+      .from('community_members')
+      .select('skool_access_expires_at, last_credit_grant_at')
+      .eq('profile_id', user.id)
+      .maybeSingle()
+    communityExpiresAt = member?.skool_access_expires_at ?? null
+    if (member?.last_credit_grant_at) {
+      // Nächster Grant = letzter + 1 Kalendermonat (matched Cron-Logik).
+      const last = new Date(member.last_credit_grant_at)
+      const next = new Date(last)
+      next.setMonth(next.getMonth() + 1)
+      nextCreditGrantAt = next.toISOString()
+    }
+  }
 
   // Plan-Details für Anzeige
   let planName: string | null = null
@@ -76,8 +99,6 @@ export default async function BillingPage({
     }
   }
 
-  const settings = await getAppSettings()
-
   return (
     <BillingClient
       subscription={state.subscription}
@@ -91,7 +112,10 @@ export default async function BillingPage({
       scheduledChangeAt={scheduledChangeAt}
       scheduledCycle={scheduledCycle}
       subscriptionsEnabled={settings.subscriptionsEnabled}
-      communityUrl={COMMUNITY_URL}
+      communityUrl={settings.communityUrl}
+      tier={access.tier}
+      communityExpiresAt={communityExpiresAt}
+      nextCreditGrantAt={nextCreditGrantAt}
     />
   )
 }

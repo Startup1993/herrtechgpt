@@ -26,12 +26,15 @@ export interface AppSettings {
   communityMonthlyCredits: number
   /** Test-Credits beim Kauf des kleinen Pakets (Funnel-Einstieg). */
   starterTestCredits: number
+  /** URL der Community (heute Skool) — wird auf allen "Community beitreten"-CTAs verlinkt. */
+  communityUrl: string
 }
 
 export const APP_SETTINGS_DEFAULTS: AppSettings = {
   subscriptionsEnabled: false,
   communityMonthlyCredits: 200,
   starterTestCredits: 0,
+  communityUrl: 'https://www.skool.com/herr-tech',
 }
 
 // Mapping: TS-Camel → DB-Snake-Key
@@ -39,6 +42,7 @@ export const SETTING_KEYS = {
   subscriptionsEnabled: 'subscriptions_enabled',
   communityMonthlyCredits: 'community_monthly_credits',
   starterTestCredits: 'starter_test_credits',
+  communityUrl: 'community_url',
 } as const satisfies Record<keyof AppSettings, string>
 
 // Reverse-Lookup für API-Validierung
@@ -78,6 +82,10 @@ export async function getAppSettings(): Promise<AppSettings> {
         result.communityMonthlyCredits = Math.max(0, Math.floor(value))
       } else if (camelKey === 'starterTestCredits' && typeof value === 'number') {
         result.starterTestCredits = Math.max(0, Math.floor(value))
+      } else if (camelKey === 'communityUrl' && typeof value === 'string') {
+        // Sehr permissive Validierung — verhindert nur leere Strings.
+        // URL-Format prüfen wäre zu strikt (Subdomains, Tracking-Params etc.).
+        if (value.trim().length > 0) result.communityUrl = value.trim()
       }
     }
     return result
