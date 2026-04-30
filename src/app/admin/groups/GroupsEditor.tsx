@@ -118,59 +118,105 @@ function MatrixEditor({
 
   return (
     <div className="space-y-6">
+      {/* Matrix umstrukturiert (W11): Tiers als Spalten (3 fixe Gruppen),
+          Features als Zeilen (erweiterbar — Lernpfad neu, weitere folgen).
+          horizontal scrollbar für schmale Viewports. */}
       <div className="card-static overflow-hidden">
         <div className="overflow-x-auto">
-          <table className="w-full text-sm">
+          <table className="w-full text-sm min-w-[640px]">
             <thead>
               <tr className="border-b border-border bg-surface-secondary">
-                <th className="text-left px-5 py-3 text-xs font-semibold text-muted uppercase tracking-wider">
-                  Gruppe
+                <th className="text-left px-5 py-3 text-xs font-semibold text-muted uppercase tracking-wider sticky left-0 bg-surface-secondary">
+                  Bereich
                 </th>
-                {FEATURES.map((f) => (
-                  <th key={f} className="text-left px-4 py-3 text-xs font-semibold text-muted uppercase tracking-wider">
-                    <span className="mr-1.5">{FEATURE_LABELS[f].emoji}</span>
-                    {FEATURE_LABELS[f].label}
-                  </th>
-                ))}
+                {TIERS.map((tier) => {
+                  const meta = TIER_META[tier]
+                  return (
+                    <th
+                      key={tier}
+                      className="text-left px-4 py-3 text-xs font-semibold text-muted uppercase tracking-wider"
+                    >
+                      <div className="flex items-center gap-2">
+                        <span className={`inline-block w-2 h-2 rounded-full ${meta.dot}`} />
+                        <div>
+                          <div className="text-foreground normal-case">{meta.label}</div>
+                          <div className="text-[10px] text-muted normal-case font-normal">{meta.hint}</div>
+                        </div>
+                      </div>
+                    </th>
+                  )
+                })}
               </tr>
             </thead>
             <tbody className="divide-y divide-border">
-              {TIERS.map((tier) => {
-                const tierMeta = TIER_META[tier]
+              {FEATURES.map((feature) => {
+                const featureMeta = FEATURE_LABELS[feature]
                 return (
-                  <tr key={tier}>
-                    <td className="px-5 py-4">
+                  <tr key={feature}>
+                    <td className="px-5 py-4 sticky left-0 bg-surface">
                       <div className="flex items-center gap-2.5">
-                        <span className={`inline-block w-2 h-2 rounded-full ${tierMeta.dot}`} />
-                        <div>
-                          <div className="font-semibold text-foreground text-sm">{tierMeta.label}</div>
-                          <div className="text-[11px] text-muted">{tierMeta.hint}</div>
+                        <span className="text-base shrink-0">{featureMeta.emoji}</span>
+                        <div className="font-semibold text-foreground text-sm">
+                          {featureMeta.label}
                         </div>
                       </div>
                     </td>
-                    {FEATURES.map((feature) => {
+                    {TIERS.map((tier) => {
                       const key = `${tier}_${feature}`
                       const value = matrix[tier][feature]
                       const meta = STATE_META[value]
+                      // Lernpfad ist ein simpler Ein/Aus-Schalter — nicht
+                      // alle 4 Status-Optionen. Jacob (W12): "bei lernpfad
+                      // einfach einblenden ausblenden. fertig."
+                      // Mapping: an → 'open', aus → 'community' (= versteckt).
+                      const isSimpleToggle = feature === 'learning_path'
                       return (
-                        <td key={feature} className="px-4 py-4 min-w-[200px]">
+                        <td key={tier} className="px-4 py-4 min-w-[200px]">
                           <div className="flex items-center gap-2">
-                            <select
-                              value={value}
-                              onChange={(e) => update(tier, feature, e.target.value as FeatureState)}
-                              disabled={saving !== null}
-                              className={`flex-1 px-2.5 py-1.5 text-xs font-medium rounded-md border-0 cursor-pointer focus:outline-none focus:ring-2 focus:ring-primary/30 ${meta.badge} disabled:opacity-50`}
-                            >
-                              {availableStates.map((s) => (
-                                <option key={s} value={s} className="bg-surface text-foreground">
-                                  {STATE_META[s].label}
-                                </option>
-                              ))}
-                            </select>
+                            {isSimpleToggle ? (
+                              <button
+                                type="button"
+                                role="switch"
+                                aria-checked={value === 'open'}
+                                disabled={saving !== null}
+                                onClick={() =>
+                                  update(tier, feature, value === 'open' ? 'community' : 'open')
+                                }
+                                className={`relative inline-flex h-6 w-11 shrink-0 items-center rounded-full transition-colors disabled:opacity-50 ${
+                                  value === 'open' ? 'bg-primary' : 'bg-border'
+                                }`}
+                              >
+                                <span
+                                  className={`inline-block h-5 w-5 transform rounded-full bg-white shadow transition-transform ${
+                                    value === 'open' ? 'translate-x-5' : 'translate-x-0.5'
+                                  }`}
+                                />
+                              </button>
+                            ) : (
+                              <select
+                                value={value}
+                                onChange={(e) => update(tier, feature, e.target.value as FeatureState)}
+                                disabled={saving !== null}
+                                className={`flex-1 px-2.5 py-1.5 text-xs font-medium rounded-md border-0 cursor-pointer focus:outline-none focus:ring-2 focus:ring-primary/30 ${meta.badge} disabled:opacity-50`}
+                              >
+                                {availableStates.map((s) => (
+                                  <option key={s} value={s} className="bg-surface text-foreground">
+                                    {STATE_META[s].label}
+                                  </option>
+                                ))}
+                              </select>
+                            )}
+                            {isSimpleToggle && (
+                              <span className="text-xs text-muted">
+                                {value === 'open' ? 'Eingeblendet' : 'Ausgeblendet'}
+                              </span>
+                            )}
                             {saving === key && <Loader2 size={14} className="animate-spin text-muted shrink-0" />}
                             {recentSaved === key && <Check size={14} className="text-green-600 shrink-0" />}
                           </div>
-                          <p className="text-[10px] text-muted mt-1 leading-tight">{meta.hint}</p>
+                          {!isSimpleToggle && (
+                            <p className="text-[10px] text-muted mt-1 leading-tight">{meta.hint}</p>
+                          )}
                         </td>
                       )
                     })}

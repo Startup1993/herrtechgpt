@@ -779,6 +779,11 @@ export default function DashboardView({
   const chatLock = stateToLock(states.chat, isAdmin)
   const toolboxLock = stateToLock(states.toolbox, isAdmin)
 
+  // Lernpfad ist seit W11 in der Berechtigungsmatrix als eigenes Feature
+  // einstellbar. In NoSubs-Default sehen ihn nur premium-Member; basic/alumni
+  // haben 'community' (= verstecken). Admin sieht ihn immer.
+  const showLearningPath = isAdmin || states.learning_path === 'open'
+
   // Anzeige-Logik Upsell-Karten — abhängig vom Master-Switch:
   //
   // subscriptionsEnabled=true (Legacy / Abo-Welt):
@@ -837,10 +842,13 @@ export default function DashboardView({
         </div>
       )}
 
-      {/* Learning Path Widget */}
-      <div className="mb-8">
-        <LearningPathWidget />
-      </div>
+      {/* Learning Path Widget — nur sichtbar wenn states.learning_path = 'open'.
+          Default für basic/alumni in NoSubs = 'community' (versteckt). */}
+      {showLearningPath && (
+        <div className="mb-8">
+          <LearningPathWidget />
+        </div>
+      )}
 
       {/* Abo-Upsell — zweigeteilt, wenn kein aktives Abo (über den Tiles, da Hauptfokus) */}
       {showSubscriptionCard && (

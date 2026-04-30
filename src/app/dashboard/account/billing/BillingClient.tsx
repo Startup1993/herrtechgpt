@@ -314,24 +314,9 @@ export default function BillingClient({
             </div>
           </div>
 
-          {/* Rechnungen / Stripe-Portal — auch für Community-Member, wenn sie
-              schon mal Credit-Packs gekauft haben (hasStripeCustomer). */}
-          {hasStripeCustomer && (
-            <div className="mt-6 pt-6 border-t border-primary/20">
-              <button
-                onClick={openPortal}
-                disabled={loading === 'portal'}
-                className="inline-flex items-center justify-center gap-2 px-4 py-2 border border-border bg-background hover:border-primary hover:text-primary text-foreground font-medium rounded-xl text-sm transition-colors disabled:opacity-50"
-              >
-                {loading === 'portal' ? (
-                  <Loader2 size={14} className="animate-spin" />
-                ) : (
-                  <FileText size={14} />
-                )}
-                Rechnungen &amp; Zahlungsdaten
-              </button>
-            </div>
-          )}
+          {/* Rechnungen-Button war früher hier in der Community-Card —
+              ist seit W11 verschoben in die Credit-Stand-Card unten,
+              näher beim "Credits nachkaufen"-Button (logischer Ort). */}
         </div>
       )}
 
@@ -523,12 +508,31 @@ export default function BillingClient({
               <span className="text-sm font-normal text-muted">Credits</span>
             </div>
           </div>
-          <Link
-            href="/dashboard/credits"
-            className="inline-flex items-center gap-2 px-4 py-2 border border-border hover:border-primary hover:text-primary text-foreground font-medium rounded-xl text-sm transition-colors"
-          >
-            Credits nachkaufen
-          </Link>
+          <div className="flex items-center gap-2 flex-wrap">
+            {/* Rechnungen / Stripe-Portal — links neben "Credits nachkaufen".
+                Sichtbar wenn der User schon mal Credit-Packs gekauft hat
+                (hasStripeCustomer). */}
+            {hasStripeCustomer && (
+              <button
+                onClick={openPortal}
+                disabled={loading === 'portal'}
+                className="inline-flex items-center gap-2 px-4 py-2 border border-border hover:border-primary hover:text-primary text-foreground font-medium rounded-xl text-sm transition-colors disabled:opacity-50"
+              >
+                {loading === 'portal' ? (
+                  <Loader2 size={14} className="animate-spin" />
+                ) : (
+                  <FileText size={14} />
+                )}
+                Rechnungen &amp; Zahlungsdaten
+              </button>
+            )}
+            <Link
+              href="/dashboard/credits"
+              className="inline-flex items-center gap-2 px-4 py-2 border border-border hover:border-primary hover:text-primary text-foreground font-medium rounded-xl text-sm transition-colors"
+            >
+              Credits nachkaufen
+            </Link>
+          </div>
         </div>
 
         {wallet && (
