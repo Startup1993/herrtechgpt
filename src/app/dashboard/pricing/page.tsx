@@ -7,10 +7,17 @@ import {
   getMonetizationState,
   priceBandForAccessTier,
 } from '@/lib/monetization'
+import { getAppSettings } from '@/lib/app-settings'
 import type { Plan } from '@/lib/types'
 import PricingClient from './PricingClient'
+import PricingDisabledView from './PricingDisabledView'
 
 export const dynamic = 'force-dynamic'
+
+// Wo "Community beitreten" hinführt, wenn das Abo-System aus ist.
+// Bewusst hardcoded statt env-var, weil das die einzige Community-URL ist
+// und wir die nicht pro Environment unterscheiden.
+const COMMUNITY_URL = 'https://www.skool.com/herr-tech'
 
 export default async function PricingPage() {
   const supabase = await createClient()
@@ -18,6 +25,14 @@ export default async function PricingPage() {
     data: { user },
   } = await supabase.auth.getUser()
   if (!user) redirect('/login?redirect=/dashboard/pricing')
+
+  // Master-Switch zuerst prüfen — wenn Subs aus sind, zeigen wir die
+  // alternative Hinweis-Seite (Community + Credit-Packs) und sparen uns
+  // den Plan-Load + Stripe-State-Aufruf.
+  const settings = await getAppSettings()
+  if (!settings.subscriptionsEnabled) {
+    return <PricingDisabledView communityUrl={COMMUNITY_URL} />
+  }
 
   const [{ data: profile }, plans, cookieStore] = await Promise.all([
     supabase.from('profiles').select('role, access_tier').eq('id', user.id).single(),
