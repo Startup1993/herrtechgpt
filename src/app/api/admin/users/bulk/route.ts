@@ -4,9 +4,11 @@
  * Bulk-Aktionen über mehrere User-IDs in einem Request:
  *   - { action: 'set_tier', userIds: string[], params: { access_tier: AccessTier } }
  *   - { action: 'delete',   userIds: string[] }
+ *   - { action: 'invite',   userIds: string[] }  // sendet Magic-Link an noch
+ *                                                 // nicht eingeloggte User
  *
  * Server iteriert intern und ruft die gleichen Hooks auf wie der Einzel-
- * PATCH/DELETE — sodass z.B. handleAccessTierChange + community-Sync
+ * PATCH/DELETE/Invite — sodass z.B. handleAccessTierChange + community-Sync
  * einheitlich greifen.
  *
  * Idempotent: Fehler bei einzelnen IDs werden gesammelt, der Request
@@ -19,6 +21,7 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import { NextResponse } from 'next/server'
 import { handleAccessTierChange } from '@/lib/monetization'
 import { notifyCommunityDowngrade } from '@/lib/email'
+import { sendInvitationEmail, recordInvitationSent } from '@/lib/invitations'
 import { syncCommunityMemberFromTierChange } from '@/lib/community-sync'
 import type { AccessTier } from '@/lib/access'
 
@@ -27,7 +30,7 @@ export const dynamic = 'force-dynamic'
 export const maxDuration = 60
 
 const VALID_TIERS = ['basic', 'alumni', 'premium'] as const
-const VALID_ACTIONS = ['set_tier', 'delete'] as const
+const VALID_ACTIONS = ['set_tier', 'delete', 'invite'] as const
 
 async function requireAdmin() {
   const supabase = await createClient()
@@ -175,6 +178,34 @@ export async function POST(request: Request) {
           failed.push({ userId, error: error.message })
           continue
         }
+        successCount += 1
+      } catch (err) {
+        failed.push({
+          userId,
+          error: err instanceof Error ? err.message : 'unbekannter Fehler',
+        })
+      }
+    }
+  } else if (action === 'invite') {
+    // Magic-Link-Einladung an noch nicht eingeloggte User. User die schon
+    // mal eingeloggt waren überspringen wir (skipped, kein Fehler).
+    for (const userId of userIds) {
+      try {
+        const { data: target, error: getErr } = await admin.auth.admin.getUserById(userId)
+        if (getErr || !target?.user?.email) {
+          failed.push({ userId, error: getErr?.message ?? 'User not found' })
+          continue
+        }
+        if (target.user.last_sign_in_at) {
+          // Schon eingeloggt — überspringen, ist kein Fehler
+          continue
+        }
+        const result = await sendInvitationEmail(admin, target.user.email)
+        if (!result.ok) {
+          failed.push({ userId, error: result.error })
+          continue
+        }
+        await recordInvitationSent(admin, userId)
         successCount += 1
       } catch (err) {
         failed.push({
