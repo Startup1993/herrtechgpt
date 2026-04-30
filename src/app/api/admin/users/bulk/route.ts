@@ -21,7 +21,7 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import { NextResponse } from 'next/server'
 import { handleAccessTierChange } from '@/lib/monetization'
 import { notifyCommunityDowngrade } from '@/lib/email'
-import { sendInvitationEmail, recordInvitationSent } from '@/lib/invitations'
+import { sendAdminInviteForUser } from '@/lib/admin-invite'
 import { syncCommunityMemberFromTierChange } from '@/lib/community-sync'
 import type { AccessTier } from '@/lib/access'
 
@@ -187,8 +187,10 @@ export async function POST(request: Request) {
       }
     }
   } else if (action === 'invite') {
-    // Magic-Link-Einladung an noch nicht eingeloggte User. User die schon
+    // Tier-aware Einladung an noch nicht eingeloggte User. User die schon
     // mal eingeloggt waren überspringen wir (skipped, kein Fehler).
+    // Pro User: alumni → Skool-Alumni-Mail, premium → Skool-Active-Mail,
+    // basic → generischer Magic-Link.
     for (const userId of userIds) {
       try {
         const { data: target, error: getErr } = await admin.auth.admin.getUserById(userId)
@@ -200,12 +202,11 @@ export async function POST(request: Request) {
           // Schon eingeloggt — überspringen, ist kein Fehler
           continue
         }
-        const result = await sendInvitationEmail(admin, target.user.email)
+        const result = await sendAdminInviteForUser(admin, userId)
         if (!result.ok) {
           failed.push({ userId, error: result.error })
           continue
         }
-        await recordInvitationSent(admin, userId)
         successCount += 1
       } catch (err) {
         failed.push({
