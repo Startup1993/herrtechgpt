@@ -1,10 +1,19 @@
 'use client'
 
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { CsvImportModal } from './CsvImportModal'
 import { CreateUserModal } from './CreateUserModal'
-import { Plus, Loader2, X, Trash2 } from 'lucide-react'
+import {
+  Plus,
+  Loader2,
+  X,
+  Trash2,
+  CheckSquare,
+  Calendar,
+  ChevronLeft,
+  ChevronRight,
+} from 'lucide-react'
 
 type AccessTier = 'basic' | 'alumni' | 'premium'
 type UserStatus = 'active' | 'invited' | 'added'
@@ -36,6 +45,10 @@ interface UserRow {
   invitation_sent_count: number
   subscription: SubscriptionInfo | null
   community_source: CommunitySource
+  /** Aus community_members.skool_access_expires_at — bis wann Mitgliedschaft gültig. */
+  access_expires_at: string | null
+  /** ID des verknüpften community_members-Eintrags — für Inline-Edit der Ablauf-Zeit. */
+  community_member_id: string | null
 }
 
 const SOURCE_META: Record<
@@ -82,8 +95,10 @@ type SubFilter =
   | 'plan_m'
   | 'plan_l'
 
-type SortKey = 'email' | 'created_at' | 'last_active' | 'conversation_count' | 'access_tier' | 'subscription'
+type SortKey = 'email' | 'created_at' | 'last_active' | 'conversation_count' | 'access_tier' | 'subscription' | 'access_expires_at'
 type SortDir = 'asc' | 'desc'
+
+const PAGE_SIZE = 50
 
 const TIER_META: Record<AccessTier, { label: string; className: string }> = {
   premium: {
@@ -139,11 +154,18 @@ export default function UsersTable({
   const [filterSource, setFilterSource] = useState<
     'all' | Exclude<CommunitySource, null> | 'self'
   >('all')
-  // ─── Bulk-Selection ───
+  // ─── Bulk-Selection (im Bearbeiten-Modus) ───
+  const [editMode, setEditMode] = useState(false)
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
   const [bulkBusy, setBulkBusy] = useState(false)
   const [bulkConfirmDelete, setBulkConfirmDelete] = useState(false)
   const [bulkMessage, setBulkMessage] = useState<{ type: 'ok' | 'err'; text: string } | null>(null)
+  // ─── Pagination ───
+  const [page, setPage] = useState(1)
+  // ─── Inline-Edit fuer "Zugang bis" ───
+  const [editingExpiry, setEditingExpiry] = useState<string | null>(null)
+  const [savingExpiry, setSavingExpiry] = useState<string | null>(null)
+  const [expiryDraft, setExpiryDraft] = useState('')
   const [sortKey, setSortKey] = useState<SortKey>('created_at')
   const [sortDir, setSortDir] = useState<SortDir>('desc')
   const [importOpen, setImportOpen] = useState(false)
@@ -210,11 +232,25 @@ export default function UsersTable({
         case 'subscription':
           cmp = subRank(a.subscription) - subRank(b.subscription)
           break
+        case 'access_expires_at':
+          cmp = (a.access_expires_at ?? '').localeCompare(b.access_expires_at ?? '')
+          break
       }
       return sortDir === 'asc' ? cmp : -cmp
     })
     return arr
   }, [filtered, sortKey, sortDir])
+
+  // ─── Pagination ────────────────────────────────────────────────
+  // Bei Filter-Änderung zurück auf erste Seite
+  useEffect(() => {
+    setPage(1)
+  }, [search, filterTier, filterStatus, filterRole, filterSub, filterSource])
+
+  const totalPages = Math.max(1, Math.ceil(sorted.length / PAGE_SIZE))
+  const currentPage = Math.min(page, totalPages)
+  const pageStart = (currentPage - 1) * PAGE_SIZE
+  const pageRows = sorted.slice(pageStart, pageStart + PAGE_SIZE)
 
   function toggleSort(key: SortKey) {
     if (sortKey === key) {
@@ -271,6 +307,50 @@ export default function UsersTable({
   function clearSelection() {
     setSelectedIds(new Set())
     setBulkConfirmDelete(false)
+  }
+
+  function exitEditMode() {
+    setEditMode(false)
+    clearSelection()
+  }
+
+  // Inline-Edit fuer "Zugang bis" — speichert auf community_members.skool_access_expires_at
+  async function saveExpiry(userRow: UserRow, isoDate: string | null) {
+    if (!userRow.community_member_id) {
+      setBulkMessage({
+        type: 'err',
+        text: 'Dieser User hat keinen Community-Eintrag. Setze ihn zuerst auf "Community" — dann wird automatisch ein Eintrag angelegt.',
+      })
+      return
+    }
+    setSavingExpiry(userRow.id)
+    try {
+      const res = await fetch('/api/admin/community/expiry', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          memberId: userRow.community_member_id,
+          expiresAt: isoDate,
+        }),
+      })
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}))
+        setBulkMessage({
+          type: 'err',
+          text: data.error ?? 'Speichern fehlgeschlagen',
+        })
+      } else {
+        router.refresh()
+      }
+    } catch (err) {
+      setBulkMessage({
+        type: 'err',
+        text: err instanceof Error ? err.message : 'Netzwerkfehler',
+      })
+    } finally {
+      setSavingExpiry(null)
+      setEditingExpiry(null)
+    }
   }
 
   async function bulkAction(
@@ -384,6 +464,23 @@ export default function UsersTable({
         >
           CSV importieren
         </button>
+        {editMode ? (
+          <button
+            onClick={exitEditMode}
+            className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium border border-primary text-primary hover:bg-primary/5 transition-colors whitespace-nowrap"
+          >
+            <X size={15} />
+            Bearbeiten beenden
+          </button>
+        ) : (
+          <button
+            onClick={() => setEditMode(true)}
+            className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium border border-border bg-surface text-foreground hover:bg-surface-secondary transition-colors whitespace-nowrap"
+          >
+            <CheckSquare size={15} />
+            Bearbeiten
+          </button>
+        )}
       </div>
 
       {/* Zeile 2: Filter-Dropdowns */}
@@ -505,8 +602,8 @@ export default function UsersTable({
         }}
       />
 
-      {/* Bulk-Action-Bar — nur sichtbar wenn mind. 1 ausgewählt */}
-      {selectedIds.size > 0 && (
+      {/* Bulk-Action-Bar — nur sichtbar im Bearbeiten-Modus mit Auswahl */}
+      {editMode && selectedIds.size > 0 && (
         <div className="sticky top-2 z-20 flex items-center gap-3 p-3 rounded-xl bg-primary/10 border border-primary/30 shadow-sm">
           <span className="text-sm font-medium text-foreground">
             {selectedIds.size} ausgewählt
@@ -590,40 +687,46 @@ export default function UsersTable({
         <table className="w-full min-w-[900px] text-sm">
           <thead>
             <tr className="border-b border-border bg-surface-secondary">
-              <th className="px-3 py-3 w-10">
-                <input
-                  type="checkbox"
-                  checked={
-                    sorted.length > 0 &&
-                    sorted.every((u) => selectedIds.has(u.id))
-                  }
-                  // Indeterminate kann React nicht direkt — über ref setzen
-                  ref={(el) => {
-                    if (el) {
-                      const someSelected = sorted.some((u) => selectedIds.has(u.id))
-                      const allSelected =
-                        sorted.length > 0 &&
-                        sorted.every((u) => selectedIds.has(u.id))
-                      el.indeterminate = someSelected && !allSelected
+              {editMode && (
+                <th className="px-3 py-3 w-10">
+                  <input
+                    type="checkbox"
+                    checked={
+                      pageRows.length > 0 &&
+                      pageRows.every((u) => selectedIds.has(u.id))
                     }
-                  }}
-                  onChange={(e) => {
-                    if (e.target.checked) {
-                      setSelectedIds(new Set(sorted.map((u) => u.id)))
-                    } else {
-                      clearSelection()
-                    }
-                  }}
-                  className="cursor-pointer"
-                  aria-label="Alle auswählen"
-                />
-              </th>
+                    // Indeterminate kann React nicht direkt — über ref setzen
+                    ref={(el) => {
+                      if (el) {
+                        const someSelected = pageRows.some((u) => selectedIds.has(u.id))
+                        const allSelected =
+                          pageRows.length > 0 &&
+                          pageRows.every((u) => selectedIds.has(u.id))
+                        el.indeterminate = someSelected && !allSelected
+                      }
+                    }}
+                    onChange={(e) => {
+                      if (e.target.checked) {
+                        // Header-Checkbox in editMode: alle gefilterten (über alle Seiten)
+                        // auswählen, nicht nur die aktuelle Seite. Sonst wäre Bulk-Edit auf
+                        // grosse User-Listen unbrauchbar.
+                        setSelectedIds(new Set(sorted.map((u) => u.id)))
+                      } else {
+                        clearSelection()
+                      }
+                    }}
+                    className="cursor-pointer"
+                    aria-label="Alle auswählen"
+                  />
+                </th>
+              )}
               <SortableTh label="Name / E-Mail" sortKey="email" current={sortKey} dir={sortDir} onClick={toggleSort} align="left" />
               <SortableTh label="Zugang" sortKey="access_tier" current={sortKey} dir={sortDir} onClick={toggleSort} align="left" />
               {subscriptionsEnabled && (
                 <SortableTh label="Abo" sortKey="subscription" current={sortKey} dir={sortDir} onClick={toggleSort} align="left" />
               )}
               <SortableTh label="Registriert" sortKey="created_at" current={sortKey} dir={sortDir} onClick={toggleSort} align="left" />
+              <SortableTh label="Zugang bis" sortKey="access_expires_at" current={sortKey} dir={sortDir} onClick={toggleSort} align="left" />
               <SortableTh label="Status" sortKey="last_active" current={sortKey} dir={sortDir} onClick={toggleSort} align="left" />
               <SortableTh label="Chats" sortKey="conversation_count" current={sortKey} dir={sortDir} onClick={toggleSort} align="center" />
               <th className="text-left px-4 py-3 text-xs font-semibold text-muted uppercase tracking-wider">Rolle</th>
@@ -634,15 +737,16 @@ export default function UsersTable({
           <tbody className="divide-y divide-border">
             {sorted.length === 0 && (
               <tr>
-                <td colSpan={subscriptionsEnabled ? 10 : 9} className="px-5 py-8 text-center text-sm text-muted">
+                <td colSpan={(subscriptionsEnabled ? 10 : 9) + (editMode ? 1 : 0)} className="px-5 py-8 text-center text-sm text-muted">
                   Keine Nutzer gefunden.
                 </td>
               </tr>
             )}
-            {sorted.map((u) => {
+            {pageRows.map((u) => {
               const tier = TIER_META[u.access_tier]
               const status = STATUS_META[u._status]
               const isSelected = selectedIds.has(u.id)
+              const isEditingThisExpiry = editingExpiry === u.id
               return (
                 <tr
                   key={u.id}
@@ -651,21 +755,23 @@ export default function UsersTable({
                   }`}
                   onClick={() => router.push(`/admin/users/${u.id}`)}
                 >
-                  <td
-                    className="px-3 py-3.5 w-10"
-                    onClick={(e) => {
-                      // Checkbox-Klick darf NICHT zur Detail-Seite navigieren
-                      e.stopPropagation()
-                    }}
-                  >
-                    <input
-                      type="checkbox"
-                      checked={isSelected}
-                      onChange={() => toggleSelected(u.id)}
-                      className="cursor-pointer"
-                      aria-label={`${u.email} auswählen`}
-                    />
-                  </td>
+                  {editMode && (
+                    <td
+                      className="px-3 py-3.5 w-10"
+                      onClick={(e) => {
+                        // Checkbox-Klick darf NICHT zur Detail-Seite navigieren
+                        e.stopPropagation()
+                      }}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={isSelected}
+                        onChange={() => toggleSelected(u.id)}
+                        className="cursor-pointer"
+                        aria-label={`${u.email} auswählen`}
+                      />
+                    </td>
+                  )}
                   <td className="px-5 py-3.5 whitespace-nowrap">
                     {u.full_name ? (
                       <>
@@ -691,6 +797,76 @@ export default function UsersTable({
                     </td>
                   )}
                   <td className="px-4 py-3.5 whitespace-nowrap text-xs text-muted">{formatDate(u.created_at)}</td>
+                  <td
+                    className="px-4 py-3.5 whitespace-nowrap"
+                    onClick={(e) => {
+                      // Inline-Edit: Klick darf nicht zur Detail-Seite
+                      if (editMode) e.stopPropagation()
+                    }}
+                  >
+                    {editMode ? (
+                      isEditingThisExpiry ? (
+                        <div className="flex items-center gap-1">
+                          <input
+                            type="date"
+                            value={expiryDraft}
+                            onChange={(e) => setExpiryDraft(e.target.value)}
+                            disabled={savingExpiry === u.id}
+                            className="px-2 py-1 text-xs border border-border rounded bg-surface focus:outline-none focus:ring-2 focus:ring-primary/30"
+                          />
+                          <button
+                            onClick={() => {
+                              const iso = expiryDraft
+                                ? new Date(expiryDraft).toISOString()
+                                : null
+                              saveExpiry(u, iso)
+                            }}
+                            disabled={savingExpiry === u.id}
+                            className="text-primary hover:text-primary-hover px-1"
+                            title="Speichern"
+                          >
+                            {savingExpiry === u.id ? (
+                              <Loader2 size={12} className="animate-spin" />
+                            ) : (
+                              '✓'
+                            )}
+                          </button>
+                          <button
+                            onClick={() => setEditingExpiry(null)}
+                            disabled={savingExpiry === u.id}
+                            className="text-muted hover:text-foreground px-1"
+                            title="Abbrechen"
+                          >
+                            ✕
+                          </button>
+                        </div>
+                      ) : (
+                        <button
+                          onClick={() => {
+                            if (!u.community_member_id) return
+                            setExpiryDraft(
+                              u.access_expires_at
+                                ? new Date(u.access_expires_at).toISOString().slice(0, 10)
+                                : ''
+                            )
+                            setEditingExpiry(u.id)
+                          }}
+                          disabled={!u.community_member_id}
+                          className="inline-flex items-center gap-1 text-xs text-foreground hover:text-primary disabled:text-muted disabled:cursor-not-allowed"
+                          title={
+                            u.community_member_id
+                              ? 'Zugang-bis ändern'
+                              : 'Nur für Community-Member editierbar'
+                          }
+                        >
+                          <Calendar size={11} />
+                          {formatDate(u.access_expires_at)}
+                        </button>
+                      )
+                    ) : (
+                      <span className="text-xs text-muted">{formatDate(u.access_expires_at)}</span>
+                    )}
+                  </td>
                   <td className="px-4 py-3.5 whitespace-nowrap">
                     <div className="flex items-center gap-2">
                       <span className={`w-2 h-2 rounded-full shrink-0 ${status.dot}`} />
@@ -785,7 +961,39 @@ export default function UsersTable({
           </tbody>
         </table>
       </div>
-      <p className="text-xs text-muted">{sorted.length} von {users.length} Nutzern</p>
+      {/* Pagination */}
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+        <p className="text-xs text-muted">
+          {sorted.length === 0
+            ? 'Keine Treffer'
+            : `${pageStart + 1}–${Math.min(pageStart + PAGE_SIZE, sorted.length)} von ${sorted.length}${
+                sorted.length !== users.length ? ` (gefiltert aus ${users.length})` : ''
+              }`}
+        </p>
+        {totalPages > 1 && (
+          <div className="flex items-center gap-1">
+            <button
+              onClick={() => setPage((p) => Math.max(1, p - 1))}
+              disabled={currentPage === 1}
+              className="p-1.5 rounded-lg border border-border bg-surface text-foreground hover:bg-surface-secondary disabled:opacity-40 disabled:cursor-not-allowed"
+              aria-label="Vorherige Seite"
+            >
+              <ChevronLeft size={14} />
+            </button>
+            <span className="text-xs text-muted px-2">
+              Seite {currentPage} / {totalPages}
+            </span>
+            <button
+              onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+              disabled={currentPage === totalPages}
+              className="p-1.5 rounded-lg border border-border bg-surface text-foreground hover:bg-surface-secondary disabled:opacity-40 disabled:cursor-not-allowed"
+              aria-label="Nächste Seite"
+            >
+              <ChevronRight size={14} />
+            </button>
+          </div>
+        )}
+      </div>
     </div>
   )
 }

@@ -25,7 +25,7 @@ export default async function AdminUsersPage() {
     admin.from('plans').select('id, tier, name'),
     admin
       .from('community_members')
-      .select('profile_id, source')
+      .select('id, profile_id, source, skool_status, skool_access_expires_at')
       .not('profile_id', 'is', null),
   ])
 
@@ -80,15 +80,19 @@ export default async function AdminUsersPage() {
     }
   })
 
-  // Source-Map: profile_id → community_members.source
-  // Zeigt in der Nutzerverwaltung wie der User reingekommen ist (Skool-Sync, CSV, manuell).
-  // Users ohne community_members-Eintrag haben keine Source (z.B. self-signup via Login).
+  // Source-Map + Access-Bis-Map aus community_members.
+  // Zeigt in der Nutzerverwaltung wie der User reingekommen ist und bis wann
+  // seine Mitgliedschaft gilt — synchron mit dem /admin/community-Tab.
   type CommunitySource = 'stripe' | 'manual' | 'csv' | 'skool' | null
   const sourceMap: Record<string, CommunitySource> = {}
+  const expiresMap: Record<string, string | null> = {}
+  const memberIdMap: Record<string, string> = {}
   communityMembers?.forEach((cm) => {
-    if (cm.profile_id) {
-      sourceMap[cm.profile_id as string] = (cm.source ?? null) as CommunitySource
-    }
+    if (!cm.profile_id) return
+    const pid = cm.profile_id as string
+    sourceMap[pid] = (cm.source ?? null) as CommunitySource
+    expiresMap[pid] = (cm.skool_access_expires_at as string | null) ?? null
+    memberIdMap[pid] = cm.id as string
   })
 
   const users = (profiles ?? []).map((p) => ({
@@ -104,6 +108,8 @@ export default async function AdminUsersPage() {
     invitation_sent_count: (p as { invitation_sent_count?: number }).invitation_sent_count ?? 0,
     subscription: subMap[p.id] ?? null,
     community_source: sourceMap[p.id] ?? null,
+    access_expires_at: expiresMap[p.id] ?? null,
+    community_member_id: memberIdMap[p.id] ?? null,
   }))
 
   return (
