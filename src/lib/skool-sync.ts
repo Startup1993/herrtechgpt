@@ -14,6 +14,8 @@ import type { SupabaseClient } from '@supabase/supabase-js'
 import { randomBytes } from 'node:crypto'
 import type Stripe from 'stripe'
 import { getStripe } from './stripe'
+import { getAppSettings } from './app-settings'
+import { grantMonthlyCredits } from './monetization'
 
 // Feature-Flag für sicheren Rollout. Default aus, damit Live-Stripe nichts
 // ungewolltes triggert, bis Jacob scharf schaltet.
@@ -246,6 +248,17 @@ export async function ensureSkoolPlanS(
   // Admin-Schutz: Admin-Profile niemals durch Skool-Sync verändern.
   if (await isAdminProfile(admin, profileId)) return
 
+  // ─── NEU (Phase 3): Master-Switch-Branch ───────────────────────
+  // Wenn Abo-System aus ist, legen wir KEINE Plan-S-Sub mehr an.
+  // Stattdessen: tier=premium + Initial-Credits + Cron handhabt Refreshes.
+  const settings = await getAppSettings()
+  if (!settings.subscriptionsEnabled) {
+    await ensureCommunityMembershipNoSub(admin, profileId, settings.communityMonthlyCredits)
+    return
+  }
+
+  // ─── Legacy-Pfad (Subs aktiv): Plan-S-Subscription anlegen ─────
+
   // Schon aktive Sub?
   const { data: active } = await admin
     .from('subscriptions')
@@ -295,6 +308,72 @@ export async function ensureSkoolPlanS(
     .update({ access_tier: 'premium' })
     .eq('id', profileId)
     .neq('access_tier', 'premium')
+}
+
+/**
+ * NEU (Phase 3): Community-Mitgliedschaft ohne Plan-S-Subscription.
+ *
+ * Wird statt der Plan-S-Sub angelegt, wenn `subscriptions_enabled=false`.
+ * - Setzt tier=premium auf dem Profil
+ * - Wenn das Mitglied noch nie Credits bekommen hat (last_credit_grant_at
+ *   IS NULL): direkter Initial-Grant + last_credit_grant_at=now()
+ * - Sonst: nichts. Cron /api/cron/community-credit-grant erneuert
+ *   monatlich nach Kalendermonat-Logik.
+ *
+ * Idempotent: Mehrfach-Aufrufe bei demselben profileId machen nichts kaputt
+ * (kein doppelter Initial-Grant dank last_credit_grant_at-Check).
+ */
+async function ensureCommunityMembershipNoSub(
+  admin: SupabaseClient,
+  profileId: string,
+  monthlyCredits: number
+): Promise<void> {
+  // Tier auf premium setzen (idempotent durch .neq).
+  await admin
+    .from('profiles')
+    .update({ access_tier: 'premium' })
+    .eq('id', profileId)
+    .neq('access_tier', 'premium')
+
+  // community_member-Eintrag finden (für last_credit_grant_at-Tracking).
+  const { data: member } = await admin
+    .from('community_members')
+    .select('id, last_credit_grant_at')
+    .eq('profile_id', profileId)
+    .maybeSingle()
+
+  // Wenn (noch) kein community_members-Eintrag verknüpft → Cron handhabt
+  // das später, sobald der Claim/Sync den Eintrag anlegt. Kein Crash.
+  if (!member) return
+
+  // Schon mal Credits bekommen → fertig, Cron erneuert monatlich.
+  if (member.last_credit_grant_at) return
+
+  // Initial-Grant: Reset-Datum 1 Monat in der Zukunft (matched cron-Logik).
+  const resetAt = new Date()
+  resetAt.setMonth(resetAt.getMonth() + 1)
+
+  const grantResult = await grantMonthlyCredits({
+    userId: profileId,
+    amount: monthlyCredits,
+    resetAt,
+    reason: 'monthly_grant',
+  })
+
+  if (!grantResult.ok) {
+    console.error(
+      '[skool-sync] Initial-Credit-Grant fehlgeschlagen für',
+      profileId,
+      grantResult.error
+    )
+    return
+  }
+
+  // Stempeln: nächster Cron-Lauf weiß, dass schon Credits da sind.
+  await admin
+    .from('community_members')
+    .update({ last_credit_grant_at: new Date().toISOString() })
+    .eq('id', member.id)
 }
 
 /**
