@@ -13,6 +13,7 @@ export default async function AdminUsersPage() {
     { data: subs },
     { data: plans },
     { data: communityMembers },
+    { data: wallets },
   ] = await Promise.all([
     admin.from('profiles').select('id, role, access_tier, full_name, created_at, invitation_sent_count').order('created_at', { ascending: false }),
     admin.auth.admin.listUsers({ perPage: 1000 }),
@@ -27,6 +28,9 @@ export default async function AdminUsersPage() {
       .from('community_members')
       .select('id, profile_id, source, skool_status, skool_access_expires_at')
       .not('profile_id', 'is', null),
+    admin
+      .from('credit_wallets')
+      .select('user_id, monthly_balance, purchased_balance'),
   ])
 
   const emailMap: Record<string, string> = {}
@@ -95,6 +99,14 @@ export default async function AdminUsersPage() {
     memberIdMap[pid] = cm.id as string
   })
 
+  // Credit-Map: profile_id → { monthly, purchased, total }
+  const creditMap: Record<string, { monthly: number; purchased: number; total: number }> = {}
+  wallets?.forEach((w) => {
+    const monthly = (w.monthly_balance as number | null) ?? 0
+    const purchased = (w.purchased_balance as number | null) ?? 0
+    creditMap[w.user_id as string] = { monthly, purchased, total: monthly + purchased }
+  })
+
   const users = (profiles ?? []).map((p) => ({
     id: p.id,
     email: emailMap[p.id] ?? '—',
@@ -110,6 +122,9 @@ export default async function AdminUsersPage() {
     community_source: sourceMap[p.id] ?? null,
     access_expires_at: expiresMap[p.id] ?? null,
     community_member_id: memberIdMap[p.id] ?? null,
+    credits_total: creditMap[p.id]?.total ?? 0,
+    credits_monthly: creditMap[p.id]?.monthly ?? 0,
+    credits_purchased: creditMap[p.id]?.purchased ?? 0,
   }))
 
   return (

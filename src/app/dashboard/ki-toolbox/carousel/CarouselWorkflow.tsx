@@ -16,6 +16,7 @@ import {
   PaywallBanner,
   type SubscriptionGateState,
 } from '@/components/subscription-gate'
+import { CreditStatusBar } from '@/components/credit-status-bar'
 
 const PricingModal = dynamic(
   () => import('@/components/pricing-modal').then((m) => m.PricingModal),
@@ -658,6 +659,17 @@ export default function CarouselWorkflow({ gateState }: { gateState?: Subscripti
             state={gateState}
             message="Zum Generieren brauchst du ein aktives Abo. Du kannst den Generator aber gerne durchklicken."
             onOpenPricing={openPaywall}
+          />
+        )}
+
+        {/* Credit-Status — nur in NoSubs-Welt für premium/alumni-User
+            (basic ist auf Page-Layer eh schon durch CommunityRequiredView
+            abgefangen). Zeigt Credit-Stand + nächsten Auto-Refresh. */}
+        {gateState && !gateState.subscriptionsEnabled && (
+          <CreditStatusBar
+            credits={gateState.credits}
+            nextCreditRefreshAt={gateState.nextCreditRefreshAt}
+            isCommunity={gateState.isCommunity}
           />
         )}
 
