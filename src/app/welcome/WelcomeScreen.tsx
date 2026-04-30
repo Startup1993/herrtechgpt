@@ -2,9 +2,14 @@
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { Loader2, ArrowRight } from 'lucide-react'
+import { Loader2, ArrowRight, Sparkles } from 'lucide-react'
 
-export function WelcomeScreen() {
+interface Props {
+  /** Wenn true, zeigen wir einen extra Community-Hinweis-Block. */
+  isCommunityMember?: boolean
+}
+
+export function WelcomeScreen({ isCommunityMember = false }: Props) {
   const router = useRouter()
   const [loading, setLoading] = useState(false)
 
@@ -36,10 +41,27 @@ export function WelcomeScreen() {
               Du bist drin. <span className="text-primary">Willkommen in der Herr Tech World.</span>
             </h1>
 
-            <p className="text-base sm:text-lg text-muted leading-relaxed mb-10 max-w-2xl">
+            <p className="text-base sm:text-lg text-muted leading-relaxed mb-6 max-w-2xl">
               Kein Tool-Dschungel. Kein fünftes Abo. Alles an einem Ort. Nimm dir 30 Sekunden und
               schau dich um — oder lass dich direkt von einem der Coaches starten.
             </p>
+
+            {isCommunityMember && (
+              <div className="mb-10 max-w-2xl rounded-2xl border border-primary/30 bg-gradient-to-br from-primary/5 to-primary/10 p-5 flex items-start gap-3">
+                <div className="w-10 h-10 rounded-xl bg-primary/15 flex items-center justify-center shrink-0">
+                  <Sparkles size={20} className="text-primary" />
+                </div>
+                <div>
+                  <div className="text-sm font-semibold text-foreground mb-0.5">
+                    Du bist Community-Mitglied
+                  </div>
+                  <p className="text-sm text-muted leading-relaxed">
+                    Als Mitglied im KI Marketing Club ist alles für dich freigeschaltet:
+                    Herr Tech GPT, Classroom, KI Toolbox + monatliche Credits.
+                  </p>
+                </div>
+              </div>
+            )}
 
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-10">
               <FeatureCard
