@@ -39,6 +39,9 @@ KI-Lern- und Coaching-Plattform für deutschsprachige Unternehmer. Powered by "H
 /admin/content/agents               → Assistenten verwalten
 /admin/content/knowledge            → Wissensbasis verwalten
 /admin/content/videos               → Video-Sync-Status
+/admin/monetization/settings        → Modus & Defaults (Master-Switch + Fallback-Werte)
+/admin/monetization/plans           → Abo-Pläne S/M/L (nur relevant wenn Subs aktiv)
+/admin/monetization/credits         → Credit-Kosten + Top-up-Pakete
 /admin/tickets                      → Support-Tickets
 /admin/emails                       → E-Mail-Templates editieren
 /admin/emails/[key]                 → Template-Editor + Live-Preview
@@ -54,6 +57,8 @@ KI-Lern- und Coaching-Plattform für deutschsprachige Unternehmer. Powered by "H
 - `sync_log` — Wistia-Sync-Protokoll
 - `agent_configs` — Agent-Konfigurationen (CRUD via Admin)
 - `email_templates` — Editierbare Texte aller System-Mails (siehe E-Mail-System)
+- `app_settings` — Globale Plattform-Settings (Master-Switches, Defaults). Editierbar via `/admin/monetization/settings`. Siehe Abschnitt „Monetarisierungs-Modi".
+- `community_members` — Skool-Mitglieder-Tracking (skool_status, last_credit_grant_at). Verknüpft via `profile_id` mit `profiles`.
 
 ## 6 KI-Agenten (`src/lib/agents.ts`)
 herr-tech (Standard), content-hook, funnel-monetization, personal-growth, ai-prompt, business-coach
@@ -71,10 +76,51 @@ herr-tech (Standard), content-hook, funnel-monetization, personal-growth, ai-pro
 2. **Chat-Sidebar:** ← Zurück, Agenten-Liste, Letzte Chats, Neuer Chat
 3. **Admin-Sidebar:** ← Zurück, Dashboard, Nutzer, Gruppen, Inhalte, Tickets
 
-## Zugriffstiers
-- **Free (basic):** Classroom (Videos) ✅ | Chat ❌ | Toolbox ❌
-- **Premium:** Alles ✅
-- **Admin:** Alles ✅ + Admin-Bereich
+## Zugriffstiers (NEU seit April 2026 — Community-only Modell)
+Drei Tiers in `profiles.access_tier`: `basic` | `alumni` | `premium`.
+
+| Tier | Bedeutung | Toolbox | Herr Tech GPT | Classroom | Live Calls | Credits |
+|---|---|---|---|---|---|---|
+| **basic** | Starter (kleines Paket gekauft, keine Community) | ✅ | ❌ | ❌ | ❌ | Test-Credits + Pack-Käufe |
+| **alumni** | Ehemaliges Community-Mitglied | ✅ | ❌ | ❌ | ❌ | Restliche Credits + Pack-Käufe (kein Auto-Fillup) |
+| **premium** | Aktives Community-Mitglied (Skool) | ✅ | ✅ | ✅ | ✅ | Monatliche Auto-Fillup-Credits |
+| **admin** (`role`) | Admin | ✅ | ✅ | ✅ | ✅ | Bypass |
+
+Wichtige Regeln:
+- **Credits zählen NUR für die Toolbox** (Carousel, Video-Editor, Video-Creator). Herr Tech GPT braucht keine Credits.
+- **Herr Tech GPT bekommt man NUR über die Community** (Skool-Mitgliedschaft → tier=premium).
+- Beim Community-Austritt: tier=alumni, Auto-Fillup stoppt SOFORT (kein Periodenende), restliche Credits bleiben verbrauchbar.
+
+# Monetarisierungs-Modi (Master-Switch)
+
+Die Plattform hat zwei Modi, gesteuert durch `app_settings.subscriptions_enabled`:
+
+## Modus „Community-only" (`subscriptions_enabled=false`, aktueller Standard)
+- Pricing-Seite zeigt PricingDisabledView mit zwei CTAs: „Community beitreten" + „Credits kaufen"
+- `/api/checkout/subscription` liefert 403
+- Skool-Sync legt KEINE Plan-S-Subscription mehr an — setzt direkt `tier=premium` und gewährt Initial-Credits aus `app_settings.community_monthly_credits`
+- Cron `/api/cron/community-credit-grant` (täglich 04:00 UTC) erneuert monatlich Credits (Postgres `+ interval '1 month'` = Kalendermonat-Rhythmus)
+- Permission-Matrix in `lib/permissions.ts`: `chat=community, classroom=community, toolbox=open` für alle Nicht-Premium-Tiers
+- DashboardView zeigt nur MarketingClubFull-Card (kein „Plan wählen")
+- VideoCreatorPage skipt Gate, redirected immer zum Worker (Worker prüft Credits)
+
+## Modus „Mit Abos" (`subscriptions_enabled=true`, Legacy / Reaktivierung)
+- Pricing-Seite zeigt Plan S/M/L
+- Skool-Sync legt Plan-S-Subscription mit `plan_source='skool_community'` an, Credits kommen via Stripe-Invoice-Webhook
+- Cron `community-credit-grant` springt mit „skipped" raus
+- Permission-Matrix: bestehende `feature_permissions`-DB-Tabelle + Code-Defaults
+- DashboardView zeigt SubscriptionUpsellCard / UpgradeHintCard wie früher
+- VideoCreatorPage zeigt Gate wenn kein Abo
+
+## ⚠ REGEL: Wenn du Code änderst der mit Abos / Tier-Logik zu tun hat
+
+Prüfe IMMER ob deine Änderung beide Modi sauber unterstützt:
+1. Lade `getAppSettings()` aus `@/lib/app-settings` und branche auf `subscriptionsEnabled`
+2. NoSubs-Pfad nutzt `app_settings.community_monthly_credits` als Credit-Wahrheit, nicht `plans.credits_per_month`
+3. Frontend-CTAs auf „Plan wählen" → in NoSubs-Welt durch „Community beitreten" (Skool-URL `https://www.skool.com/herr-tech`) ersetzen
+4. Bei neuen API-Endpoints die Subs voraussetzen: 403 zurückgeben wenn `!subscriptionsEnabled`
+
+Admin-UI für den Switch + Defaults: `/admin/monetization/settings` (Sidebar: „Modus & Defaults").
 
 # E-Mail-System (WICHTIG für jeden neuen Chat)
 
