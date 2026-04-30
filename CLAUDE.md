@@ -210,3 +210,85 @@ Das heißt:
 - Bei Migrationen / Schema-Änderungen / Seed-Daten / Bulk-Updates → **immer** vorher Jacob fragen, bevor Scripts laufen
 - Keine „Test-Nutzer" auf Staging anlegen ohne Absprache — die landen direkt in der Live-DB
 - Bei Features die DB-Schreibzugriffe machen (z.B. neue Tabellen, Spalten, RLS-Änderungen): Jacob darauf hinweisen dass das Live-Daten betrifft
+
+# Stripe — Test-Mode → Live-Mode Switch (TODO vor echtem Launch)
+
+**Aktueller Stand**: Vercel-Env (alle Environments inkl. Production) läuft mit
+`sk_test_…`. App auf `world.herr.tech` ist deployt, aber Zahlungen gehen gegen
+Stripe Test-Mode → niemand kann real bezahlen. Gewollt, solange noch nicht echt
+gelauncht ist.
+
+## Was passiert ist (Test-Mode-Setup, fertig)
+- Yearly-Prices in Stripe Test-Mode angelegt für alle 3 Pläne × Basic/Community
+  (`scripts/stripe-seed.mjs`, idempotent über lookup_keys)
+- Yearly-Price-IDs in DB-Tabelle `plans` eingetragen
+- Migration 033: `subscriptions.scheduled_*` + `stripe_schedule_id` Spalten
+- Stripe Portal-Default-Config (Test-Mode): Cancel + Subscription-Update **AUS**.
+  Plan-Wechsel + Kündigung läuft komplett über unsere App-UI. Upgrade-Confirm
+  nutzt `flow_data: subscription_update_confirm` und funktioniert trotzdem.
+
+## Was vor Live-Launch noch fehlt (Reihenfolge wichtig!)
+
+1. **Stripe Live-Mode Yearly-Prices anlegen**
+   ```bash
+   STRIPE_SECRET_KEY=sk_live_xxx npm run stripe:seed
+   ```
+   Script ist idempotent. Output liefert die Live-Price-IDs (`price_…`) für alle
+   3 Pläne × monthly/yearly × basic/community.
+
+2. **DB-Update: Live-Price-IDs in `plans`-Tabelle eintragen**
+   - Aktuell stehen dort Test-Mode-IDs. Müssen durch Live-Mode-IDs ersetzt werden.
+   - Über Supabase Management API oder direkt im Studio per SQL:
+     ```sql
+     UPDATE plans SET stripe_price_basic_monthly='price_LIVE_xxx', ... WHERE id='plan_s';
+     ```
+   - ⚠️ Sobald die Live-IDs eingetragen sind, würde Test-Mode-Vercel-Env brechen.
+     Daher: Schritt 2 + Schritt 6 (Vercel-Env-Switch) müssen **direkt
+     hintereinander** passieren, sonst kurz kein Checkout möglich.
+
+3. **Stripe Live-Mode Webhook-Endpoint**
+   - https://dashboard.stripe.com/webhooks (Live-Mode)
+   - URL: `https://world.herr.tech/api/webhooks/stripe`
+   - 8 Events abonnieren:
+     - `checkout.session.completed`
+     - `customer.subscription.created`
+     - `customer.subscription.updated`
+     - `customer.subscription.deleted`
+     - `invoice.payment_succeeded`
+     - `invoice.payment_failed`
+     - `subscription_schedule.released`
+     - `subscription_schedule.canceled`
+   - Webhook-Signing-Secret notieren (`whsec_…`)
+
+4. **Stripe Live-Mode Customer-Portal-Config**
+   - https://dashboard.stripe.com/settings/billing/portal (Live-Mode)
+   - Gleiche Settings wie Test-Mode:
+     - Subscriptions: **AUS** (Plan-Wechsel läuft nur über unsere App)
+     - Cancellations: **AUS** (Kündigung läuft nur über unsere App)
+     - Payment methods: AN
+     - Customer information: AN (Email, Adresse, Tax-ID, Name, Phone)
+     - Invoice history: AN
+     - Locale: Deutsch (Default-Branding-Settings)
+
+5. **Vercel-Env auf Live umstellen** (Production + Preview Environment)
+   https://vercel.com/jonas-projects-fe8f496e/herr-tech-gpt/settings/environment-variables
+   - `STRIPE_SECRET_KEY` → `sk_live_…`
+   - `NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY` → `pk_live_…`
+   - `STRIPE_WEBHOOK_SECRET` → `whsec_…` (aus Schritt 3, Live-Webhook!)
+
+6. **Redeploy triggern**
+   - Vercel deployt nicht automatisch bei reiner Env-Änderung
+   - Entweder im Vercel-UI: letztes Deployment → "..." → "Redeploy"
+   - Oder leerer Commit auf main: `git commit --allow-empty -m "chore: redeploy for Stripe live keys"`
+
+7. **Live-Smoke-Test mit echter Karte**
+   - Kleinster Plan (plan_s, 19 €) abschließen
+   - Sofort kündigen über App-UI
+   - Stripe-Dashboard: Zahlung sehen, Refund manuell ausführen
+   - Webhook-Logs prüfen — alle 8 Events kommen sauber durch
+
+## Test-Mode-Keys (für Rollback)
+Test-Mode-Keys liegen in Stripe-Dashboard unter
+https://dashboard.stripe.com/test/apikeys (Test-Mode, Account "Flovision GmbH").
+Webhook-Secret findet man im jeweiligen Webhook-Endpoint-Detail.
+Nicht hier ablegen — GitHub Push-Protection blockt das.
