@@ -43,13 +43,17 @@ export async function buildGateState({
     getAppSettings(),
   ])
 
-  // In NoSubs-Welt dürfen premium + alumni die Tools nutzen — auch ohne
-  // Stripe-Sub. basic ist auf Page-Ebene durch CommunityRequiredView
-  // schon abgefangen, fällt hier in der Tool-Komponente nicht mehr ins
-  // Gewicht.
-  const noSubsAllowed =
-    !settings.subscriptionsEnabled &&
-    (access.tier === 'premium' || access.tier === 'alumni')
+  // In NoSubs-Welt sind ALLE User die hier ankommen "berechtigt zur Aktion"
+  // — der Page-Layer hat basic-User ohne Toolbox-Zugriff schon via
+  // CommunityRequiredView abgefangen. Wer hier landet (Admin-Override,
+  // alumni mit gekauften Credits, premium) darf alles versuchen, was er
+  // an Credits hat. chargeCredits() auf der Server-Seite entscheidet
+  // letztlich ob die Aktion durchgeht.
+  //
+  // WICHTIG: nicht nur premium/alumni durchlassen — sonst hängt ein
+  // basic-User mit gekauften Credits am Client-side-Gate (sieht "kostet
+  // 0 Credits"-Modal), obwohl er via Server eigentlich generieren könnte.
+  const noSubsAllowed = !settings.subscriptionsEnabled
 
   const hasActiveSubscription =
     access.isAdmin || monetization.hasActiveSubscription || noSubsAllowed

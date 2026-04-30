@@ -133,17 +133,19 @@ export async function handleAccessTierChange(params: {
 // ─── Server-side Access Check ───────────────────────────────────────────
 
 /**
- * Prüft serverseitig ob ein User Aktions-Zugriff hat (aktives Abo, Admin,
- * oder in NoSubs-Welt: tier=premium/alumni).
- *
- * Wird in API-Routes aufgerufen, bevor teure Claude/Stripe/Fal-Calls laufen,
- * damit niemand per curl die UI-Paywall umgeht.
+ * Prüft serverseitig ob ein User Aktions-Zugriff hat.
  *
  * Logik je Modus:
  *   - Subs-aktiv: Admin ODER aktives Abo
- *   - NoSubs:     Admin ODER tier='premium' ODER tier='alumni'
- *                 (basic ist via Permission-Matrix schon auf Page-Layer
- *                 abgefangen, aber als Defense-in-Depth blocken wir hier auch)
+ *   - NoSubs:     IMMER true (kein Abo-Konzept). Stattdessen entscheidet
+ *                 chargeCredits() ob der User genug Credits hat. Page-Layer
+ *                 fängt basic-User ohne Toolbox-Recht via CommunityRequired
+ *                 schon vorher ab — wer hier landet, darf zumindest die
+ *                 Credit-Prüfung machen.
+ *
+ * Vorher (W9): tier='premium'/'alumni' war Pflicht in NoSubs. Das blockte
+ * basic-User mit gekauften Credits am Server-Gate, obwohl sie über die
+ * Berechtigungs-Matrix hätten durchkommen können (toolbox='open' Override).
  */
 export async function hasActionAccess(
   supabase: SupabaseClient,
@@ -163,12 +165,8 @@ export async function hasActionAccess(
   if (profile?.role === 'admin') return true
   if (sub) return true
 
-  // NoSubs-Welt: premium + alumni haben Toolbox-Zugriff (basic muss erst
-  // Community beitreten, siehe CommunityRequiredView auf Page-Layer).
-  if (!settings.subscriptionsEnabled) {
-    const tier = profile?.access_tier as string | undefined
-    return tier === 'premium' || tier === 'alumni'
-  }
+  // NoSubs-Welt: kein Abo-Gate. chargeCredits + Page-Permission entscheiden.
+  if (!settings.subscriptionsEnabled) return true
 
   return false
 }

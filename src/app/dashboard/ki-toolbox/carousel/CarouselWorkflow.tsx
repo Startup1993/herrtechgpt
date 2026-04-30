@@ -439,7 +439,14 @@ function PalettePreview({ primary }: { primary: string }) {
 
 // ─── Main ────────────────────────────────────────────────────────────────────
 
-export default function CarouselWorkflow({ gateState }: { gateState?: SubscriptionGateState }) {
+export default function CarouselWorkflow({
+  gateState,
+  creditCost = 0,
+}: {
+  gateState?: SubscriptionGateState
+  /** Credit-Kosten pro Generate/Refine-Aktion (aus feature_credit_costs.carousel). */
+  creditCost?: number
+}) {
   const [pricingOpen, setPricingOpen] = useState(false)
   const [creditsOpen, setCreditsOpen] = useState(false)
   // Wenn die API mit 402 ablehnt, speichern wir needed/available für die
@@ -751,7 +758,16 @@ export default function CarouselWorkflow({ gateState }: { gateState?: Subscripti
               </svg>
               {progress}
             </>
-          ) : '🎠 Karussell generieren'}
+          ) : (
+            <>
+              🎠 Karussell generieren
+              {creditCost > 0 && (
+                <span className="text-xs font-normal opacity-80">
+                  ({creditCost} Credits)
+                </span>
+              )}
+            </>
+          )}
         </button>
         {pricingModal}
         {creditsModal}
