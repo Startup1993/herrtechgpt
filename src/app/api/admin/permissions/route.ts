@@ -2,6 +2,7 @@ import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { NextResponse } from 'next/server'
 import { FEATURES, STATES, TIERS, type FeatureKey, type FeatureState } from '@/lib/permissions'
+import { getAppSettings } from '@/lib/app-settings'
 import type { AccessTier } from '@/lib/access'
 
 async function requireAdmin() {
@@ -28,6 +29,19 @@ export async function PATCH(request: Request) {
     if (!TIERS.includes(tier as AccessTier)) return NextResponse.json({ error: 'Invalid tier' }, { status: 400 })
     if (!FEATURES.includes(feature as FeatureKey)) return NextResponse.json({ error: 'Invalid feature' }, { status: 400 })
     if (!STATES.includes(state as FeatureState)) return NextResponse.json({ error: 'Invalid state' }, { status: 400 })
+
+    // In NoSubs-Welt: 'paid' ist kein erlaubter State (Abo-Konzept existiert
+    // nicht). Wenn Subs aktiv sind ist 'paid' OK.
+    const settings = await getAppSettings()
+    if (!settings.subscriptionsEnabled && state === 'paid') {
+      return NextResponse.json(
+        {
+          error:
+            'Status "Abo-Zugriff" ist nicht verfügbar wenn das Abo-System deaktiviert ist. Wähle stattdessen "Community-only", "Freigeschaltet" oder "Coming Soon".',
+        },
+        { status: 400 }
+      )
+    }
 
     const { error } = await admin
       .from('feature_permissions')

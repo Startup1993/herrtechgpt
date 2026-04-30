@@ -19,6 +19,7 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import { NextResponse } from 'next/server'
 import { handleAccessTierChange } from '@/lib/monetization'
 import { notifyCommunityDowngrade } from '@/lib/email'
+import { syncCommunityMemberFromTierChange } from '@/lib/community-sync'
 import type { AccessTier } from '@/lib/access'
 
 export const runtime = 'nodejs'
@@ -138,37 +139,10 @@ export async function POST(request: Request) {
             console.error('[admin/users/bulk] tier-change hook failed for', userId, err)
           }
 
-          // Community-Members-Sync (gleiche Logik wie in PATCH /admin/users)
+          // Community-Members-Sync — gleicher Helper wie Einzel-PATCH.
+          // Legt Eintrag an wenn nötig + Initial-Credit-Grant bei premium.
           try {
-            const { data: member } = await admin
-              .from('community_members')
-              .select('id, skool_status')
-              .eq('profile_id', userId)
-              .maybeSingle()
-
-            if (member) {
-              if (tier === 'premium' && member.skool_status !== 'active') {
-                const newExpiry = new Date()
-                newExpiry.setFullYear(newExpiry.getFullYear() + 1)
-                await admin
-                  .from('community_members')
-                  .update({
-                    skool_status: 'active',
-                    skool_access_expires_at: newExpiry.toISOString(),
-                  })
-                  .eq('id', member.id)
-              } else if (tier === 'alumni' && member.skool_status === 'active') {
-                await admin
-                  .from('community_members')
-                  .update({ skool_status: 'alumni' })
-                  .eq('id', member.id)
-              } else if (tier === 'basic') {
-                await admin
-                  .from('community_members')
-                  .update({ claimed_at: null, profile_id: null })
-                  .eq('id', member.id)
-              }
-            }
+            await syncCommunityMemberFromTierChange(admin, userId, tier)
           } catch (err) {
             console.error('[admin/users/bulk] community-sync failed for', userId, err)
           }

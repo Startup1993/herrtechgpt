@@ -22,9 +22,11 @@ type Tab = 'matrix' | 'upsell'
 export function GroupsEditor({
   initialMatrix,
   initialUpsell,
+  subscriptionsEnabled,
 }: {
   initialMatrix: PermissionMatrix
   initialUpsell: Record<AccessTier, UpsellCopy>
+  subscriptionsEnabled: boolean
 }) {
   const [tab, setTab] = useState<Tab>('matrix')
 
@@ -39,7 +41,12 @@ export function GroupsEditor({
         </TabButton>
       </div>
 
-      {tab === 'matrix' && <MatrixEditor initial={initialMatrix} />}
+      {tab === 'matrix' && (
+        <MatrixEditor
+          initial={initialMatrix}
+          subscriptionsEnabled={subscriptionsEnabled}
+        />
+      )}
       {tab === 'upsell' && <UpsellEditor initial={initialUpsell} />}
     </div>
   )
@@ -65,12 +72,25 @@ function TabButton({ active, onClick, children }: { active: boolean; onClick: ()
 // MATRIX EDITOR
 // ═══════════════════════════════════════════════════════════
 
-function MatrixEditor({ initial }: { initial: PermissionMatrix }) {
+function MatrixEditor({
+  initial,
+  subscriptionsEnabled,
+}: {
+  initial: PermissionMatrix
+  subscriptionsEnabled: boolean
+}) {
   const router = useRouter()
   const [matrix, setMatrix] = useState<PermissionMatrix>(initial)
   const [saving, setSaving] = useState<string | null>(null)
   const [recentSaved, setRecentSaved] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
+
+  // In NoSubs-Welt blenden wir 'paid' (= "Abo-Zugriff") aus dem Dropdown +
+  // der Legende aus. Der State existiert technisch noch, aber Admin soll
+  // ihn nicht setzen können solange Abos deaktiviert sind.
+  const availableStates: FeatureState[] = subscriptionsEnabled
+    ? [...STATES]
+    : STATES.filter((s) => s !== 'paid')
 
   const update = async (tier: AccessTier, feature: FeatureKey, state: FeatureState) => {
     const key = `${tier}_${feature}`
@@ -141,7 +161,7 @@ function MatrixEditor({ initial }: { initial: PermissionMatrix }) {
                               disabled={saving !== null}
                               className={`flex-1 px-2.5 py-1.5 text-xs font-medium rounded-md border-0 cursor-pointer focus:outline-none focus:ring-2 focus:ring-primary/30 ${meta.badge} disabled:opacity-50`}
                             >
-                              {STATES.map((s) => (
+                              {availableStates.map((s) => (
                                 <option key={s} value={s} className="bg-surface text-foreground">
                                   {STATE_META[s].label}
                                 </option>
@@ -172,7 +192,7 @@ function MatrixEditor({ initial }: { initial: PermissionMatrix }) {
       <div className="card-static p-5">
         <h3 className="text-sm font-semibold text-foreground mb-3">Status-Legende</h3>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-          {STATES.map((s) => (
+          {availableStates.map((s) => (
             <div key={s} className="flex items-start gap-3">
               <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium shrink-0 ${STATE_META[s].badge}`}>
                 {STATE_META[s].label}
@@ -181,6 +201,14 @@ function MatrixEditor({ initial }: { initial: PermissionMatrix }) {
             </div>
           ))}
         </div>
+        {!subscriptionsEnabled && (
+          <p className="text-xs text-muted mt-3 leading-relaxed">
+            <strong>Hinweis:</strong> Der Status &bdquo;Abo-Zugriff&ldquo; ist
+            ausgeblendet, weil das Abo-System in &bdquo;Modus &amp; Defaults&ldquo;
+            deaktiviert ist. Solche Legacy-Werte aus der Datenbank werden bei
+            der Anzeige ignoriert.
+          </p>
+        )}
       </div>
     </div>
   )
