@@ -77,9 +77,17 @@ export async function syncCommunityMemberFromTierChange(
         .eq('id', member.id)
     }
 
-    // Initial-Credit-Grant: nur beim ersten Aktiv-Setzen.
-    // Spätere Refreshes laufen monatlich via Cron community-credit-grant.
-    if (member && !member.last_credit_grant_at) {
+    // Credit-Grant beim Tier-Upgrade auf premium — IMMER, nicht nur beim
+    // ersten Aktiv-Setzen. Jacob: "wenn ich einen nutzer in der nutzer-
+    // verwaltung oder in der club mitglieder tabelle irgendwo von basic
+    // oder alumni auf community stelle soll er auch die credits dazu
+    // erhalten - immer."
+    //
+    // Kein Missbrauchs-Risiko: grantMonthlyCredits() ÜBERSCHREIBT
+    // monthly_balance (kein Doppel-Stack). purchased_balance bleibt.
+    // last_credit_grant_at wird neu gestempelt → Cron-Rhythmus startet
+    // ab jetzt wieder.
+    if (member) {
       try {
         const settings = await getAppSettings()
         const resetAt = new Date()
@@ -96,10 +104,10 @@ export async function syncCommunityMemberFromTierChange(
             .update({ last_credit_grant_at: new Date().toISOString() })
             .eq('id', member.id)
         } else {
-          console.error('[community-sync] initial credit grant failed:', result.error)
+          console.error('[community-sync] credit grant on upgrade failed:', result.error)
         }
       } catch (err) {
-        console.error('[community-sync] initial credit grant exception:', err)
+        console.error('[community-sync] credit grant on upgrade exception:', err)
       }
     }
     return
