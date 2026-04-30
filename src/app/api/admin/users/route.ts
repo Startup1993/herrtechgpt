@@ -3,7 +3,7 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import { NextResponse } from 'next/server'
 import { handleAccessTierChange } from '@/lib/monetization'
 import { notifyCommunityDowngrade } from '@/lib/email'
-import { sendInvitationEmail, recordInvitationSent } from '@/lib/invitations'
+import { sendAdminInviteForUser } from '@/lib/admin-invite'
 import { syncCommunityMemberFromTierChange } from '@/lib/community-sync'
 import type { AccessTier } from '@/lib/access'
 
@@ -86,11 +86,18 @@ export async function POST(request: Request) {
 
   let inviteSent = false
   let inviteError: string | null = null
+  let inviteType: string | null = null
   if (sendInvite) {
-    const res = await sendInvitationEmail(admin, emailRaw)
+    // Tier-aware Mail-Auswahl: alumni → Skool-Alumni-Mail (mit Classroom-
+    // Zugang-Hinweis), premium → Skool-Active-Mail, basic → Magic-Link.
+    // Jacob: "wenn ich nen alumni mitglied hinzufüge und ne einladungsmail
+    // schicke, soll ihm auch die skool alumni einladungs mail geschickt
+    // werden — damit dem user auch klar wird dass er hier den zugang zum
+    // classroom weiter hat."
+    const res = await sendAdminInviteForUser(admin, userId)
     if (res.ok) {
-      await recordInvitationSent(admin, userId)
       inviteSent = true
+      inviteType = res.type
     } else {
       inviteError = res.error
     }
@@ -101,6 +108,7 @@ export async function POST(request: Request) {
     userId,
     email: emailRaw,
     invite_sent: inviteSent,
+    invite_type: inviteType,
     invite_error: inviteError,
   })
 }

@@ -1,7 +1,7 @@
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { NextResponse } from 'next/server'
-import { sendInvitationEmail, recordInvitationSent } from '@/lib/invitations'
+import { sendAdminInviteForUser } from '@/lib/admin-invite'
 
 async function requireAdmin() {
   const supabase = await createClient()
@@ -28,10 +28,10 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: 'Nutzer hat sich bereits eingeloggt' }, { status: 400 })
   }
 
-  const res = await sendInvitationEmail(admin, target.user.email)
-  if (!res.ok) return NextResponse.json({ error: res.error }, { status: 500 })
-
-  await recordInvitationSent(admin, body.userId)
+  // Tier-aware Mail-Auswahl: alumni → Skool-Alumni-Mail (Classroom-Hinweis),
+  // premium → Skool-Active-Mail, basic → Magic-Link.
+  const result = await sendAdminInviteForUser(admin, body.userId)
+  if (!result.ok) return NextResponse.json({ error: result.error }, { status: 500 })
 
   const { data: profile } = await admin
     .from('profiles')
@@ -41,6 +41,7 @@ export async function POST(request: Request) {
 
   return NextResponse.json({
     success: true,
+    invite_type: result.type,
     invitation_sent_count: profile?.invitation_sent_count ?? 1,
     invitation_last_sent_at: profile?.invitation_last_sent_at,
   })
