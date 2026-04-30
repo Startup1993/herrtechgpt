@@ -24,9 +24,14 @@
 
 import { useState } from 'react'
 import Link from 'next/link'
+import dynamic from 'next/dynamic'
 import { X, Coins, ArrowRight, Loader2, Sparkles } from 'lucide-react'
 import type { Plan, CreditPack } from '@/lib/types'
-import { PricingModal } from './pricing-modal'
+
+const PricingModal = dynamic(
+  () => import('./pricing-modal').then((m) => m.PricingModal),
+  { ssr: false }
+)
 
 type PriceBand = 'basic' | 'community'
 
