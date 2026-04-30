@@ -10,8 +10,13 @@
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { PricingModal } from '@/components/pricing-modal'
+import dynamic from 'next/dynamic'
 import { PaywallBanner, type SubscriptionGateState } from '@/components/subscription-gate'
+
+const PricingModal = dynamic(
+  () => import('@/components/pricing-modal').then((m) => m.PricingModal),
+  { ssr: false }
+)
 import {
   DEFAULT_SLIDES,
   DEFAULT_FONT_PAIRING,

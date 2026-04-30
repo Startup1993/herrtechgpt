@@ -1,4 +1,5 @@
 import type { NextConfig } from "next";
+import bundleAnalyzer from "@next/bundle-analyzer";
 
 // Video-Creator-Worker: Proxy läuft als Route-Handler
 // (src/app/api/video-creator/[...path]/route.ts), nicht als Rewrite —
@@ -6,4 +7,9 @@ import type { NextConfig } from "next";
 // Upload-Bodies mit korrektem Header-Durchreichen.
 const nextConfig: NextConfig = {};
 
-export default nextConfig;
+// ANALYZE=true npm run build → öffnet Bundle-Visualization im Browser.
+const withBundleAnalyzer = bundleAnalyzer({
+  enabled: process.env.ANALYZE === "true",
+});
+
+export default withBundleAnalyzer(nextConfig);
