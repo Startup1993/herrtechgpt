@@ -4,6 +4,7 @@ import { redirect } from 'next/navigation'
 import { computeEffectiveAccess, VIEW_AS_COOKIE } from '@/lib/access'
 import { getPermissionMatrix, getUpsellCopy } from '@/lib/permissions'
 import { getActivePlans, getMonetizationState } from '@/lib/monetization'
+import { getAppSettings } from '@/lib/app-settings'
 import { getAuthedUser, getProfileCached } from '@/lib/server-cache'
 import type { Plan } from '@/lib/types'
 import DashboardView from './DashboardView'
@@ -14,10 +15,11 @@ export default async function DashboardPage() {
 
   const supabase = await createClient()
 
-  const [profile, cookieStore, matrix] = await Promise.all([
+  const [profile, cookieStore, matrix, settings] = await Promise.all([
     getProfileCached(),
     cookies(),
     getPermissionMatrix(supabase),
+    getAppSettings(),
   ])
 
   const viewAsRaw = cookieStore.get(VIEW_AS_COOKIE)?.value
@@ -42,6 +44,7 @@ export default async function DashboardPage() {
       currentPlanId={monetization.planId}
       currentPlanTier={monetization.planTier}
       currentCycle={monetization.subscription?.billing_cycle ?? null}
+      subscriptionsEnabled={settings.subscriptionsEnabled}
     />
   )
 }

@@ -7,6 +7,10 @@
     {
       "path": "/api/cron/skool-expiry",
       "schedule": "0 3 * * *"
+    },
+    {
+      "path": "/api/cron/community-credit-grant",
+      "schedule": "0 4 * * *"
     }
   ]
 }

@@ -41,6 +41,7 @@ import {
   CreditCard,
   Coins,
   Mail,
+  SlidersHorizontal,
 } from 'lucide-react'
 import { resolveToolboxIcon, type ToolboxTool } from '@/lib/toolbox-icons'
 
@@ -1046,6 +1047,13 @@ function AdminSidebar({
 
         <SectionHeader label="Monetarisierung" />
         <div className="space-y-1">
+          <NavItem
+            href="/admin/monetization/settings"
+            icon={SlidersHorizontal}
+            label="Modus & Defaults"
+            description="Abo an/aus, Fallback-Credits"
+            isActive={pathname.startsWith('/admin/monetization/settings')}
+          />
           <NavItem
             href="/admin/monetization/plans"
             icon={CreditCard}

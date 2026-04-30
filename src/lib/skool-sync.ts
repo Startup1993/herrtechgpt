@@ -14,6 +14,8 @@ import type { SupabaseClient } from '@supabase/supabase-js'
 import { randomBytes } from 'node:crypto'
 import type Stripe from 'stripe'
 import { getStripe } from './stripe'
+import { getAppSettings } from './app-settings'
+import { grantMonthlyCredits } from './monetization'
 
 // Feature-Flag für sicheren Rollout. Default aus, damit Live-Stripe nichts
 // ungewolltes triggert, bis Jacob scharf schaltet.
@@ -246,6 +248,17 @@ export async function ensureSkoolPlanS(
   // Admin-Schutz: Admin-Profile niemals durch Skool-Sync verändern.
   if (await isAdminProfile(admin, profileId)) return
 
+  // ─── NEU (Phase 3): Master-Switch-Branch ───────────────────────
+  // Wenn Abo-System aus ist, legen wir KEINE Plan-S-Sub mehr an.
+  // Stattdessen: tier=premium + Initial-Credits + Cron handhabt Refreshes.
+  const settings = await getAppSettings()
+  if (!settings.subscriptionsEnabled) {
+    await ensureCommunityMembershipNoSub(admin, profileId, settings.communityMonthlyCredits)
+    return
+  }
+
+  // ─── Legacy-Pfad (Subs aktiv): Plan-S-Subscription anlegen ─────
+
   // Schon aktive Sub?
   const { data: active } = await admin
     .from('subscriptions')
@@ -295,6 +308,72 @@ export async function ensureSkoolPlanS(
     .update({ access_tier: 'premium' })
     .eq('id', profileId)
     .neq('access_tier', 'premium')
+}
+
+/**
+ * NEU (Phase 3): Community-Mitgliedschaft ohne Plan-S-Subscription.
+ *
+ * Wird statt der Plan-S-Sub angelegt, wenn `subscriptions_enabled=false`.
+ * - Setzt tier=premium auf dem Profil
+ * - Wenn das Mitglied noch nie Credits bekommen hat (last_credit_grant_at
+ *   IS NULL): direkter Initial-Grant + last_credit_grant_at=now()
+ * - Sonst: nichts. Cron /api/cron/community-credit-grant erneuert
+ *   monatlich nach Kalendermonat-Logik.
+ *
+ * Idempotent: Mehrfach-Aufrufe bei demselben profileId machen nichts kaputt
+ * (kein doppelter Initial-Grant dank last_credit_grant_at-Check).
+ */
+async function ensureCommunityMembershipNoSub(
+  admin: SupabaseClient,
+  profileId: string,
+  monthlyCredits: number
+): Promise<void> {
+  // Tier auf premium setzen (idempotent durch .neq).
+  await admin
+    .from('profiles')
+    .update({ access_tier: 'premium' })
+    .eq('id', profileId)
+    .neq('access_tier', 'premium')
+
+  // community_member-Eintrag finden (für last_credit_grant_at-Tracking).
+  const { data: member } = await admin
+    .from('community_members')
+    .select('id, last_credit_grant_at')
+    .eq('profile_id', profileId)
+    .maybeSingle()
+
+  // Wenn (noch) kein community_members-Eintrag verknüpft → Cron handhabt
+  // das später, sobald der Claim/Sync den Eintrag anlegt. Kein Crash.
+  if (!member) return
+
+  // Schon mal Credits bekommen → fertig, Cron erneuert monatlich.
+  if (member.last_credit_grant_at) return
+
+  // Initial-Grant: Reset-Datum 1 Monat in der Zukunft (matched cron-Logik).
+  const resetAt = new Date()
+  resetAt.setMonth(resetAt.getMonth() + 1)
+
+  const grantResult = await grantMonthlyCredits({
+    userId: profileId,
+    amount: monthlyCredits,
+    resetAt,
+    reason: 'monthly_grant',
+  })
+
+  if (!grantResult.ok) {
+    console.error(
+      '[skool-sync] Initial-Credit-Grant fehlgeschlagen für',
+      profileId,
+      grantResult.error
+    )
+    return
+  }
+
+  // Stempeln: nächster Cron-Lauf weiß, dass schon Credits da sind.
+  await admin
+    .from('community_members')
+    .update({ last_credit_grant_at: new Date().toISOString() })
+    .eq('id', member.id)
 }
 
 /**
@@ -376,6 +455,15 @@ export async function cancelSkoolMembership(
       .eq('access_tier', 'premium')
   }
 
+  // Auto-Fillup-Anzeige stoppen: monthly_balance bleibt (User darf noch
+  // verbrauchen), aber reset_at = null entfernt die "erneuert sich am X"-
+  // Anzeige im Frontend. Auch der Cron-Job /api/cron/community-credit-grant
+  // springt diesen User dank skool_status='cancelled' nicht mehr an.
+  await admin
+    .from('credit_wallets')
+    .update({ reset_at: null })
+    .eq('user_id', member.profile_id)
+
   return { deleted: false, cancelled: true }
 }
 
@@ -383,8 +471,12 @@ export async function cancelSkoolMembership(
  * Beendet Skool-Zugang (Alumni-Werden, NACH 12-Monats-Ablauf).
  * - community_members.skool_status = 'alumni'
  * - Wenn profile_id vorhanden und Plan S aus Skool → beenden
- * - access_tier von 'premium' auf 'alumni' zurücksetzen (Classroom
- *   bleibt lebenslang erhalten — das ist der Unterschied zu cancel).
+ * - access_tier von 'premium' auf 'alumni' zurücksetzen
+ * - Auto-Fillup stoppt SOFORT (Cron skippt durch skool_status-Filter)
+ * - monthly_balance + purchased_balance BLEIBEN — User darf restliche
+ *   Credits in der Toolbox verbrauchen (Jacob: "credits bleiben erhalten
+ *   kann sie noch verbrauchen kann also noch in die ki toolbox").
+ * - reset_at wird auf null gesetzt → Frontend zeigt keine fake Erneuerung
  */
 export async function expireSkoolMembership(
   admin: SupabaseClient,
@@ -444,6 +536,14 @@ export async function expireSkoolMembership(
       .eq('id', member.profile_id)
       .eq('access_tier', 'premium')
   }
+
+  // Auto-Fillup-Anzeige stoppen (analog cancelSkoolMembership):
+  // monthly_balance bleibt zum Verbrauchen, aber reset_at = null entfernt
+  // die "erneuert sich am X"-Anzeige im Wallet-UI.
+  await admin
+    .from('credit_wallets')
+    .update({ reset_at: null })
+    .eq('user_id', member.profile_id)
 }
 
 /**

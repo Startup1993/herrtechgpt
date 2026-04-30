@@ -727,6 +727,7 @@ export default function DashboardView({
   currentPlanId,
   currentPlanTier,
   currentCycle,
+  subscriptionsEnabled,
 }: {
   tier: AccessTier
   isAdmin: boolean
@@ -739,6 +740,7 @@ export default function DashboardView({
   currentPlanId: string | null
   currentPlanTier: 'S' | 'M' | 'L' | null
   currentCycle: 'monthly' | 'yearly' | null
+  subscriptionsEnabled: boolean
 }) {
   const [pricingOpen, setPricingOpen] = useState(false)
 
@@ -746,17 +748,32 @@ export default function DashboardView({
   const chatLock = stateToLock(states.chat, isAdmin)
   const toolboxLock = stateToLock(states.toolbox, isAdmin)
 
-  // Anzeige-Logik Upsell-Karten:
-  // - Kein Abo + nicht Admin → große zweigeteilte Subscription-Upsell-Karte
-  // - Aktives Abo S oder M + nicht Admin → kleine UpgradeHintCard (mehr Credits via M/L)
-  // - Abo aktiv + nicht community + nicht Admin → zusätzlich MarketingClubFull (Community beitreten)
-  // - Admin → nur kompakter Community-Link oben
-  const showSubscriptionCard = !isAdmin && !hasActiveSubscription
+  // Anzeige-Logik Upsell-Karten — abhängig vom Master-Switch:
+  //
+  // subscriptionsEnabled=true (Legacy / Abo-Welt):
+  //   - Kein Abo + nicht Admin → zweigeteilte Subscription-Upsell-Karte
+  //   - Aktives Abo S/M + nicht Admin → UpgradeHintCard (mehr Credits via M/L)
+  //   - Abo aktiv + nicht community + nicht Admin → MarketingClubFull
+  //   - Admin → kompakter Community-Link oben
+  //
+  // subscriptionsEnabled=false (Community-only-Welt):
+  //   - Nicht-Community + nicht Admin → MarketingClubFull (einheitlich
+  //     "Community beitreten", kein Plan-S/M/L-CTA mehr)
+  //   - Community-Mitglied → keine Upsell-Cards (hat schon alles)
+  //   - Admin → kompakter Community-Link oben
+  const showSubscriptionCard =
+    subscriptionsEnabled && !isAdmin && !hasActiveSubscription
   const showUpgradeHint =
+    subscriptionsEnabled &&
     !isAdmin &&
     hasActiveSubscription &&
     (currentPlanTier === 'S' || currentPlanTier === 'M')
-  const showFullUpsell = !isAdmin && hasActiveSubscription && !isCommunity
+  // In NoSubs-Welt zeigen wir die Community-Card auch ohne aktives Abo —
+  // weil "Abo" nicht mehr das Tor ist. Nur Community-Mitglieder bekommen
+  // gar keine Upsell-Card (sie sind schon drin).
+  const showFullUpsell = subscriptionsEnabled
+    ? !isAdmin && hasActiveSubscription && !isCommunity
+    : !isAdmin && !isCommunity
   const showCompactCommunity = isAdmin
 
   return (

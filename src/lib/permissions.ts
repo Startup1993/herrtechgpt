@@ -1,5 +1,6 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
 import type { AccessTier } from './access'
+import { getAppSettings } from './app-settings'
 
 export type FeatureKey = 'classroom' | 'chat' | 'toolbox'
 export type FeatureState = 'open' | 'coming_soon' | 'community' | 'paid'
@@ -39,15 +40,32 @@ export interface UpsellCopy {
 
 export type PermissionMatrix = Record<AccessTier, Record<FeatureKey, FeatureState>>
 
-// Neue Defaults mit Abo-Modell:
-// - Classroom: bleibt wie vorher (Alumni lebenslang, Basic nur Community)
-// - Chat + Toolbox: Abo-Zugriff für alle Tiers ('paid' = Seite sichtbar, Aktionen brauchen Abo)
+// ─── Defaults im Abo-Modell (Legacy / wenn subscriptions_enabled=true) ───
+// - Classroom: Alumni lebenslang, Basic nur Community
+// - Chat + Toolbox: 'paid' = Seite sichtbar, Aktionen brauchen Abo
 //   Community-User haben Plan S gratis, müssen ihn aber aktivieren.
-const DEFAULT_MATRIX: PermissionMatrix = {
+const DEFAULT_MATRIX_LEGACY: PermissionMatrix = {
   basic:   { classroom: 'community',   chat: 'paid', toolbox: 'paid' },
   alumni:  { classroom: 'open',        chat: 'paid', toolbox: 'paid' },
   premium: { classroom: 'open',        chat: 'paid', toolbox: 'paid' },
 }
+
+// ─── Defaults im Community-only Modell (subscriptions_enabled=false) ───
+// Jacob: "credits zählen nur für die toolbox! herr tech gpt bekomme ich
+// nur in der community". Übersetzt:
+// - Toolbox: 'open' für ALLE — Aktionen kosten Credits, nicht Abo
+// - Chat (Herr Tech GPT) + Classroom: 'community' = nur premium-Tier (= Skool aktiv)
+//   Alumni verlieren Classroom-Zugang (kein "lebenslang" mehr) — Jacob:
+//   "wenn sie weg sind sind sie dann weg, können dann der community auch
+//   beitreten um so zugriff auf alles zu bekommen"
+const DEFAULT_MATRIX_NOSUBS: PermissionMatrix = {
+  basic:   { classroom: 'community',   chat: 'community', toolbox: 'open' },
+  alumni:  { classroom: 'community',   chat: 'community', toolbox: 'open' },
+  premium: { classroom: 'open',        chat: 'open',      toolbox: 'open' },
+}
+
+// Backwards-compat Alias (alter Name, falls woanders importiert).
+const DEFAULT_MATRIX = DEFAULT_MATRIX_LEGACY
 
 const DEFAULT_UPSELL: Record<AccessTier, UpsellCopy> = {
   basic: {
@@ -80,7 +98,16 @@ const DEFAULT_UPSELL: Record<AccessTier, UpsellCopy> = {
 }
 
 export async function getPermissionMatrix(supabase: SupabaseClient): Promise<PermissionMatrix> {
-  const matrix: PermissionMatrix = JSON.parse(JSON.stringify(DEFAULT_MATRIX))
+  // Im Community-only Modus ignorieren wir die DB-Overrides komplett —
+  // die NOSUBS-Matrix ist die einzige Wahrheit. Beim Re-Aktivieren der
+  // Abos (subscriptions_enabled=true) greifen Code-Defaults + DB-Overrides
+  // wieder wie vorher.
+  const settings = await getAppSettings()
+  if (!settings.subscriptionsEnabled) {
+    return JSON.parse(JSON.stringify(DEFAULT_MATRIX_NOSUBS))
+  }
+
+  const matrix: PermissionMatrix = JSON.parse(JSON.stringify(DEFAULT_MATRIX_LEGACY))
   const { data } = await supabase.from('feature_permissions').select('tier, feature, state')
   for (const row of data ?? []) {
     const t = row.tier as AccessTier
@@ -96,13 +123,19 @@ export async function getFeatureState(
   tier: AccessTier,
   feature: FeatureKey,
 ): Promise<FeatureState> {
+  // Wie getPermissionMatrix: NoSubs-Welt ignoriert DB-Overrides.
+  const settings = await getAppSettings()
+  if (!settings.subscriptionsEnabled) {
+    return DEFAULT_MATRIX_NOSUBS[tier][feature]
+  }
+
   const { data } = await supabase
     .from('feature_permissions')
     .select('state')
     .eq('tier', tier)
     .eq('feature', feature)
     .maybeSingle()
-  return (data?.state as FeatureState) ?? DEFAULT_MATRIX[tier][feature]
+  return (data?.state as FeatureState) ?? DEFAULT_MATRIX_LEGACY[tier][feature]
 }
 
 export async function getAllUpsellCopy(supabase: SupabaseClient): Promise<Record<AccessTier, UpsellCopy>> {

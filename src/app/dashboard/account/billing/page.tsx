@@ -3,7 +3,11 @@ import { redirect } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
 import { computeEffectiveAccess, VIEW_AS_COOKIE } from '@/lib/access'
 import { getMonetizationState } from '@/lib/monetization'
+import { getAppSettings } from '@/lib/app-settings'
 import BillingClient from './BillingClient'
+
+// Wo "Community beitreten" hinführt — gleiche URL wie auf Pricing-Page.
+const COMMUNITY_URL = 'https://www.skool.com/herr-tech'
 
 export const dynamic = 'force-dynamic'
 
@@ -72,6 +76,8 @@ export default async function BillingPage({
     }
   }
 
+  const settings = await getAppSettings()
+
   return (
     <BillingClient
       subscription={state.subscription}
@@ -84,6 +90,8 @@ export default async function BillingPage({
       scheduledPlanName={scheduledPlanName}
       scheduledChangeAt={scheduledChangeAt}
       scheduledCycle={scheduledCycle}
+      subscriptionsEnabled={settings.subscriptionsEnabled}
+      communityUrl={COMMUNITY_URL}
     />
   )
 }
