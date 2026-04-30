@@ -26,6 +26,10 @@ interface Props {
   scheduledPlanName: string | null
   scheduledChangeAt: string | null
   scheduledCycle: 'monthly' | 'yearly' | null
+  /** Master-Switch — versteckt Plan-CTAs wenn Abos global deaktiviert sind. */
+  subscriptionsEnabled: boolean
+  /** Wo "Community beitreten" hinführt (Skool-URL). */
+  communityUrl: string
 }
 
 function formatDate(iso: string): string {
@@ -56,6 +60,8 @@ export default function BillingClient({
   scheduledPlanName,
   scheduledChangeAt,
   scheduledCycle,
+  subscriptionsEnabled,
+  communityUrl,
 }: Props) {
   const router = useRouter()
   const [confirming, setConfirming] = useState(false)
@@ -260,9 +266,13 @@ export default function BillingClient({
               </>
             ) : (
               <div>
-                <div className="text-lg font-semibold text-foreground">Noch kein Abo</div>
+                <div className="text-lg font-semibold text-foreground">
+                  {subscriptionsEnabled ? 'Noch kein Abo' : 'Kein aktives Abo'}
+                </div>
                 <div className="text-sm text-muted mt-1">
-                  Schließe einen Plan ab, um Herr Tech GPT + KI Toolbox zu nutzen.
+                  {subscriptionsEnabled
+                    ? 'Schließe einen Plan ab, um Herr Tech GPT + KI Toolbox zu nutzen.'
+                    : 'Werde Community-Mitglied für vollen Zugriff auf Herr Tech GPT, Classroom + monatliche Credits.'}
                 </div>
               </div>
             )}
@@ -270,13 +280,22 @@ export default function BillingClient({
           <div className="text-right">
             {subscription ? (
               <StatusBadge subscription={subscription} />
-            ) : (
+            ) : subscriptionsEnabled ? (
               <Link
                 href="/dashboard/pricing"
                 className="inline-flex items-center gap-2 px-4 py-2 bg-primary hover:bg-primary-hover text-primary-foreground font-semibold rounded-xl text-sm transition-colors"
               >
                 Plan wählen →
               </Link>
+            ) : (
+              <a
+                href={communityUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-2 px-4 py-2 bg-primary hover:bg-primary-hover text-primary-foreground font-semibold rounded-xl text-sm transition-colors"
+              >
+                Community beitreten →
+              </a>
             )}
           </div>
         </div>
@@ -302,12 +321,16 @@ export default function BillingClient({
 
         {subscription && (
           <div className="flex flex-col sm:flex-row gap-2 mt-6 pt-6 border-t border-border">
-            <Link
-              href="/dashboard/pricing"
-              className="inline-flex items-center justify-center gap-2 px-4 py-2 border border-border hover:border-primary hover:text-primary text-foreground font-medium rounded-xl text-sm transition-colors"
-            >
-              Plan wechseln
-            </Link>
+            {/* "Plan wechseln" nur anzeigen wenn das Abo-System aktiv ist —
+                sonst landet der User auf PricingDisabledView, was verwirrt. */}
+            {subscriptionsEnabled && (
+              <Link
+                href="/dashboard/pricing"
+                className="inline-flex items-center justify-center gap-2 px-4 py-2 border border-border hover:border-primary hover:text-primary text-foreground font-medium rounded-xl text-sm transition-colors"
+              >
+                Plan wechseln
+              </Link>
+            )}
             {hasStripeCustomer && (
               <button
                 onClick={openPortal}
