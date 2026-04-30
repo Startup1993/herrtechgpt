@@ -2,9 +2,14 @@
 
 import { useState } from 'react'
 import Link from 'next/link'
+import dynamic from 'next/dynamic'
 import { ChevronLeft, Video, Sparkles, ArrowRight } from 'lucide-react'
-import { PricingModal } from '@/components/pricing-modal'
 import type { SubscriptionGateState } from '@/components/subscription-gate'
+
+const PricingModal = dynamic(
+  () => import('@/components/pricing-modal').then((m) => m.PricingModal),
+  { ssr: false }
+)
 
 /**
  * Pre-Gate für den Video-Creator. Weil der Video-Creator als externer Worker

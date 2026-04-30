@@ -4,12 +4,17 @@ import { useChat } from '@ai-sdk/react'
 import { TextStreamChatTransport } from 'ai'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
+import dynamic from 'next/dynamic'
 import { ChatMessage } from './chat-message'
 import type { AgentDefinition } from '@/lib/agents'
 import { VoiceRecordingUI } from './voice-recording-ui'
 import { useVoiceDictation } from '@/hooks/use-voice-dictation'
-import { PricingModal } from './pricing-modal'
 import { PaywallBanner, type SubscriptionGateState } from './subscription-gate'
+
+const PricingModal = dynamic(
+  () => import('./pricing-modal').then((m) => m.PricingModal),
+  { ssr: false }
+)
 
 interface ChatInterfaceProps {
   agent: AgentDefinition

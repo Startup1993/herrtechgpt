@@ -3,9 +3,14 @@
 import { useState } from 'react'
 import { Upload, FileVideo, Loader2, Scissors, CheckCircle2, AlertCircle, ChevronLeft } from 'lucide-react'
 import Link from 'next/link'
+import dynamic from 'next/dynamic'
 import type { TranscriptSegment, SceneAnalysis } from '@/lib/video/types'
-import { PricingModal } from '@/components/pricing-modal'
 import { PaywallBanner, type SubscriptionGateState } from '@/components/subscription-gate'
+
+const PricingModal = dynamic(
+  () => import('@/components/pricing-modal').then((m) => m.PricingModal),
+  { ssr: false }
+)
 
 type Step = 'upload' | 'transcribe' | 'analyze' | 'review' | 'error'
 

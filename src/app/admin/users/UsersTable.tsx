@@ -4,7 +4,7 @@ import { useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { CsvImportModal } from './CsvImportModal'
 import { CreateUserModal } from './CreateUserModal'
-import { Plus } from 'lucide-react'
+import { Plus, Loader2, X, Trash2 } from 'lucide-react'
 
 type AccessTier = 'basic' | 'alumni' | 'premium'
 type UserStatus = 'active' | 'invited' | 'added'
@@ -139,6 +139,11 @@ export default function UsersTable({
   const [filterSource, setFilterSource] = useState<
     'all' | Exclude<CommunitySource, null> | 'self'
   >('all')
+  // ─── Bulk-Selection ───
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
+  const [bulkBusy, setBulkBusy] = useState(false)
+  const [bulkConfirmDelete, setBulkConfirmDelete] = useState(false)
+  const [bulkMessage, setBulkMessage] = useState<{ type: 'ok' | 'err'; text: string } | null>(null)
   const [sortKey, setSortKey] = useState<SortKey>('created_at')
   const [sortDir, setSortDir] = useState<SortDir>('desc')
   const [importOpen, setImportOpen] = useState(false)
@@ -250,6 +255,69 @@ export default function UsersTable({
     setLoading(null)
     setDeleteConfirm(null)
     router.refresh()
+  }
+
+  // ─── Bulk-Helpers ──────────────────────────────────────────────
+
+  function toggleSelected(id: string) {
+    setSelectedIds((prev) => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+  }
+
+  function clearSelection() {
+    setSelectedIds(new Set())
+    setBulkConfirmDelete(false)
+  }
+
+  async function bulkAction(
+    action: 'set_tier' | 'delete',
+    params: { access_tier?: AccessTier } = {}
+  ) {
+    if (selectedIds.size === 0) return
+    setBulkBusy(true)
+    setBulkMessage(null)
+    try {
+      const res = await fetch('/api/admin/users/bulk', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action,
+          userIds: [...selectedIds],
+          params,
+        }),
+      })
+      const data = await res.json()
+      if (!res.ok) {
+        setBulkMessage({ type: 'err', text: data?.error ?? 'Bulk-Aktion fehlgeschlagen' })
+      } else {
+        const failedCount = (data.failed as Array<unknown> | undefined)?.length ?? 0
+        const successCount = data.success_count ?? 0
+        if (failedCount === 0) {
+          setBulkMessage({
+            type: 'ok',
+            text: `${successCount} ${successCount === 1 ? 'Nutzer' : 'Nutzer'} erfolgreich verarbeitet.`,
+          })
+        } else {
+          setBulkMessage({
+            type: 'err',
+            text: `${successCount} erfolgreich, ${failedCount} fehlgeschlagen.`,
+          })
+        }
+        clearSelection()
+        router.refresh()
+      }
+    } catch (err) {
+      setBulkMessage({
+        type: 'err',
+        text: err instanceof Error ? err.message : 'Netzwerkfehler',
+      })
+    } finally {
+      setBulkBusy(false)
+    }
   }
 
   async function sendInvite(userId: string) {
@@ -437,11 +505,119 @@ export default function UsersTable({
         }}
       />
 
+      {/* Bulk-Action-Bar — nur sichtbar wenn mind. 1 ausgewählt */}
+      {selectedIds.size > 0 && (
+        <div className="sticky top-2 z-20 flex items-center gap-3 p-3 rounded-xl bg-primary/10 border border-primary/30 shadow-sm">
+          <span className="text-sm font-medium text-foreground">
+            {selectedIds.size} ausgewählt
+          </span>
+          <div className="h-5 w-px bg-border" />
+          <select
+            disabled={bulkBusy}
+            onChange={(e) => {
+              const v = e.target.value
+              e.target.value = '' // reset dropdown
+              if (v) bulkAction('set_tier', { access_tier: v as AccessTier })
+            }}
+            className="px-3 py-1.5 rounded-lg border border-border bg-surface text-sm text-foreground hover:bg-surface-secondary disabled:opacity-50"
+            defaultValue=""
+          >
+            <option value="" disabled>Tier ändern…</option>
+            <option value="premium">Community (premium)</option>
+            <option value="alumni">Alumni</option>
+            <option value="basic">Basic</option>
+          </select>
+          {bulkConfirmDelete ? (
+            <>
+              <button
+                disabled={bulkBusy}
+                onClick={() => bulkAction('delete')}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-red-600 hover:bg-red-700 text-white text-sm font-medium transition-colors disabled:opacity-50"
+              >
+                {bulkBusy ? <Loader2 size={14} className="animate-spin" /> : <Trash2 size={14} />}
+                Wirklich löschen?
+              </button>
+              <button
+                disabled={bulkBusy}
+                onClick={() => setBulkConfirmDelete(false)}
+                className="text-xs text-muted hover:text-foreground"
+              >
+                Abbrechen
+              </button>
+            </>
+          ) : (
+            <button
+              disabled={bulkBusy}
+              onClick={() => setBulkConfirmDelete(true)}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-red-500/30 hover:bg-red-500/10 text-red-600 text-sm font-medium transition-colors disabled:opacity-50"
+            >
+              <Trash2 size={14} />
+              Löschen
+            </button>
+          )}
+          <div className="flex-1" />
+          <button
+            disabled={bulkBusy}
+            onClick={clearSelection}
+            className="text-muted hover:text-foreground p-1"
+            title="Auswahl aufheben"
+          >
+            <X size={16} />
+          </button>
+        </div>
+      )}
+
+      {bulkMessage && (
+        <div
+          className={`flex items-start gap-2 p-3 rounded-xl text-sm ${
+            bulkMessage.type === 'ok'
+              ? 'bg-green-500/10 border border-green-500/30 text-green-700 dark:text-green-400'
+              : 'bg-red-500/10 border border-red-500/30 text-red-700 dark:text-red-400'
+          }`}
+        >
+          <span className="flex-1">{bulkMessage.text}</span>
+          <button
+            onClick={() => setBulkMessage(null)}
+            className="text-muted hover:text-foreground"
+          >
+            <X size={14} />
+          </button>
+        </div>
+      )}
+
       {/* Tabelle */}
       <div className="bg-surface border border-border rounded-xl overflow-x-auto">
         <table className="w-full min-w-[900px] text-sm">
           <thead>
             <tr className="border-b border-border bg-surface-secondary">
+              <th className="px-3 py-3 w-10">
+                <input
+                  type="checkbox"
+                  checked={
+                    sorted.length > 0 &&
+                    sorted.every((u) => selectedIds.has(u.id))
+                  }
+                  // Indeterminate kann React nicht direkt — über ref setzen
+                  ref={(el) => {
+                    if (el) {
+                      const someSelected = sorted.some((u) => selectedIds.has(u.id))
+                      const allSelected =
+                        sorted.length > 0 &&
+                        sorted.every((u) => selectedIds.has(u.id))
+                      el.indeterminate = someSelected && !allSelected
+                    }
+                  }}
+                  onChange={(e) => {
+                    if (e.target.checked) {
+                      setSelectedIds(new Set(sorted.map((u) => u.id)))
+                    } else {
+                      clearSelection()
+                    }
+                  }}
+                  className="cursor-pointer"
+                  aria-label="Alle auswählen"
+                />
+              </th>
               <SortableTh label="Name / E-Mail" sortKey="email" current={sortKey} dir={sortDir} onClick={toggleSort} align="left" />
               <SortableTh label="Zugang" sortKey="access_tier" current={sortKey} dir={sortDir} onClick={toggleSort} align="left" />
               {subscriptionsEnabled && (
@@ -458,7 +634,7 @@ export default function UsersTable({
           <tbody className="divide-y divide-border">
             {sorted.length === 0 && (
               <tr>
-                <td colSpan={subscriptionsEnabled ? 9 : 8} className="px-5 py-8 text-center text-sm text-muted">
+                <td colSpan={subscriptionsEnabled ? 10 : 9} className="px-5 py-8 text-center text-sm text-muted">
                   Keine Nutzer gefunden.
                 </td>
               </tr>
@@ -466,12 +642,30 @@ export default function UsersTable({
             {sorted.map((u) => {
               const tier = TIER_META[u.access_tier]
               const status = STATUS_META[u._status]
+              const isSelected = selectedIds.has(u.id)
               return (
                 <tr
                   key={u.id}
-                  className="hover:bg-surface-secondary/50 transition-colors cursor-pointer"
+                  className={`hover:bg-surface-secondary/50 transition-colors cursor-pointer ${
+                    isSelected ? 'bg-primary/5' : ''
+                  }`}
                   onClick={() => router.push(`/admin/users/${u.id}`)}
                 >
+                  <td
+                    className="px-3 py-3.5 w-10"
+                    onClick={(e) => {
+                      // Checkbox-Klick darf NICHT zur Detail-Seite navigieren
+                      e.stopPropagation()
+                    }}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={isSelected}
+                      onChange={() => toggleSelected(u.id)}
+                      className="cursor-pointer"
+                      aria-label={`${u.email} auswählen`}
+                    />
+                  </td>
                   <td className="px-5 py-3.5 whitespace-nowrap">
                     {u.full_name ? (
                       <>
