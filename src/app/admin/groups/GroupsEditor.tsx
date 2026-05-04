@@ -1,8 +1,9 @@
 'use client'
 
 import { useState } from 'react'
+import Link from 'next/link'
 import { useRouter } from 'next/navigation'
-import { Loader2, Save, Plus, X, Check, AlertCircle } from 'lucide-react'
+import { Loader2, Save, Plus, X, Check, AlertCircle, Wrench, ArrowRight } from 'lucide-react'
 import {
   FEATURES,
   STATES,
@@ -118,6 +119,24 @@ function MatrixEditor({
 
   return (
     <div className="space-y-6">
+      <Link
+        href="/admin/content/toolbox"
+        className="card-static p-4 flex items-start gap-3 bg-primary/5 border-primary/20 hover:bg-primary/10 hover:border-primary/40 transition-colors group"
+      >
+        <div className="w-8 h-8 rounded-[var(--radius-md)] bg-primary/15 flex items-center justify-center shrink-0">
+          <Wrench size={16} className="text-primary" />
+        </div>
+        <div className="flex-1 min-w-0">
+          <div className="text-sm font-semibold text-foreground mb-0.5">
+            Einzelne Toolbox-Tools verwalten
+          </div>
+          <p className="text-xs text-muted leading-relaxed">
+            Du möchtest einzelne Tools in der Toolbox für alle aktivieren oder als &bdquo;Coming Soon&ldquo; markieren? Das geht unter <strong className="text-foreground">Inhalte → KI Toolbox</strong>.
+          </p>
+        </div>
+        <ArrowRight size={16} className="text-muted group-hover:text-primary group-hover:translate-x-0.5 transition-all shrink-0 mt-1" />
+      </Link>
+
       {/* Matrix umstrukturiert (W11): Tiers als Spalten (3 fixe Gruppen),
           Features als Zeilen (erweiterbar — Lernpfad neu, weitere folgen).
           horizontal scrollbar für schmale Viewports. */}
