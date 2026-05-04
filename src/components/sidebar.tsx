@@ -1249,12 +1249,15 @@ function ClassroomSidebar({
 function ToolboxNavItem({
   tool,
   isActive,
+  bypassComingSoon,
 }: {
   tool: ToolboxTool
   isActive: boolean
+  /** Echte Admins (nicht im Testmodus) ignorieren Coming-Soon-Locks. */
+  bypassComingSoon?: boolean
 }) {
   const Icon = resolveToolboxIcon(tool.icon_name)
-  const disabled = tool.coming_soon || !tool.href
+  const disabled = (tool.coming_soon && !bypassComingSoon) || !tool.href
 
   const content = (
     <>
@@ -1297,11 +1300,14 @@ function ToolboxSidebar({
   pathname,
   onBack,
   isAdmin,
+  bypassComingSoon,
   onDrillDown,
 }: {
   pathname: string
   onBack: () => void
   isAdmin?: boolean
+  /** Echte Admins (nicht im Testmodus) sehen Coming-Soon-Tools als klickbar. */
+  bypassComingSoon?: boolean
   onDrillDown: (mode: SidebarMode) => void
 }) {
   const [tools, setTools] = useState<ToolboxTool[]>([])
@@ -1340,6 +1346,7 @@ function ToolboxSidebar({
               key={tool.id}
               tool={tool}
               isActive={!!tool.href && pathname.startsWith(tool.href)}
+              bypassComingSoon={bypassComingSoon}
             />
           ))}
         </div>
@@ -1505,7 +1512,7 @@ export function Sidebar({ conversations, userEmail, userName, isAdmin, realIsAdm
             pointerEvents: mode === 'toolbox' ? 'auto' : 'none',
           }}
         >
-          <ToolboxSidebar pathname={pathname} onBack={handleBack} isAdmin={realIsAdmin} onDrillDown={handleDrillDown} />
+          <ToolboxSidebar pathname={pathname} onBack={handleBack} isAdmin={realIsAdmin} bypassComingSoon={isAdmin} onDrillDown={handleDrillDown} />
         </div>
 
         <div

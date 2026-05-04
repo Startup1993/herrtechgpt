@@ -1,17 +1,30 @@
 import Link from 'next/link'
+import { cookies } from 'next/headers'
 import { ArrowRight, Clock, Sparkles } from 'lucide-react'
 import { createClient } from '@/lib/supabase/server'
 import { resolveToolboxIcon, type ToolboxTool } from '@/lib/toolbox-icons'
+import { computeEffectiveAccess, VIEW_AS_COOKIE } from '@/lib/access'
+import { getProfileCached } from '@/lib/server-cache'
 
 export const dynamic = 'force-dynamic'
 
 export default async function KiToolboxPage() {
   const supabase = await createClient()
-  const { data } = await supabase
-    .from('toolbox_tools')
-    .select('*')
-    .eq('published', true)
-    .order('sort_order', { ascending: true })
+  const [{ data }, profile, cookieStore] = await Promise.all([
+    supabase
+      .from('toolbox_tools')
+      .select('*')
+      .eq('published', true)
+      .order('sort_order', { ascending: true }),
+    getProfileCached(),
+    cookies(),
+  ])
+
+  const access = computeEffectiveAccess(profile, cookieStore.get(VIEW_AS_COOKIE)?.value)
+  // Echte Admins (nicht im Testmodus) bekommen "Coming Soon"-Tools trotzdem
+  // klickbar, damit sie sie selbst testen können. Badge bleibt sichtbar als
+  // Hinweis "für normale User Coming Soon".
+  const bypassComingSoon = access.isAdmin
 
   const tools = (data ?? []) as ToolboxTool[]
 
@@ -32,7 +45,7 @@ export default async function KiToolboxPage() {
       <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
         {tools.map((tool) => {
           const Icon = resolveToolboxIcon(tool.icon_name)
-          const disabled = tool.coming_soon || !tool.href
+          const disabled = (tool.coming_soon && !bypassComingSoon) || !tool.href
 
           const cardInner = (
             <>
