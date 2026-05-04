@@ -21,9 +21,9 @@ export default async function KiToolboxPage() {
   ])
 
   const access = computeEffectiveAccess(profile, cookieStore.get(VIEW_AS_COOKIE)?.value)
-  // Echte Admins (nicht im Testmodus) bekommen "Coming Soon"-Tools trotzdem
-  // klickbar, damit sie sie selbst testen können. Badge bleibt sichtbar als
-  // Hinweis "für normale User Coming Soon".
+  // Echte Admins (nicht im Testmodus) sehen Coming-Soon-Tools komplett
+  // normal — klickbar und ohne Badge. Im Testmodus als Community/Alumni/
+  // Basic greift Coming-Soon ganz normal.
   const bypassComingSoon = access.isAdmin
 
   const tools = (data ?? []) as ToolboxTool[]
@@ -47,9 +47,11 @@ export default async function KiToolboxPage() {
           const Icon = resolveToolboxIcon(tool.icon_name)
           const disabled = (tool.coming_soon && !bypassComingSoon) || !tool.href
 
+          const showComingSoonBadge = tool.coming_soon && !bypassComingSoon
+
           const cardInner = (
             <>
-              {tool.coming_soon && (
+              {showComingSoonBadge && (
                 <div className="absolute top-3 right-3 inline-flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wider px-2 py-0.5 rounded-full bg-amber-100 text-amber-700 dark:bg-amber-950/30 dark:text-amber-400">
                   <Clock size={10} /> Coming Soon
                 </div>
