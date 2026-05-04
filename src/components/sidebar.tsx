@@ -1257,14 +1257,15 @@ function ToolboxNavItem({
   bypassComingSoon?: boolean
 }) {
   const Icon = resolveToolboxIcon(tool.icon_name)
-  const disabled = (tool.coming_soon && !bypassComingSoon) || !tool.href
+  const showComingSoon = tool.coming_soon && !bypassComingSoon
+  const disabled = showComingSoon || !tool.href
 
   const content = (
     <>
       <Icon size={18} className={isActive ? 'text-primary' : 'text-muted-light'} />
       <div className="flex-1 min-w-0">
         <span className="truncate block">{tool.title}</span>
-        {tool.coming_soon ? (
+        {showComingSoon ? (
           <span className="inline-flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wider mt-0.5 text-amber-600 dark:text-amber-400">
             <Clock size={9} /> Coming Soon
           </span>
