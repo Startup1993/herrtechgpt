@@ -66,6 +66,8 @@ export default async function CreditsPage({
       hasSubscription={state.hasActiveSubscription}
       checkoutStatus={checkout ?? null}
       subscriptionsEnabled={settings.subscriptionsEnabled}
+      isAdmin={profile?.role === 'admin'}
+      userId={user.id}
     />
   )
 }
