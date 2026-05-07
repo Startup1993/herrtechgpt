@@ -691,6 +691,7 @@ export default function CarouselWorkflow({
             credits={gateState.credits}
             nextCreditRefreshAt={gateState.nextCreditRefreshAt}
             isCommunity={gateState.isCommunity}
+            requiredCredits={creditCost}
           />
         )}
 
