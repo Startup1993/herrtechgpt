@@ -8,6 +8,13 @@ export async function middleware(request: NextRequest) {
     request,
   })
 
+  // Vor getUser() snapshotten: hatte der Browser je eine Supabase-Session?
+  // getUser() kann abgelaufene Auth-Cookies beim fehlgeschlagenen Refresh
+  // löschen — danach wäre der Check nicht mehr verlässlich.
+  const hadSession = request.cookies
+    .getAll()
+    .some((c) => c.name.startsWith('sb-') && c.name.includes('auth-token'))
+
   const supabase = createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
@@ -37,9 +44,11 @@ export async function middleware(request: NextRequest) {
 
   const { pathname } = request.nextUrl
 
-  // ── Nicht-eingeloggte User → /coming-soon (außer /admin → /login) ──────
-  // Admin-Routen gehen auf /login, damit Team direkt einloggen kann.
-  // Alle anderen geschützten Routen leiten auf die Marketing-Landing.
+  // ── Nicht-eingeloggte User auf geschützten Routen ──────────────────────
+  // Admin-Routen → immer /login (Team loggt sich direkt ein).
+  // /dashboard + /assistants: wer schon mal eingeloggt war (abgelaufene
+  //   Session, z.B. Rückkehr aus dem Video Creator) → /login statt der
+  //   Marketing-Landing. Echte Erstbesucher ohne Auth-Cookie → /coming-soon.
   if (!user && pathname.startsWith('/admin')) {
     const url = request.nextUrl.clone()
     url.pathname = '/login'
@@ -47,7 +56,7 @@ export async function middleware(request: NextRequest) {
   }
   if (!user && (pathname.startsWith('/assistants') || pathname.startsWith('/dashboard'))) {
     const url = request.nextUrl.clone()
-    url.pathname = '/coming-soon'
+    url.pathname = hadSession ? '/login' : '/coming-soon'
     return NextResponse.redirect(url)
   }
 
