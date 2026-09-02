@@ -94,5 +94,7 @@ export async function GET(request: Request) {
     }
   }
 
-  return NextResponse.redirect(`${origin}/login`)
+  // Verify/Exchange fehlgeschlagen (Token verbraucht, abgelaufen oder
+  // PKCE-Verifier-Cookie fehlt) → Login mit Fehlermeldung statt stillem Loop
+  return NextResponse.redirect(`${origin}/login?error=link_invalid`)
 }

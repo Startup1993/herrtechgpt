@@ -1,6 +1,18 @@
 import { AuthForm } from '@/components/auth-form'
 
-export default function LoginPage() {
+const ERROR_MESSAGES: Record<string, string> = {
+  link_invalid:
+    'Der Anmelde-Link ist abgelaufen oder wurde schon verwendet. Fordere unten einfach einen neuen an.',
+}
+
+export default async function LoginPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ error?: string }>
+}) {
+  const { error } = await searchParams
+  const initialError = error ? (ERROR_MESSAGES[error] ?? null) : null
+
   return (
     <div className="min-h-screen flex items-center justify-center bg-background px-4">
       <div className="bg-surface p-8 rounded-2xl shadow-sm border border-border w-full max-w-md">
@@ -13,7 +25,7 @@ export default function LoginPage() {
         </div>
 
         <div className="flex justify-center">
-          <AuthForm />
+          <AuthForm initialError={initialError} />
         </div>
       </div>
     </div>
