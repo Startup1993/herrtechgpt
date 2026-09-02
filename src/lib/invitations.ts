@@ -16,11 +16,13 @@ function fromAddress(): string {
 }
 
 // Erzeugt einen Magic-Login-Link via Supabase und versendet ihn per Resend.
-// Nutzt token_hash statt action_link: wir bauen die Callback-URL selbst und
+// Nutzt token_hash statt action_link: wir bauen die URL selbst und
 // verifizieren in /auth/callback via verifyOtp serverseitig. So wird die Session
 // direkt als Cookie gesetzt und der User ist nach Klick sofort eingeloggt
 // (statt wie beim default-Flow auf der Login-Seite zu landen, weil Supabase
 // Tokens im URL-Fragment liefert, das der Server nicht sieht).
+// Der Link zeigt auf /auth/confirm (Button-Zwischenseite), damit
+// Mail-Scanner-Prefetch den Einmal-Token nicht vorab verbraucht.
 export async function sendInvitationEmail(
   admin: SupabaseClient,
   email: string,
@@ -40,7 +42,7 @@ export async function sendInvitationEmail(
     type: 'magiclink',
     next: '/dashboard',
   })
-  const loginLink = `${PRODUCTION_URL}/auth/callback?${params.toString()}`
+  const loginLink = `${PRODUCTION_URL}/auth/confirm?${params.toString()}`
 
   const resend = getResend()
   if (!resend) {
@@ -84,7 +86,7 @@ export async function sendNewsletterInviteEmail(
     type: 'magiclink',
     next: '/welcome',
   })
-  const loginLink = `${PRODUCTION_URL}/auth/callback?${params.toString()}`
+  const loginLink = `${PRODUCTION_URL}/auth/confirm?${params.toString()}`
 
   const resend = getResend()
   if (!resend) {
