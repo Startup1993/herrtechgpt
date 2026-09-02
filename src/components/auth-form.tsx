@@ -17,10 +17,15 @@ import { Mail, Check } from 'lucide-react'
  * Das setzt in Supabase voraus:
  *   Authentication → Providers → Email → "Allow new users to sign up" = ON
  *   UND der spezifische OTP-Signup-Toggle im Email-Provider = ON
+ *   UND die Mail-Templates "Magic Link" + "Confirm signup" verlinken auf
+ *   {{ .RedirectTo }}?token_hash={{ .TokenHash }}&type=email
+ *   (token_hash-Flow: funktioniert browser-/geräteübergreifend, im Gegensatz
+ *   zur ConfirmationURL, deren PKCE-Verifier-Cookie nur im anfragenden
+ *   Browser existiert)
  */
-export function AuthForm() {
+export function AuthForm({ initialError = null }: { initialError?: string | null }) {
   const [email, setEmail] = useState('')
-  const [error, setError] = useState<string | null>(null)
+  const [error, setError] = useState<string | null>(initialError)
   const [loading, setLoading] = useState(false)
   const [sent, setSent] = useState(false)
 
@@ -30,7 +35,9 @@ export function AuthForm() {
     setLoading(true)
 
     const supabase = createClient()
-    const emailRedirectTo = `${window.location.origin}/auth/callback?next=/welcome`
+    // Ziel für {{ .RedirectTo }} im Mail-Template — bewusst ohne Query,
+    // das Template hängt selbst ?token_hash=…&type=email an
+    const emailRedirectTo = `${window.location.origin}/auth/confirm`
 
     const { error } = await supabase.auth.signInWithOtp({
       email,
