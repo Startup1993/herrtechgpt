@@ -1,0 +1,51 @@
+import { NextResponse } from 'next/server'
+import { revalidatePath } from 'next/cache'
+import { createAdminClient } from '@/lib/supabase/admin'
+import { requireAdmin } from '@/lib/coaching/auth'
+import type { EventKind } from '@/lib/coaching/types'
+
+const COACH_KINDS: EventKind[] = ['whatsapp_in', 'whatsapp_out', 'note', 'schedule_change', 'plan_change', 'mood']
+
+/** Quick-Log im Cockpit: WhatsApp rein/raus, Notiz, Planänderung, Stimmung. */
+export async function POST(request: Request) {
+  const ctx = await requireAdmin()
+  if (!ctx) return NextResponse.json({ error: 'Unauthorized' }, { status: 403 })
+  const body = await request.json().catch(() => null) as Record<string, unknown> | null
+  if (!body || typeof body.enrollment_id !== 'string') return NextResponse.json({ error: 'enrollment_id erforderlich' }, { status: 400 })
+  const kind = COACH_KINDS.includes(body.kind as EventKind) ? (body.kind as EventKind) : 'note'
+  const text = typeof body.body === 'string' ? body.body.trim() : ''
+  const mood = body.mood_score != null && body.mood_score !== '' ? Number(body.mood_score) : null
+  if (!text && mood === null) return NextResponse.json({ error: 'Text oder Stimmung erforderlich' }, { status: 400 })
+  if (mood !== null && (!Number.isInteger(mood) || mood < 1 || mood > 5)) return NextResponse.json({ error: 'Stimmung 1 bis 5' }, { status: 400 })
+
+  const admin = createAdminClient()
+  const { data, error } = await admin.from('coaching_events').insert({
+    enrollment_id: body.enrollment_id,
+    kind: mood !== null && !text && kind === 'note' ? 'mood' : kind,
+    body: text || null,
+    payload: typeof body.payload === 'object' && body.payload ? body.payload : {},
+    mood_score: mood,
+    client_visible: body.client_visible === true && kind !== 'mood',
+    author_profile_id: ctx.user.id,
+    author_name: ctx.name,
+    created_at: typeof body.created_at === 'string' && body.created_at ? new Date(body.created_at).toISOString() : new Date().toISOString(),
+  }).select().single()
+  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  revalidatePath('/admin/coaching')
+  revalidatePath(`/admin/coaching/${body.enrollment_id}`)
+  return NextResponse.json(data)
+}
+
+export async function DELETE(request: Request) {
+  const ctx = await requireAdmin()
+  if (!ctx) return NextResponse.json({ error: 'Unauthorized' }, { status: 403 })
+  const { searchParams } = new URL(request.url)
+  const id = searchParams.get('id')
+  if (!id) return NextResponse.json({ error: 'id erforderlich' }, { status: 400 })
+  const admin = createAdminClient()
+  const { data: row } = await admin.from('coaching_events').select('enrollment_id').eq('id', id).maybeSingle()
+  const { error } = await admin.from('coaching_events').delete().eq('id', id)
+  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  if (row) revalidatePath(`/admin/coaching/${row.enrollment_id}`)
+  return NextResponse.json({ success: true })
+}

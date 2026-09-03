@@ -50,6 +50,7 @@ export interface TemplateDefinition {
 
 export const TEMPLATE_GROUPS: TemplateGroup[] = [
   { key: 'invites', label: 'Einladungen' },
+  { key: 'coaching', label: 'Coaching' },
   { key: 'system', label: 'System-Benachrichtigungen' },
 ]
 
@@ -58,6 +59,93 @@ export const TEMPLATE_GROUPS: TemplateGroup[] = [
 // ─────────────────────────────────────────────────────────────────────────────
 
 export const TEMPLATES: TemplateDefinition[] = [
+  // ───────────────────────────────────────────────────────────────────────────
+  {
+    key: 'coaching_invite',
+    label: 'Coaching-Zugang',
+    group: 'coaching',
+    trigger:
+      'Coach schickt einem Coaching-Kunden den Zugang zu "Mein Coaching" — über /admin/coaching (Teilnahme → "Einladung senden") oder beim Anlegen der Teilnahme. Magic-Link landet direkt auf /dashboard/coaching.',
+    preview: { firstName: 'Julia', coachName: 'Jacob', loginLink: 'https://world.herr.tech/auth/confirm?...' },
+    variables: [
+      { key: '{firstName}', description: 'Vorname des Kunden (optional)' },
+      { key: '{coachName}', description: 'Vorname des Coaches' },
+      { key: '{loginLink}', description: 'Magic-Login-Link mit Token (1× nutzbar)' },
+    ],
+    fields: [
+      { key: 'subject', label: 'Betreff', kind: 'text' },
+      { key: 'eyebrow', label: 'Kicker (kleine Headline oben)', kind: 'text' },
+      { key: 'headline_top', label: 'Hauptüberschrift — Zeile 1', kind: 'text' },
+      { key: 'headline_bottom', label: 'Hauptüberschrift — Zeile 2 (lila)', kind: 'text' },
+      { key: 'greeting', label: 'Begrüßung (mit {firstName} möglich)', kind: 'text' },
+      { key: 'intro_paragraph', label: 'Intro-Absatz', kind: 'textarea' },
+      { key: 'features_intro', label: 'Einleitung über die Liste', kind: 'text' },
+      { key: 'feature_1', label: 'Listenpunkt 1', kind: 'text' },
+      { key: 'feature_2', label: 'Listenpunkt 2', kind: 'text' },
+      { key: 'feature_3', label: 'Listenpunkt 3', kind: 'text' },
+      { key: 'feature_4', label: 'Listenpunkt 4', kind: 'text' },
+      { key: 'cta_label', label: 'Button-Text', kind: 'text' },
+      { key: 'cta_caption', label: 'Hinweis unter Button', kind: 'text' },
+      { key: 'skool_note', label: 'Hinweis zu Skool (Community bleibt dort)', kind: 'textarea' },
+      { key: 'signature', label: 'Signatur (mit {coachName} möglich)', kind: 'text' },
+      { key: 'footer_note', label: 'Hinweis am Ende (Link-Fallback)', kind: 'textarea' },
+    ],
+    defaults: {
+      subject: 'Dein Coaching-Zugang: alles an einem Ort',
+      data: {
+        eyebrow: 'Mein Coaching',
+        headline_top: 'Dein Plan, deine Calls,',
+        headline_bottom: 'deine nächsten Schritte.',
+        greeting: 'Hey {firstName}!',
+        intro_paragraph:
+          'Ab jetzt findest du alles aus deinem Coaching an einem Ort: keine PDF-Suche mehr, kein Scrollen im Chat. Ein Klick, und du siehst, wo du stehst.',
+        features_intro: 'Was dich dort erwartet:',
+        feature_1: '📍 <strong>Wo du stehst</strong> — dein Fortschritt und dein nächster Call auf einen Blick.',
+        feature_2: '✅ <strong>Deine Aufgaben</strong> — zum Abhaken, mit Anleitung und fertigem Prompt.',
+        feature_3: '🎥 <strong>Jede Session</strong> — Zusammenfassung, Aufzeichnung, Entscheidungen.',
+        feature_4: '🧰 <strong>Dein Material</strong> — Skills, Skripte und Dokumente, die wir für dich bauen.',
+        cta_label: 'Mein Coaching öffnen',
+        cta_caption: 'Ein Klick, und du bist drin. Kein Passwort, kein Formular.',
+        skool_note:
+          'Deine Community, die Tutorials und die Live-Calls bleiben wie gewohnt im KI Marketing Club auf Skool. Hier geht es nur um dein Coaching.',
+        signature: 'Bis gleich, {coachName}',
+        footer_note:
+          'Falls der Button nicht funktioniert, kopiere diesen Link: {loginLink} — Der Link ist zeitlich begrenzt gültig und kann nur einmal verwendet werden.',
+      },
+    },
+  },
+
+  // ───────────────────────────────────────────────────────────────────────────
+  {
+    key: 'coaching_blocker_alert',
+    label: 'Coaching: Kunde hängt (an Coach)',
+    group: 'coaching',
+    trigger:
+      'Geht an den Coach (Fallback: alle Admins), sobald ein Coaching-Kunde in "Mein Coaching" auf "Hier hänge ich" drückt. Enthält die Nachricht des Kunden und den Link ins Cockpit.',
+    preview: { clientName: 'Julia Neuen', message: 'Die Skill-Datei lässt sich nicht hochladen.' },
+    variables: [
+      { key: '{clientName}', description: 'Name des Kunden' },
+      { key: '{message}', description: 'Text, den der Kunde eingegeben hat' },
+    ],
+    fields: [
+      { key: 'subject', label: 'Betreff (mit {clientName})', kind: 'text' },
+      { key: 'heading', label: 'Hauptüberschrift', kind: 'text' },
+      { key: 'intro', label: 'Intro-Text (HTML erlaubt, mit {clientName} und {message})', kind: 'textarea' },
+      { key: 'cta_label', label: 'Button-Text', kind: 'text' },
+      { key: 'footer_note', label: 'Hinweis am Ende', kind: 'textarea' },
+    ],
+    defaults: {
+      subject: '🔴 {clientName} hängt: Blocker im Coaching',
+      data: {
+        heading: '{clientName} braucht dich',
+        intro:
+          '<strong>{clientName}</strong> hat gerade im Dashboard „Hier hänge ich“ gedrückt:<br><br><em>„{message}“</em><br><br>Je schneller die Antwort, desto kleiner das Loch. WhatsApp reicht.',
+        cta_label: 'Zum Cockpit',
+        footer_note: 'Diese Mail kommt automatisch aus der Herr Tech World, sobald ein Coaching-Kunde einen Blocker meldet.',
+      },
+    },
+  },
+
   // ───────────────────────────────────────────────────────────────────────────
   {
     key: 'admin_invite',

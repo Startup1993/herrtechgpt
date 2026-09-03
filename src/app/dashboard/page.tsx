@@ -6,6 +6,7 @@ import { getPermissionMatrix, getUpsellCopy } from '@/lib/permissions'
 import { getActivePlans, getMonetizationState } from '@/lib/monetization'
 import { getAppSettings } from '@/lib/app-settings'
 import { getAuthedUser, getProfileCached } from '@/lib/server-cache'
+import { getClientCoachingContext } from '@/lib/coaching/queries'
 import type { Plan } from '@/lib/types'
 import DashboardView from './DashboardView'
 
@@ -15,15 +16,19 @@ export default async function DashboardPage() {
 
   const supabase = await createClient()
 
-  const [profile, cookieStore, matrix, settings] = await Promise.all([
+  const [profile, cookieStore, matrix, settings, coaching] = await Promise.all([
     getProfileCached(),
     cookies(),
     getPermissionMatrix(supabase),
     getAppSettings(),
+    getClientCoachingContext(supabase, user.id),
   ])
 
   const viewAsRaw = cookieStore.get(VIEW_AS_COOKIE)?.value
   const access = computeEffectiveAccess(profile, viewAsRaw)
+
+  // Programm-Zugang: Coaching-Kunden landen direkt in ihrem Coaching.
+  if (coaching?.world_mode === 'program_only' && !access.isAdmin) redirect('/dashboard/coaching')
 
   const [upsell, plans, monetization] = await Promise.all([
     getUpsellCopy(supabase, access.tier),
