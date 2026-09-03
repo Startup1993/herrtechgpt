@@ -14,7 +14,8 @@ function avg(nums: number[]): number | null {
 }
 
 /** Reine Rechenfunktion (kein Render): Zahlen über alle Teilnahmen. */
-function buildStats(bundles: EnrollmentBundle[], now: number) {
+function buildStats(bundles: EnrollmentBundle[]) {
+  const now = Date.now()
   const active = bundles.filter((b) => b.enrollment.status === 'active')
   const completed = bundles.filter((b) => b.enrollment.status === 'completed')
 
@@ -55,7 +56,7 @@ function buildStats(bundles: EnrollmentBundle[], now: number) {
 /** Die Coaching-Database aus dem Konzept, nur echt. */
 export default async function CoachingStatsPage() {
   const bundles = await listEnrollmentsAdmin()
-  const { active, completed, allGoals, clientTasks, doneTasks, overdue, timeToDone, moods, nps, blockers, wins, logins, invited, byTrack, upsell } = buildStats(bundles, Date.now())
+  const { active, completed, allGoals, clientTasks, doneTasks, overdue, timeToDone, moods, nps, blockers, wins, logins, invited, byTrack, upsell } = buildStats(bundles)
 
   const tiles: Array<{ label: string; value: string; hint?: string }> = [
     { label: 'Teilnahmen', value: String(bundles.length), hint: `${active.length} aktiv · ${completed.length} abgeschlossen` },
