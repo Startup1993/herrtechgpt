@@ -18,12 +18,14 @@ export default function SettingsManager({ initial }: Props) {
     communityMonthlyCredits: 'idle',
     starterTestCredits: 'idle',
     communityUrl: 'idle',
+    coachingClientAccess: 'idle',
   })
   const [errors, setErrors] = useState<Record<keyof AppSettings, string | null>>({
     subscriptionsEnabled: null,
     communityMonthlyCredits: null,
     starterTestCredits: null,
     communityUrl: null,
+    coachingClientAccess: null,
   })
 
   async function save<K extends keyof AppSettings>(key: K, value: AppSettings[K]) {

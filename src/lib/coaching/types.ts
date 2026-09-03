@@ -100,6 +100,7 @@ export interface Task {
   completed_at: string | null
   proof_url: string | null
   sort_order: number
+  created_at: string
 }
 
 export interface Goal {
