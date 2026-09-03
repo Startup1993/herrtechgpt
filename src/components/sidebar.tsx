@@ -43,7 +43,9 @@ import {
   Mail,
   SlidersHorizontal,
 } from 'lucide-react'
+import { Target } from 'lucide-react'
 import { resolveToolboxIcon, type ToolboxTool } from '@/lib/toolbox-icons'
+import type { CoachingNavContext } from './app-shell'
 
 // ═══════════════════════════════════════════════════════════
 // TYPES
@@ -64,6 +66,8 @@ interface SidebarProps {
   helpUnreadCount?: number
   /** Beeinflusst nur das Profil-Menü-Label ("Mitgliedschaft & Credits" vs "Abrechnung & Abo"). */
   subscriptionsEnabled?: boolean
+  /** Coaching-Teilnahme: zeigt "Mein Coaching" und reduziert die Navigation je Programm-Zugang. */
+  coaching?: CoachingNavContext | null
 }
 
 // ═══════════════════════════════════════════════════════════
@@ -376,6 +380,7 @@ function MainSidebar({
   helpUnreadCount,
   pathname,
   onDrillDown,
+  coaching,
 }: {
   isAdmin?: boolean
   realIsAdmin?: boolean
@@ -384,7 +389,17 @@ function MainSidebar({
   helpUnreadCount?: number
   pathname: string
   onDrillDown: (mode: SidebarMode) => void
+  coaching?: CoachingNavContext | null
 }) {
+  // Programm-Zugang: Coaching-Kunden sehen je world_mode weniger. Das Flag
+  // gewinnt gegen das Tier, damit der Skool-Sync nichts ungewollt aufreißt.
+  // Admins sehen immer alles.
+  const hasCoaching = !!coaching
+  const programOnly = hasCoaching && !isAdmin && coaching!.worldMode === 'program_only'
+  const programPlusToolbox = hasCoaching && !isAdmin && coaching!.worldMode === 'program_plus_toolbox'
+  const hideClassroom = programOnly || programPlusToolbox
+  const hideChat = programOnly || programPlusToolbox
+  const hideToolbox = programOnly
   // Sidebar-Lock-Logik (NEU): unterscheidet drei Zust\u00e4nde.
   //   - 'upgrade'     \u2192 User kann reinklicken zur Upgrade-/Community-Page
   //   - 'coming_soon' \u2192 Eintrag NICHT klickbar (Soon-Badge statt Lock)
@@ -417,39 +432,55 @@ function MainSidebar({
       <SectionHeader label="Navigation" />
 
       <div className="space-y-1">
-        <NavItem
-          href="/dashboard"
-          icon={LayoutDashboard}
-          label="Dashboard"
-          isActive={pathname === '/dashboard'}
-        />
-        <NavItem
-          icon={GraduationCap}
-          label="Classroom"
-          isActive={pathname.startsWith('/dashboard/classroom')}
-          locked={classroomLocked}
-          comingSoon={classroomComingSoon}
-          onClick={() => (classroomLocked || classroomComingSoon) ? undefined : onDrillDown('classroom')}
-          href={classroomLocked ? '/dashboard/upgrade?feature=classroom' : undefined}
-        />
-        <NavItem
-          icon={Bot}
-          label="Herr Tech GPT"
-          isActive={pathname.startsWith('/dashboard/herr-tech-gpt')}
-          locked={chatLocked}
-          comingSoon={chatComingSoon}
-          onClick={() => (chatLocked || chatComingSoon) ? undefined : onDrillDown('chat')}
-          href={chatLocked ? '/dashboard/upgrade?feature=chat' : undefined}
-        />
-        <NavItem
-          icon={Wrench}
-          label="KI Toolbox"
-          isActive={pathname.startsWith('/dashboard/ki-toolbox')}
-          locked={toolboxLocked}
-          comingSoon={toolboxComingSoon}
-          onClick={() => (toolboxLocked || toolboxComingSoon) ? undefined : onDrillDown('toolbox')}
-          href={toolboxLocked ? '/dashboard/upgrade?feature=toolbox' : undefined}
-        />
+        {hasCoaching && (
+          <NavItem
+            href="/dashboard/coaching"
+            icon={Target}
+            label="Mein Coaching"
+            isActive={pathname.startsWith('/dashboard/coaching')}
+          />
+        )}
+        {!programOnly && (
+          <NavItem
+            href="/dashboard"
+            icon={LayoutDashboard}
+            label="Dashboard"
+            isActive={pathname === '/dashboard'}
+          />
+        )}
+        {!hideClassroom && (
+          <NavItem
+            icon={GraduationCap}
+            label="Classroom"
+            isActive={pathname.startsWith('/dashboard/classroom')}
+            locked={classroomLocked}
+            comingSoon={classroomComingSoon}
+            onClick={() => (classroomLocked || classroomComingSoon) ? undefined : onDrillDown('classroom')}
+            href={classroomLocked ? '/dashboard/upgrade?feature=classroom' : undefined}
+          />
+        )}
+        {!hideChat && (
+          <NavItem
+            icon={Bot}
+            label="Herr Tech GPT"
+            isActive={pathname.startsWith('/dashboard/herr-tech-gpt')}
+            locked={chatLocked}
+            comingSoon={chatComingSoon}
+            onClick={() => (chatLocked || chatComingSoon) ? undefined : onDrillDown('chat')}
+            href={chatLocked ? '/dashboard/upgrade?feature=chat' : undefined}
+          />
+        )}
+        {!hideToolbox && (
+          <NavItem
+            icon={Wrench}
+            label="KI Toolbox"
+            isActive={pathname.startsWith('/dashboard/ki-toolbox')}
+            locked={toolboxLocked}
+            comingSoon={toolboxComingSoon}
+            onClick={() => (toolboxLocked || toolboxComingSoon) ? undefined : onDrillDown('toolbox')}
+            href={toolboxLocked ? '/dashboard/upgrade?feature=toolbox' : undefined}
+          />
+        )}
         <NavItem
           icon={MessageCircleQuestion}
           label="Hilfe & Kontakt"
@@ -1051,6 +1082,17 @@ function AdminSidebar({
           />
         </div>
 
+        <SectionHeader label="Coaching" />
+        <div className="space-y-1">
+          <NavItem
+            href="/admin/coaching"
+            icon={Target}
+            label="Coaching-Cockpit"
+            description="Kunden, Heute-Liste, Verlauf"
+            isActive={pathname.startsWith('/admin/coaching')}
+          />
+        </div>
+
         <SectionHeader label="Inhalte" />
         <div className="space-y-1">
           <NavItem
@@ -1380,7 +1422,7 @@ function ToolboxSidebar({
 // MAIN SIDEBAR EXPORT
 // ═══════════════════════════════════════════════════════════
 
-export function Sidebar({ conversations, userEmail, userName, isAdmin, realIsAdmin, accessTier, viewAs, states, newTicketCount, helpUnreadCount, subscriptionsEnabled = false }: SidebarProps) {
+export function Sidebar({ conversations, userEmail, userName, isAdmin, realIsAdmin, accessTier, viewAs, states, newTicketCount, helpUnreadCount, subscriptionsEnabled = false, coaching = null }: SidebarProps) {
   const pathname = usePathname()
   const router = useRouter()
   const { theme, toggleTheme } = useTheme()
@@ -1463,6 +1505,7 @@ export function Sidebar({ conversations, userEmail, userName, isAdmin, realIsAdm
             helpUnreadCount={helpUnreadCount}
             pathname={pathname}
             onDrillDown={handleDrillDown}
+            coaching={coaching}
           />
         </div>
 

@@ -6,6 +6,7 @@ import { computeEffectiveAccess, VIEW_AS_COOKIE } from '@/lib/access'
 import { getPermissionMatrix } from '@/lib/permissions'
 import { getAppSettings } from '@/lib/app-settings'
 import { getAuthedUser, getProfileCached } from '@/lib/server-cache'
+import { getClientCoachingContext } from '@/lib/coaching/queries'
 
 // Layout darf nicht statisch gecached werden — sonst sehen User nach
 // Berechtigungs-/Settings-Änderungen den alten Stand bis Hard-Reload.
@@ -23,7 +24,7 @@ export default async function DashboardLayout({
 
   const supabase = await createClient()
 
-  const [profile, { data: conversations }, cookieStore, matrix, { count: helpUnreadCount }, settings] = await Promise.all([
+  const [profile, { data: conversations }, cookieStore, matrix, { count: helpUnreadCount }, settings, coaching] = await Promise.all([
     getProfileCached(),
     supabase
       .from('conversations')
@@ -40,6 +41,7 @@ export default async function DashboardLayout({
       .eq('agent_id', 'help')
       .eq('user_has_unread', true),
     getAppSettings(),
+    getClientCoachingContext(supabase, user.id),
   ])
 
   const viewAsRaw = cookieStore.get(VIEW_AS_COOKIE)?.value
@@ -77,6 +79,7 @@ export default async function DashboardLayout({
       newTicketCount={newTicketCount}
       helpUnreadCount={helpUnreadCount ?? 0}
       subscriptionsEnabled={settings.subscriptionsEnabled}
+      coaching={coaching ? { worldMode: coaching.world_mode, status: coaching.status } : null}
     >
       {children}
     </AppShell>

@@ -9,6 +9,12 @@ import { CreditBadge } from './credit-badge'
 import type { Conversation } from '@/lib/types'
 import type { AccessTier, ViewAsMode } from '@/lib/access'
 import type { FeatureKey, FeatureState } from '@/lib/permissions'
+import type { WorldMode } from '@/lib/coaching/types'
+
+export interface CoachingNavContext {
+  worldMode: WorldMode
+  status: string
+}
 
 interface AppShellProps {
   conversations: Conversation[]
@@ -23,10 +29,12 @@ interface AppShellProps {
   helpUnreadCount?: number
   /** Master-Switch — beeinflusst Profil-Menü-Label "Abrechnung" vs "Mitgliedschaft". */
   subscriptionsEnabled?: boolean
+  /** Coaching-Teilnahme des Users: steuert "Mein Coaching" und den Programm-Zugang in der Sidebar. */
+  coaching?: CoachingNavContext | null
   children: React.ReactNode
 }
 
-export function AppShell({ conversations, userEmail, userName, isAdmin, realIsAdmin, accessTier, viewAs, states, newTicketCount, helpUnreadCount, subscriptionsEnabled, children }: AppShellProps) {
+export function AppShell({ conversations, userEmail, userName, isAdmin, realIsAdmin, accessTier, viewAs, states, newTicketCount, helpUnreadCount, subscriptionsEnabled, coaching, children }: AppShellProps) {
   const [sidebarOpen, setSidebarOpen] = useState(false)       // mobile overlay
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false) // desktop collapse
   const pathname = usePathname()
@@ -67,6 +75,7 @@ export function AppShell({ conversations, userEmail, userName, isAdmin, realIsAd
           newTicketCount={newTicketCount}
           helpUnreadCount={helpUnreadCount}
           subscriptionsEnabled={subscriptionsEnabled}
+          coaching={coaching}
         />
       </div>
 

@@ -6,6 +6,7 @@ import {
   renderInviteEmail,
   renderNewsletterInviteEmail,
   renderSkoolInviteEmail,
+  renderCoachingInviteEmail,
 } from '@/lib/email-template'
 import { applyVariables } from '@/lib/email-templates/registry'
 import { PRODUCTION_URL } from '@/lib/urls'
@@ -42,6 +43,27 @@ export async function POST(request: Request) {
   let renderedSubject = subject ?? def.defaults.subject
 
   switch (key) {
+    case 'coaching_invite': {
+      const loginLink = String(previewVars.loginLink ?? `${PRODUCTION_URL}/auth/confirm?token_hash=demo`)
+      const firstName = previewVars.firstName ? String(previewVars.firstName) : null
+      const coachName = previewVars.coachName ? String(previewVars.coachName) : null
+      html = renderCoachingInviteEmail({ loginLink, firstName, coachName, content: merged })
+      renderedSubject = applyVariables(renderedSubject, { loginLink, firstName: firstName ?? '', coachName: coachName ?? '' })
+      break
+    }
+    case 'coaching_blocker_alert': {
+      const clientName = String(previewVars.clientName ?? 'Julia Neuen')
+      const message = String(previewVars.message ?? 'Die Skill-Datei lässt sich nicht hochladen.')
+      const vars = { clientName, message }
+      html = renderEmail({
+        heading: applyVariables(merged.heading ?? '', vars),
+        intro: applyVariables(merged.intro ?? '', vars),
+        cta: { label: applyVariables(merged.cta_label ?? '', vars), href: `${PRODUCTION_URL}/admin/coaching` },
+        footerNote: applyVariables(merged.footer_note ?? '', vars),
+      })
+      renderedSubject = applyVariables(renderedSubject, vars)
+      break
+    }
     case 'admin_invite': {
       const loginLink = String(previewVars.loginLink ?? `${PRODUCTION_URL}/auth/callback?token_hash=demo`)
       const firstName = previewVars.firstName ? String(previewVars.firstName) : null
