@@ -42,12 +42,25 @@ async function resolveRedirectAfterAuth(
 ): Promise<string> {
   const isDefaultNext = explicitNext === '/welcome' || explicitNext === '/dashboard'
 
-  // Expliziter Deep-Link (nicht /welcome oder /dashboard) hat Vorrang
+  // Expliziter Deep-Link (nicht /welcome oder /dashboard) hat Vorrang.
+  // Coaching-Einladungen schicken /dashboard/coaching mit, das greift hier.
   if (!isDefaultNext) return explicitNext
 
   try {
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) return explicitNext
+
+    // Coaching-Kunden landen immer direkt in ihrem Coaching, nie auf dem
+    // Welcome-Screen der World (der bewirbt Toolbox, GPT und Classroom,
+    // die ein Programm-Kunde nicht sieht).
+    const { data: enrollment } = await supabase
+      .from('coaching_enrollments')
+      .select('id')
+      .eq('profile_id', user.id)
+      .in('status', ['active', 'paused'])
+      .limit(1)
+      .maybeSingle()
+    if (enrollment) return '/dashboard/coaching'
 
     const { data: profile } = await supabase
       .from('profiles')

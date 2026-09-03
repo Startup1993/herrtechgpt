@@ -13,11 +13,25 @@ export default async function WelcomePage() {
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) redirect('/login')
 
-  const { data: profile } = await supabase
-    .from('profiles')
-    .select('welcomed_at, access_tier')
-    .eq('id', user.id)
-    .single()
+  const [{ data: profile }, { data: enrollment }] = await Promise.all([
+    supabase
+      .from('profiles')
+      .select('welcomed_at, access_tier')
+      .eq('id', user.id)
+      .single(),
+    supabase
+      .from('coaching_enrollments')
+      .select('id')
+      .eq('profile_id', user.id)
+      .in('status', ['active', 'paused'])
+      .limit(1)
+      .maybeSingle(),
+  ])
+
+  // Coaching-Kunden sehen den Welcome-Screen nie, sie landen im Coaching.
+  if (enrollment) {
+    redirect('/dashboard/coaching')
+  }
 
   // Wer schon durch den Welcome-Screen ist, skippt ihn beim Re-Visit.
   if (profile?.welcomed_at) {
