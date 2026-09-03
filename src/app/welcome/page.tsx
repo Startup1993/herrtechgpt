@@ -1,6 +1,7 @@
 import { createClient } from '@/lib/supabase/server'
 import { redirect } from 'next/navigation'
 import { WelcomeScreen } from './WelcomeScreen'
+import { getAppSettings } from '@/lib/app-settings'
 
 export const dynamic = 'force-dynamic'
 
@@ -30,7 +31,8 @@ export default async function WelcomePage() {
 
   // Coaching-Kunden sehen den Welcome-Screen nie, sie landen im Coaching.
   if (enrollment) {
-    redirect('/dashboard/coaching')
+    const settings = await getAppSettings()
+    if (settings.coachingClientAccess) redirect('/dashboard/coaching')
   }
 
   // Wer schon durch den Welcome-Screen ist, skippt ihn beim Re-Visit.

@@ -28,6 +28,8 @@ export interface AppSettings {
   starterTestCredits: number
   /** URL der Community (heute Skool) — wird auf allen "Community beitreten"-CTAs verlinkt. */
   communityUrl: string
+  /** Coaching-Cockpit: dürfen Kunden ihr Dashboard sehen und Kunden-Mails empfangen? Aus = nur intern sichtbar. */
+  coachingClientAccess: boolean
 }
 
 export const APP_SETTINGS_DEFAULTS: AppSettings = {
@@ -35,6 +37,7 @@ export const APP_SETTINGS_DEFAULTS: AppSettings = {
   communityMonthlyCredits: 200,
   starterTestCredits: 0,
   communityUrl: 'https://www.skool.com/herr-tech',
+  coachingClientAccess: false,
 }
 
 // Mapping: TS-Camel → DB-Snake-Key
@@ -43,6 +46,7 @@ export const SETTING_KEYS = {
   communityMonthlyCredits: 'community_monthly_credits',
   starterTestCredits: 'starter_test_credits',
   communityUrl: 'community_url',
+  coachingClientAccess: 'coaching_client_access',
 } as const satisfies Record<keyof AppSettings, string>
 
 // Reverse-Lookup für API-Validierung
@@ -94,6 +98,8 @@ export async function getAppSettings(): Promise<AppSettings> {
         result.communityMonthlyCredits = Math.max(0, Math.floor(value))
       } else if (camelKey === 'starterTestCredits' && typeof value === 'number') {
         result.starterTestCredits = Math.max(0, Math.floor(value))
+      } else if (camelKey === 'coachingClientAccess' && typeof value === 'boolean') {
+        result.coachingClientAccess = value
       } else if (camelKey === 'communityUrl' && typeof value === 'string') {
         // app_settings.community_url als Fallback. Wird gleich von der
         // tier_upsell_copy-Quelle überschrieben falls vorhanden.

@@ -11,6 +11,7 @@ const EDITABLE = [
   'client_name', 'client_email', 'company', 'coach_name', 'coach_profile_id', 'status', 'world_mode',
   'starts_at', 'ends_at', 'track', 'persona', 'north_star', 'success_quote', 'intro_text', 'nps',
   'upsell_status', 'case_study', 'notion_url', 'drive_url', 'whatsapp_url', 'community_url', 'program_key',
+  'recommendation_title', 'recommendation_text', 'recommendation_url', 'recommendation_cta',
 ] as const
 
 function invalidate(id?: string) {
