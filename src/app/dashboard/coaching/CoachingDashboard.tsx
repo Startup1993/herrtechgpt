@@ -8,8 +8,8 @@ import {
   Play, Sparkles, Video, Download,
 } from 'lucide-react'
 import type { EnrollmentBundle } from '@/lib/coaching/queries'
-import type { Goal, Material, Milestone, Task } from '@/lib/coaching/types'
-import { GOAL_STATUS_META, MATERIAL_KIND_META } from '@/lib/coaching/types'
+import type { CoachingEvent, Goal, Material, Milestone, Task } from '@/lib/coaching/types'
+import { GOAL_STATUS_META, MATERIAL_KIND_META, MESSAGE_KINDS } from '@/lib/coaching/types'
 import {
   computeProgress, derivePhase, fmtDate, lastDoneMilestone, nextMilestone, relativeDays, sortMilestones,
 } from '@/lib/coaching/derive'
@@ -171,7 +171,13 @@ export function CoachingDashboard({ bundle, firstName, communityUrl, preview = f
                 </section>
               )}
 
-              <VoiceSection enrollmentId={enrollment.id} disabled={preview} coachName={enrollment.coach_name} />
+              <VoiceSection
+                enrollmentId={enrollment.id}
+                disabled={preview}
+                coachName={enrollment.coach_name}
+                messages={bundle.events.filter((e) => e.client_visible && MESSAGE_KINDS.includes(e.kind))}
+                seenBefore={lastSeen}
+              />
             </div>
 
             {/* Rechte Spalte */}
@@ -589,12 +595,23 @@ function MaterialList({ materials, disabled }: { materials: Material[]; disabled
   )
 }
 
-function VoiceSection({ enrollmentId, disabled, coachName }: { enrollmentId: string; disabled: boolean; coachName: string | null }) {
+function VoiceSection({ enrollmentId, disabled, coachName, messages, seenBefore }: {
+  enrollmentId: string
+  disabled: boolean
+  coachName: string | null
+  messages: CoachingEvent[]
+  seenBefore: string | null
+}) {
   const [win, setWin] = useState('')
   const [blocker, setBlocker] = useState('')
   const [sent, setSent] = useState<'win' | 'blocker' | null>(null)
   const [busy, setBusy] = useState<'win' | 'blocker' | null>(null)
+  const [showAll, setShowAll] = useState(false)
   const router = useRouter()
+  const coach = coachName ?? 'Dein Coach'
+  const seenAt = seenBefore ? new Date(seenBefore).getTime() : 0
+  const newReplies = messages.filter((m) => m.kind === 'coach_reply' && new Date(m.created_at).getTime() > seenAt).length
+  const visible = showAll ? messages : messages.slice(0, 6)
 
   async function send(kind: 'client_win' | 'client_blocker') {
     const body = kind === 'client_win' ? win : blocker
@@ -643,6 +660,41 @@ function VoiceSection({ enrollmentId, disabled, coachName }: { enrollmentId: str
             </button>
           </div>
         </div>
+      </div>
+
+      {/* Nachrichten-Verlauf: was der Kunde geschickt hat, was der Coach geantwortet hat */}
+      <div className="mt-5 pt-4 border-t border-border">
+        <div className="flex items-baseline justify-between gap-3 mb-3">
+          <h3 className="text-[11px] font-mono uppercase tracking-[0.14em] text-muted font-semibold">Nachrichten mit {coach.split(' ')[0]}</h3>
+          {newReplies > 0 && <span className="rounded-full bg-primary text-white text-[11px] font-bold px-2.5 py-1">{newReplies} neue Antwort{newReplies > 1 ? 'en' : ''}</span>}
+        </div>
+        {messages.length === 0 ? (
+          <p className="text-sm text-muted">Noch keine Nachrichten. Was du oben einträgst, erscheint hier, genauso wie die Antworten von {coach.split(' ')[0]}.</p>
+        ) : (
+          <div className="grid gap-2.5">
+            {visible.map((m) => {
+              const fromCoach = m.kind === 'coach_reply'
+              const isNew = fromCoach && new Date(m.created_at).getTime() > seenAt
+              return (
+                <div key={m.id} className={`flex ${fromCoach ? 'justify-start' : 'justify-end'}`}>
+                  <div className={`max-w-[85%] rounded-[var(--radius-lg)] px-4 py-3 border ${
+                    fromCoach ? `bg-primary/10 ${isNew ? 'border-primary' : 'border-primary/30'}` : m.kind === 'client_blocker' ? 'bg-background border-danger/40' : 'bg-background border-success/40'}`}>
+                    <div className="flex flex-wrap items-center gap-2 text-[11px] font-mono text-muted mb-1">
+                      <span className={`font-semibold ${fromCoach ? 'text-primary' : 'text-foreground'}`}>{fromCoach ? (m.author_name ?? coach) : 'Du'}</span>
+                      <span>{fmtDate(m.created_at, 'datetime')}</span>
+                      {!fromCoach && <span>{m.kind === 'client_blocker' ? '· Hier hänge ich' : '· Das läuft'}</span>}
+                      {isNew && <span className="rounded-full bg-primary text-white px-1.5 py-0.5 text-[10px] font-bold">neu</span>}
+                    </div>
+                    <div className="text-sm text-foreground whitespace-pre-wrap">{m.body}</div>
+                  </div>
+                </div>
+              )
+            })}
+            {messages.length > 6 && (
+              <button type="button" onClick={() => setShowAll((v) => !v)} className="text-xs font-semibold text-primary hover:underline text-left">{showAll ? 'Weniger anzeigen' : `Alle ${messages.length} Nachrichten anzeigen`}</button>
+            )}
+          </div>
+        )}
       </div>
     </section>
   )

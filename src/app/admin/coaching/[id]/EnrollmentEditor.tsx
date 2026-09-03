@@ -615,6 +615,7 @@ function MaterialForm({ enrollment, material, milestones, onSave }: { enrollment
 // ─── Verlauf ──────────────────────────────────────────────────────────────────
 
 const QUICK_KINDS: Array<{ kind: EventKind; label: string }> = [
+  { kind: 'coach_reply', label: 'Antwort an Kunden' },
   { kind: 'whatsapp_in', label: 'WhatsApp vom Kunden' },
   { kind: 'whatsapp_out', label: 'WhatsApp an Kunden' },
   { kind: 'note', label: 'Notiz' },
@@ -622,62 +623,142 @@ const QUICK_KINDS: Array<{ kind: EventKind; label: string }> = [
   { kind: 'mood', label: 'Nur Stimmung' },
 ]
 
+const REPLYABLE: EventKind[] = ['client_blocker', 'client_win', 'whatsapp_in']
+
+type EventPostResult = CoachingEvent & { mail_sent?: boolean; mail_error?: string | null; wa_url?: string | null }
+
 function HistorySection({ enrollment, events }: { enrollment: Enrollment; events: CoachingEvent[] }) {
   const router = useRouter()
-  const [kind, setKind] = useState<EventKind>('whatsapp_in')
+  const [kind, setKind] = useState<EventKind>('coach_reply')
   const [text, setText] = useState('')
   const [mood, setMood] = useState<number | ''>('')
   const [clientVisible, setClientVisible] = useState(false)
+  const [notify, setNotify] = useState(true)
   const [saving, setSaving] = useState(false)
+  const [replyTo, setReplyTo] = useState<CoachingEvent | null>(null)
+  const [replyText, setReplyText] = useState('')
+  const [replyNotify, setReplyNotify] = useState(true)
+  const [lastResult, setLastResult] = useState<{ mailSent: boolean; mailError: string | null; waUrl: string | null } | null>(null)
+  const canWhatsApp = !!enrollment.whatsapp_url
+  const canMail = !!enrollment.client_email
+
+  async function post(payload: Record<string, unknown>) {
+    const res = await api<EventPostResult>('/api/admin/coaching/events', 'POST', { enrollment_id: enrollment.id, ...payload })
+    if (payload.kind === 'coach_reply') {
+      setLastResult({ mailSent: !!res.mail_sent, mailError: res.mail_error ?? null, waUrl: res.wa_url ?? null })
+    }
+    router.refresh()
+  }
 
   async function submit(e: React.FormEvent) {
     e.preventDefault()
     if (!text.trim() && mood === '') return
     setSaving(true)
     try {
-      await api('/api/admin/coaching/events', 'POST', { enrollment_id: enrollment.id, kind, body: text, mood_score: mood === '' ? null : mood, client_visible: clientVisible })
-      setText(''); setMood(''); router.refresh()
+      await post({ kind, body: text, mood_score: mood === '' ? null : mood, client_visible: clientVisible, notify })
+      setText(''); setMood('')
     } catch (err) { alert((err as Error).message) }
     setSaving(false)
   }
+
+  async function submitReply(e: React.FormEvent) {
+    e.preventDefault()
+    if (!replyTo || !replyText.trim()) return
+    setSaving(true)
+    try {
+      await post({ kind: 'coach_reply', body: replyText, reply_to: replyTo.id, notify: replyNotify })
+      setReplyTo(null); setReplyText('')
+    } catch (err) { alert((err as Error).message) }
+    setSaving(false)
+  }
+
   async function remove(ev: CoachingEvent) { if (!confirm('Eintrag löschen?')) return; await api(`/api/admin/coaching/events?id=${ev.id}`, 'DELETE'); router.refresh() }
+
+  const replyPreview = (ev: CoachingEvent) => (ev.payload?.reply_to ? events.find((x) => x.id === ev.payload.reply_to) : null)
 
   return (
     <div className="space-y-5">
+      {lastResult && (
+        <div className="rounded-[var(--radius-lg)] border border-primary/30 bg-primary/10 px-4 py-3 text-sm text-foreground flex flex-wrap items-center justify-between gap-3">
+          <span>
+            Antwort ist im Dashboard des Kunden.
+            {lastResult.mailSent ? ' Mail ist raus.' : lastResult.mailError ? ` Mail fehlgeschlagen: ${lastResult.mailError}` : canMail ? ' Ohne Mail.' : ' Keine E-Mail hinterlegt, deshalb keine Mail.'}
+          </span>
+          <div className="flex gap-2">
+            {lastResult.waUrl && <a href={lastResult.waUrl} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-surface px-3 py-1.5 text-xs font-semibold text-foreground hover:bg-surface-hover">Auch per WhatsApp schicken</a>}
+            <button type="button" onClick={() => setLastResult(null)} className="p-1 text-muted hover:text-foreground" aria-label="Schließen"><X size={14} /></button>
+          </div>
+        </div>
+      )}
+
       <form onSubmit={submit} className="card-static p-5 space-y-3">
         <h3 className="text-sm font-semibold text-foreground">Quick-Log</h3>
-        <p className="text-xs text-muted">WhatsApp-Nachricht einfügen, Notiz, Planänderung. Dazu optional die Stimmung 1 bis 5. Stimmung sieht der Kunde nie.</p>
+        <p className="text-xs text-muted">
+          „Antwort an Kunden“ erscheint im Dashboard unter Nachrichten und geht als Mail raus. Alles andere ist intern, außer du hakst „Kunde darf das sehen“ an. Stimmung sieht der Kunde nie.
+        </p>
         <div className="flex flex-wrap gap-1.5">
           {QUICK_KINDS.map((q) => <button key={q.kind} type="button" onClick={() => setKind(q.kind)} className={`rounded-full border px-3 py-1 text-xs ${kind === q.kind ? 'border-primary bg-primary/10 text-primary font-semibold' : 'border-border text-muted hover:text-foreground'}`}>{q.label}</button>)}
         </div>
-        {kind !== 'mood' && <textarea className={input} rows={3} value={text} onChange={(e) => setText(e.target.value)} placeholder={kind === 'whatsapp_in' ? 'Nachricht des Kunden hier einfügen …' : kind === 'whatsapp_out' ? 'Was du geschrieben hast …' : 'Notiz …'} />}
+        {kind !== 'mood' && <textarea className={input} rows={3} value={text} onChange={(e) => setText(e.target.value)} placeholder={kind === 'coach_reply' ? `Deine Nachricht an ${enrollment.client_name.split(' ')[0]} …` : kind === 'whatsapp_in' ? 'Nachricht des Kunden hier einfügen …' : kind === 'whatsapp_out' ? 'Was du geschrieben hast …' : 'Notiz …'} />}
         <div className="flex flex-wrap items-center justify-between gap-3">
-          <div className="flex items-center gap-3">
-            <span className="text-xs text-muted">Stimmung</span>
-            <div className="flex gap-1">{[1, 2, 3, 4, 5].map((n) => <button key={n} type="button" onClick={() => setMood(mood === n ? '' : n)} className={`h-7 w-7 rounded-md text-xs font-mono border ${mood === n ? (n <= 2 ? 'bg-danger text-white border-danger' : n === 3 ? 'bg-warning text-black border-warning' : 'bg-success text-black border-success') : 'border-border text-muted hover:text-foreground'}`}>{n}</button>)}</div>
-            {kind !== 'mood' && <label className="text-xs text-muted flex items-center gap-1.5 ml-2"><input type="checkbox" checked={clientVisible} onChange={(e) => setClientVisible(e.target.checked)} /> Kunde darf das sehen</label>}
+          <div className="flex flex-wrap items-center gap-3">
+            {kind !== 'coach_reply' && (
+              <>
+                <span className="text-xs text-muted">Stimmung</span>
+                <div className="flex gap-1">{[1, 2, 3, 4, 5].map((n) => <button key={n} type="button" onClick={() => setMood(mood === n ? '' : n)} className={`h-7 w-7 rounded-md text-xs font-mono border ${mood === n ? (n <= 2 ? 'bg-danger text-white border-danger' : n === 3 ? 'bg-warning text-black border-warning' : 'bg-success text-black border-success') : 'border-border text-muted hover:text-foreground'}`}>{n}</button>)}</div>
+              </>
+            )}
+            {kind !== 'mood' && kind !== 'coach_reply' && <label className="text-xs text-muted flex items-center gap-1.5"><input type="checkbox" checked={clientVisible} onChange={(e) => setClientVisible(e.target.checked)} /> Kunde darf das sehen</label>}
+            {kind === 'coach_reply' && <label className="text-xs text-muted flex items-center gap-1.5"><input type="checkbox" checked={notify} disabled={!canMail} onChange={(e) => setNotify(e.target.checked)} /> per Mail benachrichtigen{!canMail ? ' (keine E-Mail hinterlegt)' : ''}</label>}
+            {kind === 'coach_reply' && canWhatsApp && <span className="text-xs text-muted">WhatsApp-Link gibt es nach dem Senden</span>}
           </div>
-          <button type="submit" disabled={saving || (!text.trim() && mood === '')} className="btn-primary !py-2 !px-3.5 !text-sm">{saving ? <Loader2 size={15} className="animate-spin" /> : <Check size={15} />} Eintragen</button>
+          <button type="submit" disabled={saving || (!text.trim() && mood === '')} className="btn-primary !py-2 !px-3.5 !text-sm">{saving ? <Loader2 size={15} className="animate-spin" /> : <Check size={15} />} {kind === 'coach_reply' ? 'Antwort senden' : 'Eintragen'}</button>
         </div>
       </form>
 
       <div className="card-static divide-y divide-border">
         {events.length === 0 && <div className="p-8 text-center text-sm text-muted">Noch kein Verlauf.</div>}
-        {events.map((ev) => (
-          <div key={ev.id} className="p-4 flex items-start gap-3">
-            <div className="w-[130px] shrink-0 text-[11px] font-mono text-muted">{fmtDate(ev.created_at, 'datetime')}</div>
-            <div className="min-w-0 flex-1">
-              <div className="flex flex-wrap items-center gap-2 text-xs">
-                <span className={`rounded-full px-2 py-0.5 font-mono ${ev.kind === 'client_blocker' ? 'bg-red-100 text-red-700 dark:bg-red-950/30 dark:text-red-400' : ev.kind === 'client_win' ? 'bg-green-100 text-green-700 dark:bg-green-950/30 dark:text-green-400' : ev.kind.startsWith('whatsapp') ? 'bg-primary/10 text-primary' : 'bg-surface-secondary text-muted'}`}>{EVENT_KIND_META[ev.kind]?.label ?? ev.kind}</span>
-                {ev.author_name && <span className="text-muted">{ev.author_name}</span>}
-                {ev.mood_score != null && <span className="font-mono text-muted">Stimmung {ev.mood_score}/5</span>}
-                {ev.client_visible && <span className="text-muted">· sichtbar für Kunde</span>}
+        {events.map((ev) => {
+          const orig = ev.kind === 'coach_reply' ? replyPreview(ev) : null
+          const badge =
+            ev.kind === 'client_blocker' ? 'bg-red-100 text-red-700 dark:bg-red-950/30 dark:text-red-400'
+              : ev.kind === 'client_win' ? 'bg-green-100 text-green-700 dark:bg-green-950/30 dark:text-green-400'
+                : ev.kind === 'coach_reply' ? 'bg-primary text-white'
+                  : ev.kind.startsWith('whatsapp') ? 'bg-primary/10 text-primary' : 'bg-surface-secondary text-muted'
+          return (
+            <div key={ev.id} className="p-4">
+              <div className="flex items-start gap-3">
+                <div className="w-[130px] shrink-0 text-[11px] font-mono text-muted">{fmtDate(ev.created_at, 'datetime')}</div>
+                <div className="min-w-0 flex-1">
+                  <div className="flex flex-wrap items-center gap-2 text-xs">
+                    <span className={`rounded-full px-2 py-0.5 font-mono ${badge}`}>{EVENT_KIND_META[ev.kind]?.label ?? ev.kind}</span>
+                    {ev.author_name && <span className="text-muted">{ev.author_name}</span>}
+                    {ev.mood_score != null && <span className="font-mono text-muted">Stimmung {ev.mood_score}/5</span>}
+                    {ev.client_visible && ev.kind !== 'coach_reply' && <span className="text-muted">· sichtbar für Kunde</span>}
+                  </div>
+                  {orig?.body && <div className="mt-1.5 text-xs text-muted border-l-2 border-border pl-2 truncate">Antwort auf: „{orig.body}“</div>}
+                  {ev.body && <div className="text-sm text-foreground mt-1 whitespace-pre-wrap">{ev.body}</div>}
+                  {REPLYABLE.includes(ev.kind) && replyTo?.id !== ev.id && (
+                    <button type="button" onClick={() => { setReplyTo(ev); setReplyText('') }} className="mt-2 inline-flex items-center gap-1.5 rounded-lg bg-primary px-3 py-1.5 text-xs font-bold text-white hover:bg-primary-hover">Antworten</button>
+                  )}
+                  {replyTo?.id === ev.id && (
+                    <form onSubmit={submitReply} className="mt-3 rounded-[var(--radius-lg)] border border-primary/40 bg-background p-3 space-y-2">
+                      <textarea className={input} rows={3} autoFocus value={replyText} onChange={(e) => setReplyText(e.target.value)} placeholder={`Antwort an ${enrollment.client_name.split(' ')[0]} …`} />
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <label className="text-xs text-muted flex items-center gap-1.5"><input type="checkbox" checked={replyNotify} disabled={!canMail} onChange={(e) => setReplyNotify(e.target.checked)} /> per Mail benachrichtigen{!canMail ? ' (keine E-Mail hinterlegt)' : ''}</label>
+                        <div className="flex gap-2">
+                          <button type="button" onClick={() => setReplyTo(null)} className="btn-ghost !text-xs">Abbrechen</button>
+                          <button type="submit" disabled={saving || !replyText.trim()} className="btn-primary !py-1.5 !px-3 !text-xs !font-bold">{saving ? <Loader2 size={13} className="animate-spin" /> : <Check size={13} />} Antwort senden</button>
+                        </div>
+                      </div>
+                    </form>
+                  )}
+                </div>
+                <button type="button" onClick={() => remove(ev)} className="p-1 text-muted hover:text-danger shrink-0" aria-label="Löschen"><Trash2 size={13} /></button>
               </div>
-              {ev.body && <div className="text-sm text-foreground mt-1 whitespace-pre-wrap">{ev.body}</div>}
             </div>
-            <button type="button" onClick={() => remove(ev)} className="p-1 text-muted hover:text-danger shrink-0" aria-label="Löschen"><Trash2 size={13} /></button>
-          </div>
-        ))}
+          )
+        })}
       </div>
     </div>
   )

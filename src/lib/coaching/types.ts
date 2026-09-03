@@ -11,7 +11,7 @@ export type Visibility = 'internal' | 'client'
 export type EventKind =
   | 'whatsapp_in' | 'whatsapp_out' | 'note' | 'schedule_change' | 'plan_change'
   | 'task_done' | 'task_reopened' | 'milestone_done' | 'material_added'
-  | 'login' | 'client_win' | 'client_blocker' | 'mood' | 'invite_sent'
+  | 'login' | 'client_win' | 'client_blocker' | 'mood' | 'invite_sent' | 'coach_reply'
 
 export interface Program {
   key: string
@@ -195,7 +195,11 @@ export const EVENT_KIND_META: Record<EventKind, { label: string }> = {
   client_blocker: { label: 'Hier hänge ich (Kunde)' },
   mood: { label: 'Stimmung' },
   invite_sent: { label: 'Einladung verschickt' },
+  coach_reply: { label: 'Antwort an den Kunden' },
 }
+
+/** Ereignisse, die auf der Kundenseite als Nachrichten-Verlauf erscheinen. */
+export const MESSAGE_KINDS: EventKind[] = ['client_win', 'client_blocker', 'coach_reply']
 
 export const COACH_OPTIONS = ['Jacob', 'Jonas', 'Flo'] as const
 export const TRACK_OPTIONS = ['A', 'B', 'C', 'D', 'A/B', 'B/C', 'C/B', 'C/D', 'B+C'] as const
