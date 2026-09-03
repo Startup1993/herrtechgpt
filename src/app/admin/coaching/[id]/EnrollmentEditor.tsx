@@ -152,6 +152,8 @@ function StammdatenForm({ enrollment, programs }: { enrollment: Enrollment; prog
         track: form.track, persona: form.persona, north_star: form.north_star, success_quote: form.success_quote, intro_text: form.intro_text,
         nps: form.nps, upsell_status: form.upsell_status, case_study: form.case_study,
         notion_url: form.notion_url, drive_url: form.drive_url, whatsapp_url: form.whatsapp_url, community_url: form.community_url,
+        recommendation_title: form.recommendation_title, recommendation_text: form.recommendation_text,
+        recommendation_url: form.recommendation_url, recommendation_cta: form.recommendation_cta,
       })
       setSaved(true); setTimeout(() => setSaved(false), 1500); router.refresh()
     } catch (err) { alert((err as Error).message) }
@@ -188,6 +190,22 @@ function StammdatenForm({ enrollment, programs }: { enrollment: Enrollment; prog
         <label><span className={label}>Upsell-Status</span><input className={input} value={form.upsell_status ?? ''} onChange={set('upsell_status')} placeholder="Club / Sprint / Power Session / offen" /></label>
         <label><span className={label}>NPS (0 bis 10)</span><input className={input} type="number" min={0} max={10} value={form.nps ?? ''} onChange={(e) => setForm({ ...form, nps: e.target.value === '' ? null : Number(e.target.value) })} /></label>
         <label className="flex items-center gap-2 self-end pb-2 text-sm text-foreground"><input type="checkbox" checked={form.case_study} onChange={(e) => setForm({ ...form, case_study: e.target.checked })} /> Case Study</label>
+      </div>
+      <div className="rounded-lg border border-border p-3 space-y-3">
+        <div>
+          <div className="text-sm font-semibold text-foreground">Empfehlungskarte (Alumni-Übergang)</div>
+          <p className="text-xs text-muted">Erscheint im Dashboard des Kunden als Karte, z. B. nach Call 4: Club-Live-Calls, Sprint, Power Session. Leer lassen = keine Karte.</p>
+        </div>
+        <div className="grid sm:grid-cols-2 gap-3">
+          <label><span className={label}>Titel</span><input className={input} value={form.recommendation_title ?? ''} onChange={set('recommendation_title')} placeholder="Nächster Schritt: KI Sprint" /></label>
+          <label><span className={label}>Button-Text</span><input className={input} value={form.recommendation_cta ?? ''} onChange={set('recommendation_cta')} placeholder="Mehr erfahren" /></label>
+        </div>
+        <label className="block"><span className={label}>Text</span><textarea className={input} rows={2} value={form.recommendation_text ?? ''} onChange={set('recommendation_text')} placeholder="Du weißt jetzt, wie Claude tickt. Im Sprint bauen wir dein großes Ding in 2 bis 4 Wochen fertig." /></label>
+        <label className="block"><span className={label}>Link</span><input className={input} value={form.recommendation_url ?? ''} onChange={set('recommendation_url')} placeholder="https://herr.tech/sprint" /></label>
+        <div className="flex flex-wrap gap-2 pt-1">
+          <button type="button" onClick={() => setForm({ ...form, world_mode: 'full', status: 'completed' })} className="inline-flex items-center gap-1.5 rounded-lg border border-border px-3 py-1.5 text-xs text-foreground hover:bg-surface-hover">Alumni-Modus vorbereiten (World öffnen, Status abgeschlossen)</button>
+          <span className="text-[11px] text-muted self-center">Wirkt erst nach „Speichern“.</span>
+        </div>
       </div>
       <div className="flex items-center justify-between pt-1">
         <span className="text-xs text-muted">{enrollment.profile_id ? `World-Account verknüpft · zuletzt gesehen ${enrollment.last_client_seen_at ? fmtDate(enrollment.last_client_seen_at, 'datetime') : 'nie'}` : 'kein World-Account (Einladung legt ihn an)'}</span>
@@ -290,6 +308,17 @@ function MilestonesSection({ enrollment, milestones, tasks, materials, program }
   const [busy, setBusy] = useState(false)
   const suggestion = nextTemplateMilestone(program, milestones)
 
+  async function addMonths() {
+    if (!confirm('Monate 2 bis 12 als Meilensteine anlegen? Monatlich ab dem Monat nach dem letzten Call. Der Kunde sieht sie im Zeitstrahl als 12-Monats-Weg.')) return
+    setBusy(true)
+    try {
+      const r = await api<{ created: number }>('/api/admin/coaching/milestones', 'POST', { enrollment_id: enrollment.id, bulk_months: true })
+      alert(`${r.created} Monate angelegt.`)
+      router.refresh()
+    } catch (e) { alert((e as Error).message) }
+    setBusy(false)
+  }
+
   async function addFromTemplate() {
     if (!suggestion) return
     setBusy(true)
@@ -322,6 +351,7 @@ function MilestonesSection({ enrollment, milestones, tasks, materials, program }
         <div className="flex gap-2">
           {suggestion && <button type="button" onClick={addFromTemplate} disabled={busy} className="btn-primary !py-2 !px-3.5 !text-sm">{busy ? <Loader2 size={15} className="animate-spin" /> : <Plus size={15} />} {suggestion.title} anlegen</button>}
           <button type="button" onClick={() => setEditing({ kind: 'call', number: (milestones.filter((m) => m.kind === 'call').length || 0) + 1, status: 'planned' })} className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-surface px-3 py-2 text-sm text-foreground hover:bg-surface-hover"><Plus size={15} /> Frei anlegen</button>
+          {!milestones.some((m) => m.kind === 'month') && <button type="button" onClick={addMonths} disabled={busy} className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-surface px-3 py-2 text-sm text-foreground hover:bg-surface-hover disabled:opacity-50"><Plus size={15} /> 12-Monats-Weg anlegen</button>}
         </div>
       </div>
       {milestones.length === 0 && <div className="card-static p-8 text-center text-sm text-muted">Noch keine Sessions.</div>}

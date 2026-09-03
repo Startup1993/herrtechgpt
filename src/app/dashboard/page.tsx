@@ -28,7 +28,7 @@ export default async function DashboardPage() {
   const access = computeEffectiveAccess(profile, viewAsRaw)
 
   // Programm-Zugang: Coaching-Kunden landen direkt in ihrem Coaching.
-  if (coaching?.world_mode === 'program_only' && !access.isAdmin) redirect('/dashboard/coaching')
+  if (coaching?.world_mode === 'program_only' && !access.isAdmin && settings.coachingClientAccess) redirect('/dashboard/coaching')
 
   const [upsell, plans, monetization] = await Promise.all([
     getUpsellCopy(supabase, access.tier),

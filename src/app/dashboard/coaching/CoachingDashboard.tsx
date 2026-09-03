@@ -203,6 +203,20 @@ export function CoachingDashboard({ bundle, firstName, communityUrl, preview = f
                 </div>
               </section>
 
+              {enrollment.recommendation_title && (
+                <section className="relative overflow-hidden rounded-[var(--radius-2xl)] border border-primary/40 bg-surface p-5 sm:p-6">
+                  <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(160deg,var(--ht-primary-light),transparent_60%)]" />
+                  <div className="relative">
+                    <div className="text-[11px] font-mono uppercase tracking-[0.14em] text-primary font-semibold">Empfehlung von {enrollment.coach_name?.split(' ')[0] ?? 'deinem Coach'}</div>
+                    <h2 className="text-xl font-extrabold tracking-tight text-foreground mt-1">{enrollment.recommendation_title}</h2>
+                    {enrollment.recommendation_text && <p className="text-sm text-muted mt-2">{enrollment.recommendation_text}</p>}
+                    {enrollment.recommendation_url && (
+                      <a href={enrollment.recommendation_url} target="_blank" rel="noreferrer" className="btn-primary !font-bold mt-4 inline-flex">{enrollment.recommendation_cta ?? 'Mehr erfahren'}</a>
+                    )}
+                  </div>
+                </section>
+              )}
+
               <section className="rounded-[var(--radius-2xl)] border border-border bg-surface p-5 sm:p-6">
                 <div className="flex items-baseline justify-between gap-3 mb-3">
                   <div>

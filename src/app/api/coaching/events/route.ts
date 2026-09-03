@@ -3,6 +3,8 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import { requireClientEnrollment } from '@/lib/coaching/auth'
 import { logEvent } from '@/lib/coaching/queries'
 import { sendBlockerAlert } from '@/lib/coaching/emails'
+import { postCoachingSlack, mrkdwnEscape as esc } from '@/lib/coaching/slack'
+import { PRODUCTION_URL } from '@/lib/urls'
 
 /** Kunde trägt "Das läuft" oder "Hier hänge ich" ein. Blocker alarmiert den Coach per Mail. */
 export async function POST(request: Request) {
@@ -24,18 +26,24 @@ export async function POST(request: Request) {
     client_visible: true,
   })
 
+  // Coach-Benachrichtigung: Slack zuerst (Coaching-Channel), Mail nur ohne Webhook.
+  const cockpitUrl = `${PRODUCTION_URL}/admin/coaching/${ctx.enrollment.id}`
+  const name = esc(ctx.enrollment.client_name)
+  const coach = ctx.enrollment.coach_name ? ` (${esc(ctx.enrollment.coach_name)})` : ''
   if (body.kind === 'client_blocker') {
-    let coachEmail: string | null = null
-    if (ctx.enrollment.coach_profile_id) {
-      const { data } = await admin.auth.admin.getUserById(ctx.enrollment.coach_profile_id)
-      coachEmail = data?.user?.email ?? null
+    const posted = await postCoachingSlack(
+      `🆘 *${name} hängt*${coach}\n> ${esc(text)}\n<${cockpitUrl}|Im Cockpit antworten>`,
+    )
+    if (!posted) {
+      let coachEmail: string | null = null
+      if (ctx.enrollment.coach_profile_id) {
+        const { data } = await admin.auth.admin.getUserById(ctx.enrollment.coach_profile_id)
+        coachEmail = data?.user?.email ?? null
+      }
+      await sendBlockerAlert(admin, { clientName: ctx.enrollment.client_name, message: text, enrollmentId: ctx.enrollment.id, coachEmail })
     }
-    await sendBlockerAlert(admin, {
-      clientName: ctx.enrollment.client_name,
-      message: text,
-      enrollmentId: ctx.enrollment.id,
-      coachEmail,
-    })
+  } else {
+    await postCoachingSlack(`🎉 *${name}: Das läuft*${coach}\n> ${esc(text)}\n<${cockpitUrl}|Im Cockpit ansehen>`)
   }
 
   return NextResponse.json({ success: true })

@@ -54,6 +54,10 @@ export interface Enrollment {
   community_url: string | null
   last_client_seen_at: string | null
   invited_at: string | null
+  recommendation_title: string | null
+  recommendation_text: string | null
+  recommendation_url: string | null
+  recommendation_cta: string | null
   created_at: string
   updated_at: string
 }
@@ -96,6 +100,7 @@ export interface Task {
   completed_at: string | null
   proof_url: string | null
   sort_order: number
+  created_at: string
 }
 
 export interface Goal {

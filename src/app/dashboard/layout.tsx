@@ -79,7 +79,7 @@ export default async function DashboardLayout({
       newTicketCount={newTicketCount}
       helpUnreadCount={helpUnreadCount ?? 0}
       subscriptionsEnabled={settings.subscriptionsEnabled}
-      coaching={coaching ? { worldMode: coaching.world_mode, status: coaching.status } : null}
+      coaching={coaching && (settings.coachingClientAccess || access.realIsAdmin) ? { worldMode: coaching.world_mode, status: coaching.status } : null}
     >
       {children}
     </AppShell>

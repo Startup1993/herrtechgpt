@@ -1,11 +1,12 @@
 import { listEnrollmentsAdmin, listPrograms } from '@/lib/coaching/queries'
 import { derivePhase, deriveSignals, lastContact, latestMood, nextMilestone, computeProgress } from '@/lib/coaching/derive'
+import { getAppSettings } from '@/lib/app-settings'
 import { CoachingList, type ListRow, type TodayItem } from './CoachingList'
 
 export const dynamic = 'force-dynamic'
 
 export default async function AdminCoachingPage() {
-  const [bundles, programs] = await Promise.all([listEnrollmentsAdmin(), listPrograms()])
+  const [bundles, programs, settings] = await Promise.all([listEnrollmentsAdmin(), listPrograms(), getAppSettings()])
   const now = new Date()
 
   const rows: ListRow[] = bundles.map((b) => {
@@ -28,6 +29,7 @@ export default async function AdminCoachingPage() {
       overdue,
       lastContact: contact,
       mood,
+      moodTrend: b.events.filter((e) => e.kind === 'mood' && e.mood_score != null).slice(0, 8).reverse().map((e) => e.mood_score as number),
       signals: deriveSignals(b.enrollment, b.milestones, b.tasks, b.events, now),
       progress: computeProgress(b.milestones, b.tasks).percent,
       goals: b.goals.map((g) => g.status),
@@ -64,7 +66,7 @@ export default async function AdminCoachingPage() {
           </p>
         </div>
       </div>
-      <CoachingList rows={rows} today={today} programs={programs.map((p) => ({ key: p.key, title: p.title }))} />
+      <CoachingList rows={rows} today={today} programs={programs.map((p) => ({ key: p.key, title: p.title }))} clientAccess={settings.coachingClientAccess} slackConfigured={!!process.env.SLACK_COACHING_WEBHOOK_URL} />
     </div>
   )
 }

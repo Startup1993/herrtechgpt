@@ -1,6 +1,7 @@
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { linkUserToCommunityMember } from '@/lib/skool-sync'
+import { getAppSettings } from '@/lib/app-settings'
 import { NextResponse } from 'next/server'
 import type { EmailOtpType } from '@supabase/supabase-js'
 import type { SupabaseClient } from '@supabase/supabase-js'
@@ -60,7 +61,11 @@ async function resolveRedirectAfterAuth(
       .in('status', ['active', 'paused'])
       .limit(1)
       .maybeSingle()
-    if (enrollment) return '/dashboard/coaching'
+    if (enrollment) {
+      // Schalter „Kunden-Zugang“ im Cockpit: aus = Kunden sehen das Coaching noch nicht.
+      const settings = await getAppSettings()
+      if (settings.coachingClientAccess) return '/dashboard/coaching'
+    }
 
     const { data: profile } = await supabase
       .from('profiles')

@@ -3,6 +3,7 @@ import type { Enrollment, EventKind, Goal, GoalStatus, Material, MaterialKind, M
 import { createCoachCadenceTasks } from './template'
 import { logEvent } from './queries'
 import { sendCoachingInviteEmail } from './emails'
+import { getAppSettings } from '@/lib/app-settings'
 
 /**
  * Import-Vertrag für das Coaching-Plugin (nach-kickoff, nach-call, /notiz,
@@ -401,7 +402,9 @@ export async function importBundle(admin: SupabaseClient, payload: ImportPayload
   // ── Einladung ───────────────────────────────────────────────────────
   let inviteSent = false
   let inviteError: string | null = null
-  if (e.send_invite && email && profileId) {
+  if (e.send_invite && email && profileId && !(await getAppSettings()).coachingClientAccess) {
+    inviteError = 'Kunden-Zugang ist aus (Schalter im Cockpit). Einladung nicht verschickt.'
+  } else if (e.send_invite && email && profileId) {
     const res = await sendCoachingInviteEmail(admin, email, { firstName: enrollment.client_name.split(' ')[0], coachName: enrollment.coach_name })
     if (res.ok) {
       inviteSent = true

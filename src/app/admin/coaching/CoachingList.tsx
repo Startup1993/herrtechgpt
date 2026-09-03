@@ -23,6 +23,7 @@ export interface ListRow {
   overdue: number
   lastContact: { label: string; at: string } | null
   mood: { score: number; note: string | null; at: string } | null
+  moodTrend: number[]
   signals: Signal[]
   progress: number
   goals: GoalStatus[]
@@ -47,11 +48,32 @@ const SIGNAL_CLASS: Record<Signal['level'], string> = {
   info: 'bg-primary/10 text-primary',
 }
 
-export function CoachingList({ rows, today, programs }: { rows: ListRow[]; today: TodayItem[]; programs: Array<{ key: string; title: string }> }) {
+export function CoachingList({ rows, today, programs, clientAccess, slackConfigured }: {
+  rows: ListRow[]
+  today: TodayItem[]
+  programs: Array<{ key: string; title: string }>
+  clientAccess: boolean
+  slackConfigured: boolean
+}) {
   const router = useRouter()
   const [showCompleted, setShowCompleted] = useState(false)
   const [creating, setCreating] = useState(false)
   const [busyTask, setBusyTask] = useState<string | null>(null)
+  const [access, setAccess] = useState(clientAccess)
+  const [togglingAccess, setTogglingAccess] = useState(false)
+
+  async function toggleAccess() {
+    const next = !access
+    const msg = next
+      ? 'Kunden-Zugang anschalten? Danach sehen eingeladene Kunden ihr Dashboard, und Einladungen sowie Antwort-Mails gehen raus.'
+      : 'Kunden-Zugang ausschalten? Kunden sehen dann nur „Dein Bereich kommt gleich“, keine Kunden-Mails.'
+    if (!confirm(msg)) return
+    setTogglingAccess(true)
+    const res = await fetch('/api/admin/coaching/settings', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ coachingClientAccess: next }) })
+    if (res.ok) setAccess(next)
+    setTogglingAccess(false)
+    router.refresh()
+  }
 
   const active = rows.filter((r) => r.status !== 'completed').sort((a, b) => score(b) - score(a))
   const completed = rows.filter((r) => r.status === 'completed')
@@ -66,6 +88,26 @@ export function CoachingList({ rows, today, programs }: { rows: ListRow[]; today
 
   return (
     <div className="space-y-6">
+      {/* Steuerung: Kunden-Zugang, Slack, Statistik */}
+      <section className={`rounded-[var(--radius-xl)] border px-5 py-3.5 flex flex-wrap items-center justify-between gap-3 ${access ? 'border-green-300 bg-green-50 dark:border-green-900 dark:bg-green-950/20' : 'border-amber-300 bg-amber-50 dark:border-amber-900 dark:bg-amber-950/20'}`}>
+        <div className="flex items-center gap-3 text-sm">
+          <span className={`h-2.5 w-2.5 rounded-full ${access ? 'bg-green-500' : 'bg-amber-500'}`} />
+          <div>
+            <div className="font-semibold text-foreground">Kunden-Zugang {access ? 'an' : 'aus'}</div>
+            <div className="text-xs text-muted">
+              {access ? 'Eingeladene Kunden sehen ihr Dashboard, Einladungen und Antwort-Mails gehen raus.' : 'Nur intern sichtbar. Kunden sehen „Dein Bereich kommt gleich“, es geht keine Kunden-Mail raus, egal was geklickt wird.'}
+              {' '}{slackConfigured ? 'Slack-Channel verbunden.' : 'Slack noch nicht verbunden (SLACK_COACHING_WEBHOOK_URL fehlt), Blocker gehen per Mail.'}
+            </div>
+          </div>
+        </div>
+        <div className="flex items-center gap-2">
+          <Link href="/admin/coaching/stats" className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-surface px-3 py-2 text-sm text-foreground hover:bg-surface-hover">Statistik</Link>
+          <button type="button" onClick={toggleAccess} disabled={togglingAccess} className={`inline-flex items-center gap-1.5 rounded-lg px-3 py-2 text-sm font-semibold ${access ? 'border border-border bg-surface text-foreground hover:bg-surface-hover' : 'bg-primary text-white hover:bg-primary-hover'} disabled:opacity-50`}>
+            {togglingAccess ? <Loader2 size={15} className="animate-spin" /> : null} {access ? 'Kunden-Zugang ausschalten' : 'Kunden-Zugang anschalten'}
+          </button>
+        </div>
+      </section>
+
       {/* Heute */}
       <section className="card-static p-5">
         <div className="flex flex-wrap items-baseline justify-between gap-3 mb-3">
@@ -180,7 +222,9 @@ function Row({ r }: { r: ListRow }) {
       <td className="px-3 py-3 align-top text-[13px]">
         {r.mood ? (
           <div className="flex items-center gap-2">
-            <span className="inline-flex gap-0.5">{[1, 2, 3, 4, 5].map((i) => <i key={i} className={`block h-3.5 w-1.5 rounded-sm ${i <= r.mood!.score ? (r.mood!.score <= 2 ? 'bg-danger' : r.mood!.score === 3 ? 'bg-warning' : 'bg-success') : 'bg-border'}`} />)}</span>
+            <span className="inline-flex items-end gap-0.5 h-4" title={`Verlauf: ${r.moodTrend.join(' → ')}`}>
+              {r.moodTrend.map((s, i) => <i key={i} className={`block w-1.5 rounded-sm ${s <= 2 ? 'bg-danger' : s === 3 ? 'bg-warning' : 'bg-success'} ${i === r.moodTrend.length - 1 ? 'opacity-100' : 'opacity-50'}`} style={{ height: `${4 + s * 2.4}px` }} />)}
+            </span>
             <span className="text-muted text-[11px] truncate max-w-[140px]" title={r.mood.note ?? ''}>{r.mood.score}{r.mood.note ? ` · ${r.mood.note}` : ''}</span>
           </div>
         ) : <span className="text-muted">–</span>}

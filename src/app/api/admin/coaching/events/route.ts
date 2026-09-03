@@ -4,6 +4,7 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import { requireAdmin } from '@/lib/coaching/auth'
 import type { EventKind, Enrollment } from '@/lib/coaching/types'
 import { sendCoachReplyEmail } from '@/lib/coaching/emails'
+import { getAppSettings } from '@/lib/app-settings'
 
 const COACH_KINDS: EventKind[] = ['whatsapp_in', 'whatsapp_out', 'note', 'schedule_change', 'plan_change', 'mood', 'coach_reply']
 
@@ -52,7 +53,10 @@ export async function POST(request: Request) {
         const base = enrollment.whatsapp_url.split('?')[0]
         waUrl = `${base}?text=${encodeURIComponent(text)}`
       }
-      if (body.notify !== false && enrollment.client_email) {
+      const settings = await getAppSettings()
+      if (body.notify !== false && enrollment.client_email && !settings.coachingClientAccess) {
+        mailError = 'Kunden-Zugang ist aus, keine Mail an den Kunden. Antwort steht im Verlauf.'
+      } else if (body.notify !== false && enrollment.client_email) {
         let replyTo: string | null = null
         if (typeof body.reply_to === 'string') {
           const { data: orig } = await admin.from('coaching_events').select('body').eq('id', body.reply_to).maybeSingle()

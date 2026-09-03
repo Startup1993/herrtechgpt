@@ -5,6 +5,7 @@ import { requireAdmin } from '@/lib/coaching/auth'
 import { logEvent } from '@/lib/coaching/queries'
 import { sendCoachingInviteEmail } from '@/lib/coaching/emails'
 import type { Enrollment } from '@/lib/coaching/types'
+import { getAppSettings } from '@/lib/app-settings'
 
 /**
  * Coaching-Einladung verschicken. Legt bei Bedarf den World-Account an
@@ -15,6 +16,11 @@ export async function POST(request: Request) {
   if (!ctx) return NextResponse.json({ error: 'Unauthorized' }, { status: 403 })
   const body = await request.json().catch(() => null) as { enrollment_id?: string } | null
   if (!body?.enrollment_id) return NextResponse.json({ error: 'enrollment_id erforderlich' }, { status: 400 })
+
+  const settings = await getAppSettings()
+  if (!settings.coachingClientAccess) {
+    return NextResponse.json({ error: 'Kunden-Zugang ist aus. Erst im Cockpit oben den Schalter „Kunden-Zugang“ anschalten, dann einladen.' }, { status: 409 })
+  }
 
   const admin = createAdminClient()
   const { data } = await admin.from('coaching_enrollments').select('*').eq('id', body.enrollment_id).maybeSingle()
