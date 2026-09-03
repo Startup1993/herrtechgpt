@@ -51,6 +51,22 @@ export async function POST(request: Request) {
       renderedSubject = applyVariables(renderedSubject, { loginLink, firstName: firstName ?? '', coachName: coachName ?? '' })
       break
     }
+    case 'coaching_coach_reply': {
+      const vars = {
+        firstName: String(previewVars.firstName ?? 'Julia'),
+        coachName: String(previewVars.coachName ?? 'Jacob'),
+        message: String(previewVars.message ?? 'Lad die Datei über den Desktop hoch.'),
+        replyTo: String(previewVars.replyTo ?? 'Die Skill-Datei lässt sich nicht hochladen.'),
+      }
+      html = renderEmail({
+        heading: applyVariables(merged.heading ?? '', vars),
+        intro: applyVariables(merged.intro ?? '', vars),
+        cta: { label: applyVariables(merged.cta_label ?? '', vars), href: `${PRODUCTION_URL}/dashboard/coaching` },
+        footerNote: applyVariables(merged.footer_note ?? '', vars),
+      })
+      renderedSubject = applyVariables(renderedSubject, vars)
+      break
+    }
     case 'coaching_blocker_alert': {
       const clientName = String(previewVars.clientName ?? 'Julia Neuen')
       const message = String(previewVars.message ?? 'Die Skill-Datei lässt sich nicht hochladen.')

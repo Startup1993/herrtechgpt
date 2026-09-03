@@ -84,3 +84,38 @@ export async function sendBlockerAlert(
     console.error('[coaching] Blocker-Alarm fehlgeschlagen:', err)
   }
 }
+
+/**
+ * Antwort des Coaches an den Kunden (aus dem Cockpit-Verlauf).
+ * Template 'coaching_coach_reply'. Landet beim Kunden mit Link ins Dashboard.
+ */
+export async function sendCoachReplyEmail(
+  admin: SupabaseClient,
+  input: { to: string; firstName: string; coachName: string; message: string; replyTo?: string | null },
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  const resend = getResend()
+  if (!resend) return { ok: false, error: 'RESEND_API_KEY nicht konfiguriert' }
+  const tpl = await loadTemplate('coaching_coach_reply', admin)
+  const esc = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+  const vars = {
+    firstName: esc(input.firstName),
+    coachName: esc(input.coachName),
+    message: esc(input.message).replace(/\n/g, '<br>'),
+    replyTo: esc(input.replyTo ?? '').replace(/\n/g, ' '),
+  }
+  let intro = applyVariables(tpl.data.intro ?? '', vars)
+  // Ohne Bezugstext den Satz „Du hattest geschrieben: „““ nicht stehen lassen.
+  if (!input.replyTo) intro = intro.replace(/Du hattest geschrieben:\s*<em>„“<\/em><br><br>/, '')
+  const html = renderEmail({
+    heading: applyVariables(tpl.data.heading ?? '', vars),
+    intro,
+    cta: { label: applyVariables(tpl.data.cta_label ?? '', vars), href: `${PRODUCTION_URL}/dashboard/coaching` },
+    footerNote: applyVariables(tpl.data.footer_note ?? '', vars),
+  })
+  try {
+    await resend.emails.send({ from: fromAddress(), to: input.to, subject: applyVariables(tpl.subject, vars), html })
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message : 'Versand fehlgeschlagen' }
+  }
+  return { ok: true }
+}

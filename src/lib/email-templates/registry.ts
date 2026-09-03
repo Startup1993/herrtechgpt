@@ -117,6 +117,39 @@ export const TEMPLATES: TemplateDefinition[] = [
 
   // ───────────────────────────────────────────────────────────────────────────
   {
+    key: 'coaching_coach_reply',
+    label: 'Coaching: Antwort vom Coach (an Kunde)',
+    group: 'coaching',
+    trigger:
+      'Geht an den Coaching-Kunden, wenn der Coach im Cockpit (Verlauf → „Antworten“) auf „Hier hänge ich“, „Das läuft“ oder eine Nachricht antwortet. Enthält die Antwort im Volltext und den Link ins Dashboard.',
+    preview: { firstName: 'Julia', coachName: 'Jacob', message: 'Lad die Datei mal über den Desktop hoch statt vom Handy, dann klappt es. Wenn nicht: Screenshot an mich.', replyTo: 'Die Skill-Datei lässt sich nicht hochladen.' },
+    variables: [
+      { key: '{firstName}', description: 'Vorname des Kunden' },
+      { key: '{coachName}', description: 'Vorname des Coaches' },
+      { key: '{message}', description: 'Antwort des Coaches' },
+      { key: '{replyTo}', description: 'Worauf geantwortet wurde (Text des Kunden, kann leer sein)' },
+    ],
+    fields: [
+      { key: 'subject', label: 'Betreff (mit {coachName})', kind: 'text' },
+      { key: 'heading', label: 'Hauptüberschrift', kind: 'text' },
+      { key: 'intro', label: 'Text (HTML erlaubt, mit {message}, {replyTo}, {firstName})', kind: 'textarea' },
+      { key: 'cta_label', label: 'Button-Text', kind: 'text' },
+      { key: 'footer_note', label: 'Hinweis am Ende', kind: 'textarea' },
+    ],
+    defaults: {
+      subject: '{coachName} hat dir geantwortet',
+      data: {
+        heading: 'Antwort von {coachName}',
+        intro:
+          'Hey {firstName}!<br><br>Du hattest geschrieben: <em>„{replyTo}“</em><br><br><strong>{coachName}:</strong><br>{message}<br><br>Die ganze Unterhaltung findest du in deinem Coaching-Dashboard.',
+        cta_label: 'Zum Dashboard',
+        footer_note: 'Antworten kannst du direkt im Dashboard unter „Deine Stimme“ oder wie immer per WhatsApp.',
+      },
+    },
+  },
+
+  // ───────────────────────────────────────────────────────────────────────────
+  {
     key: 'coaching_blocker_alert',
     label: 'Coaching: Kunde hängt (an Coach)',
     group: 'coaching',
