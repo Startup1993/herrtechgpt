@@ -1,6 +1,6 @@
 import Link from 'next/link'
 import { ChevronLeft } from 'lucide-react'
-import { listEnrollmentsAdmin } from '@/lib/coaching/queries'
+import { listEnrollmentsAdmin, type EnrollmentBundle } from '@/lib/coaching/queries'
 import { computeProgress } from '@/lib/coaching/derive'
 import { ENROLLMENT_STATUS_META, GOAL_STATUS_META } from '@/lib/coaching/types'
 
@@ -13,16 +13,15 @@ function avg(nums: number[]): number | null {
   return Math.round((nums.reduce((a, b) => a + b, 0) / nums.length) * 10) / 10
 }
 
-/** Die Coaching-Database aus dem Konzept, nur echt: Zahlen über alle Teilnahmen. */
-export default async function CoachingStatsPage() {
-  const bundles = await listEnrollmentsAdmin()
+/** Reine Rechenfunktion (kein Render): Zahlen über alle Teilnahmen. */
+function buildStats(bundles: EnrollmentBundle[], now: number) {
   const active = bundles.filter((b) => b.enrollment.status === 'active')
   const completed = bundles.filter((b) => b.enrollment.status === 'completed')
 
   const allGoals = bundles.flatMap((b) => b.goals)
   const clientTasks = bundles.flatMap((b) => b.tasks.filter((t) => t.assignee === 'client' && t.status !== 'skipped'))
   const doneTasks = clientTasks.filter((t) => t.status === 'done')
-  const overdue = clientTasks.filter((t) => t.status === 'open' && t.due_at && new Date(t.due_at).getTime() < Date.now()).length
+  const overdue = clientTasks.filter((t) => t.status === 'open' && t.due_at && new Date(t.due_at).getTime() < now).length
   const timeToDone = doneTasks
     .filter((t) => t.completed_at && t.created_at)
     .map((t) => (new Date(t.completed_at!).getTime() - new Date(t.created_at).getTime()) / DAY)
@@ -49,6 +48,14 @@ export default async function CoachingStatsPage() {
     const k = (b.enrollment.upsell_status ?? 'offen').trim() || 'offen'
     upsell.set(k, (upsell.get(k) ?? 0) + 1)
   }
+
+  return { active, completed, allGoals, clientTasks, doneTasks, overdue, timeToDone, moods, nps, blockers, wins, logins, invited, byTrack, upsell }
+}
+
+/** Die Coaching-Database aus dem Konzept, nur echt. */
+export default async function CoachingStatsPage() {
+  const bundles = await listEnrollmentsAdmin()
+  const { active, completed, allGoals, clientTasks, doneTasks, overdue, timeToDone, moods, nps, blockers, wins, logins, invited, byTrack, upsell } = buildStats(bundles, Date.now())
 
   const tiles: Array<{ label: string; value: string; hint?: string }> = [
     { label: 'Teilnahmen', value: String(bundles.length), hint: `${active.length} aktiv · ${completed.length} abgeschlossen` },
