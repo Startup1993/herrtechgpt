@@ -124,7 +124,7 @@ export function CoachingDashboard({ bundle, firstName, communityUrl, preview = f
             <div className="flex flex-wrap items-baseline justify-between gap-3 mb-5">
               <div>
                 <div className="text-[11px] font-mono uppercase tracking-[0.14em] text-primary font-semibold">Dein Weg</div>
-                <h2 className="text-xl font-extrabold tracking-tight text-foreground">Vier Wochen Coaching. Zwölf Monate dran bleiben.</h2>
+                <h2 className="text-xl font-extrabold tracking-tight text-foreground">Vier Wochen Coaching. Danach dein eigener Weg.</h2>
               </div>
               {enrollment.starts_at && (
                 <span className="text-xs font-mono text-muted rounded-full border border-border px-3 py-1">

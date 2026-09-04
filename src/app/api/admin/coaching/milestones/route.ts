@@ -32,38 +32,9 @@ export async function POST(request: Request) {
   const defaults = milestoneDefaults(kind, number)
 
   const admin = createAdminClient()
-  const { data: enrollment } = await admin.from('coaching_enrollments').select('id, program_key, starts_at, ends_at').eq('id', body.enrollment_id).maybeSingle()
+  const { data: enrollment } = await admin.from('coaching_enrollments').select('id, program_key').eq('id', body.enrollment_id).maybeSingle()
   if (!enrollment) return NextResponse.json({ error: 'Teilnahme nicht gefunden' }, { status: 404 })
 
-  // 12-Monats-Weg: Monate 2 bis 12 auf einmal, monatlich ab dem Monat nach dem letzten Call.
-  if (body.bulk_months === true) {
-    const { data: existing } = await admin.from('coaching_milestones').select('kind, number, scheduled_at').eq('enrollment_id', body.enrollment_id)
-    const rows = (existing ?? []) as Array<{ kind: string; number: number; scheduled_at: string | null }>
-    const haveMonths = new Set(rows.filter((r) => r.kind === 'month').map((r) => r.number))
-    const lastCall = rows.filter((r) => r.kind === 'call' && r.scheduled_at).map((r) => new Date(r.scheduled_at!).getTime()).sort((a, b) => b - a)[0]
-    const anchor = lastCall ? new Date(lastCall) : enrollment.starts_at ? new Date(enrollment.starts_at as string) : new Date()
-    const inserts: Array<Record<string, unknown>> = []
-    for (let n = 2; n <= 12; n++) {
-      if (haveMonths.has(n)) continue
-      const d = new Date(anchor.getFullYear(), anchor.getMonth() + (n - 1), 1, 9, 0, 0)
-      inserts.push({
-        enrollment_id: body.enrollment_id,
-        kind: 'month',
-        number: n,
-        title: `Monat ${n} · dran bleiben`,
-        goal: n === 2 ? 'Deine 3 Workflows laufen ohne uns. Was hakt, kommt in den Check-in.' : n % 3 === 0 ? 'Quartals-Blick: Was läuft, was fliegt raus, was kommt dazu?' : 'Ein neuer Workflow oder ein bestehender vertieft. Community-Live-Calls nutzen.',
-        scheduled_at: d.toISOString(),
-        status: 'planned',
-        sort_order: 2000 + n,
-      })
-    }
-    if (inserts.length) {
-      const { error } = await admin.from('coaching_milestones').insert(inserts)
-      if (error) return NextResponse.json({ error: error.message }, { status: 500 })
-    }
-    invalidate(body.enrollment_id)
-    return NextResponse.json({ created: inserts.length })
-  }
 
   const { data: maxRow } = await admin.from('coaching_milestones').select('sort_order').eq('enrollment_id', body.enrollment_id).order('sort_order', { ascending: false }).limit(1).maybeSingle()
   const scheduledAt = typeof body.scheduled_at === 'string' && body.scheduled_at ? new Date(body.scheduled_at).toISOString() : null
