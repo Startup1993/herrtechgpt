@@ -308,17 +308,6 @@ function MilestonesSection({ enrollment, milestones, tasks, materials, program }
   const [busy, setBusy] = useState(false)
   const suggestion = nextTemplateMilestone(program, milestones)
 
-  async function addMonths() {
-    if (!confirm('Monate 2 bis 12 als Meilensteine anlegen? Monatlich ab dem Monat nach dem letzten Call. Der Kunde sieht sie im Zeitstrahl als 12-Monats-Weg.')) return
-    setBusy(true)
-    try {
-      const r = await api<{ created: number }>('/api/admin/coaching/milestones', 'POST', { enrollment_id: enrollment.id, bulk_months: true })
-      alert(`${r.created} Monate angelegt.`)
-      router.refresh()
-    } catch (e) { alert((e as Error).message) }
-    setBusy(false)
-  }
-
   async function addFromTemplate() {
     if (!suggestion) return
     setBusy(true)
@@ -347,11 +336,10 @@ function MilestonesSection({ enrollment, milestones, tasks, materials, program }
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <p className="text-sm text-muted">Kickoff, Calls, Check-ins und Monate. „Neue Session“ nimmt den nächsten Punkt aus der Programm-Vorlage und legt die Coach-Erinnerungen dazu an, sobald ein Termin steht.</p>
+        <p className="text-sm text-muted">Kickoff, Calls und Check-ins. „Neue Session“ nimmt den nächsten Punkt aus der Programm-Vorlage und legt die Coach-Erinnerungen dazu an, sobald ein Termin steht. Was nach Call 4 kommt, entsteht pro Kunde aus den Calls (Plugin-Command /weiterfuehrung), nicht aus einer Vorlage.</p>
         <div className="flex gap-2">
           {suggestion && <button type="button" onClick={addFromTemplate} disabled={busy} className="btn-primary !py-2 !px-3.5 !text-sm">{busy ? <Loader2 size={15} className="animate-spin" /> : <Plus size={15} />} {suggestion.title} anlegen</button>}
           <button type="button" onClick={() => setEditing({ kind: 'call', number: (milestones.filter((m) => m.kind === 'call').length || 0) + 1, status: 'planned' })} className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-surface px-3 py-2 text-sm text-foreground hover:bg-surface-hover"><Plus size={15} /> Frei anlegen</button>
-          {!milestones.some((m) => m.kind === 'month') && <button type="button" onClick={addMonths} disabled={busy} className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-surface px-3 py-2 text-sm text-foreground hover:bg-surface-hover disabled:opacity-50"><Plus size={15} /> 12-Monats-Weg anlegen</button>}
         </div>
       </div>
       {milestones.length === 0 && <div className="card-static p-8 text-center text-sm text-muted">Noch keine Sessions.</div>}
