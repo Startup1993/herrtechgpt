@@ -1,6 +1,7 @@
 import { createClient } from '@/lib/supabase/server'
 import { redirect } from 'next/navigation'
 import { WelcomeScreen } from './WelcomeScreen'
+import { getAppSettings } from '@/lib/app-settings'
 
 export const dynamic = 'force-dynamic'
 
@@ -13,11 +14,26 @@ export default async function WelcomePage() {
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) redirect('/login')
 
-  const { data: profile } = await supabase
-    .from('profiles')
-    .select('welcomed_at, access_tier')
-    .eq('id', user.id)
-    .single()
+  const [{ data: profile }, { data: enrollment }] = await Promise.all([
+    supabase
+      .from('profiles')
+      .select('welcomed_at, access_tier')
+      .eq('id', user.id)
+      .single(),
+    supabase
+      .from('coaching_enrollments')
+      .select('id')
+      .eq('profile_id', user.id)
+      .in('status', ['active', 'paused'])
+      .limit(1)
+      .maybeSingle(),
+  ])
+
+  // Coaching-Kunden sehen den Welcome-Screen nie, sie landen im Coaching.
+  if (enrollment) {
+    const settings = await getAppSettings()
+    if (settings.coachingClientAccess) redirect('/dashboard/coaching')
+  }
 
   // Wer schon durch den Welcome-Screen ist, skippt ihn beim Re-Visit.
   if (profile?.welcomed_at) {

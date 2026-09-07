@@ -9,6 +9,12 @@ import { CreditBadge } from './credit-badge'
 import type { Conversation } from '@/lib/types'
 import type { AccessTier, ViewAsMode } from '@/lib/access'
 import type { FeatureKey, FeatureState } from '@/lib/permissions'
+import type { WorldMode } from '@/lib/coaching/types'
+
+export interface CoachingNavContext {
+  worldMode: WorldMode
+  status: string
+}
 
 interface AppShellProps {
   conversations: Conversation[]
@@ -23,13 +29,16 @@ interface AppShellProps {
   helpUnreadCount?: number
   /** Master-Switch — beeinflusst Profil-Menü-Label "Abrechnung" vs "Mitgliedschaft". */
   subscriptionsEnabled?: boolean
+  /** Coaching-Teilnahme des Users: steuert "Mein Coaching" und den Programm-Zugang in der Sidebar. */
+  coaching?: CoachingNavContext | null
   children: React.ReactNode
 }
 
-export function AppShell({ conversations, userEmail, userName, isAdmin, realIsAdmin, accessTier, viewAs, states, newTicketCount, helpUnreadCount, subscriptionsEnabled, children }: AppShellProps) {
+export function AppShell({ conversations, userEmail, userName, isAdmin, realIsAdmin, accessTier, viewAs, states, newTicketCount, helpUnreadCount, subscriptionsEnabled, coaching, children }: AppShellProps) {
   const [sidebarOpen, setSidebarOpen] = useState(false)       // mobile overlay
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false) // desktop collapse
   const pathname = usePathname()
+  const programOnly = !!coaching && coaching.worldMode === 'program_only' && !isAdmin
 
   // Close mobile sidebar on navigation
   useEffect(() => {
@@ -67,6 +76,7 @@ export function AppShell({ conversations, userEmail, userName, isAdmin, realIsAd
           newTicketCount={newTicketCount}
           helpUnreadCount={helpUnreadCount}
           subscriptionsEnabled={subscriptionsEnabled}
+          coaching={coaching}
         />
       </div>
 
@@ -114,11 +124,12 @@ export function AppShell({ conversations, userEmail, userName, isAdmin, realIsAd
         )}
 
         <main className="flex-1 min-h-0 overflow-y-auto relative">
-          {/* Header-Buttons — oben rechts */}
+          {/* Header-Buttons — oben rechts. Im Programm-Zugang (nur Coaching)
+              gibt es keine Credits und keine Übersicht außer dem Coaching. */}
           <div className="absolute top-4 right-4 z-10 flex items-center gap-2">
-            <CreditBadge />
+            {!programOnly && <CreditBadge />}
             <Link
-              href="/dashboard"
+              href={programOnly ? '/dashboard/coaching' : '/dashboard'}
               className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium text-muted hover:text-foreground bg-surface/80 hover:bg-surface-secondary border border-border backdrop-blur-sm transition-colors shadow-sm"
             >
               <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">

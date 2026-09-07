@@ -467,3 +467,98 @@ export function renderSkoolInviteEmail(opts: SkoolInviteOptions): string {
   </body>
 </html>`
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Coaching-Zugang (Mein Coaching) — Template 'coaching_invite'
+// ─────────────────────────────────────────────────────────────────────────────
+
+export interface CoachingInviteOptions {
+  loginLink: string
+  firstName?: string | null
+  coachName?: string | null
+  content: Record<string, string>
+}
+
+export function renderCoachingInviteEmail(opts: CoachingInviteOptions): string {
+  const siteUrl = PRODUCTION_URL
+  const c = opts.content
+  const vars = {
+    loginLink: opts.loginLink,
+    firstName: opts.firstName ? escapeHtml(opts.firstName) : '',
+    coachName: opts.coachName ? escapeHtml(opts.coachName) : 'dein Coach',
+  }
+  const greeting = (c.greeting ?? '').includes('{firstName}') && !opts.firstName
+    ? applyVariables(c.greeting ?? '', vars).replace(/\s+!/, '!').replace(/\s+,/, ',')
+    : applyVariables(c.greeting ?? '', vars)
+
+  const features = ['feature_1', 'feature_2', 'feature_3', 'feature_4']
+    .map((k) => (c[k] ?? '').trim())
+    .filter((f) => f.length > 0)
+    .map((f) => `<tr><td style="padding:8px 0; font-size:15px; line-height:1.5; color:#333;">${applyVariables(f, vars)}</td></tr>`)
+    .join('')
+
+  return `<!DOCTYPE html>
+<html lang="de">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Dein Coaching-Zugang</title>
+  </head>
+  <body style="margin:0; padding:0; background:#F5F0EB; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;">
+    <span style="display:none; max-height:0; overflow:hidden; color:transparent;">
+      Dein Coaching an einem Ort: Plan, Calls, Aufgaben, Material.
+    </span>
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background:#F5F0EB;">
+      <tr>
+        <td align="center" style="padding:32px 16px;">
+          <table role="presentation" width="560" cellpadding="0" cellspacing="0" border="0" style="max-width:560px; width:100%; background:#FFFFFF; border-radius:16px; overflow:hidden; box-shadow:0 1px 3px rgba(0,0,0,0.04);">
+            ${renderHeader(siteUrl)}
+            <tr>
+              <td align="left" style="padding:36px 36px 8px;">
+                <div style="font-size:12px; letter-spacing:0.18em; text-transform:uppercase; color:#B598E2; font-weight:700; margin-bottom:16px;">
+                  ${escapeHtml(applyVariables(c.eyebrow ?? '', vars))}
+                </div>
+                <h1 style="margin:0 0 16px; font-size:30px; line-height:1.15; color:#0F0F13; font-weight:800; letter-spacing:-0.01em;">
+                  ${escapeHtml(applyVariables(c.headline_top ?? '', vars))}<br>
+                  <span style="color:#B598E2;">${escapeHtml(applyVariables(c.headline_bottom ?? '', vars))}</span>
+                </h1>
+                <p style="margin:0 0 14px; font-size:16px; line-height:1.6; color:#333;">${greeting}</p>
+                <p style="margin:0 0 14px; font-size:16px; line-height:1.6; color:#333;">${applyVariables(c.intro_paragraph ?? '', vars)}</p>
+                <p style="margin:0 0 8px; font-size:16px; line-height:1.6; color:#333;">${applyVariables(c.features_intro ?? '', vars)}</p>
+              </td>
+            </tr>
+            <tr>
+              <td style="padding:4px 36px 24px;">
+                <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">${features}</table>
+              </td>
+            </tr>
+            <tr>
+              <td align="center" style="padding:8px 36px 12px;">
+                <a href="${opts.loginLink}"
+                   style="display:inline-block; background:#B598E2; color:#FFFFFF; padding:16px 40px; border-radius:12px; text-decoration:none; font-weight:700; font-size:16px;">
+                  ${escapeHtml(applyVariables(c.cta_label ?? '', vars))}
+                </a>
+                <div style="font-size:13px; color:#999; margin-top:12px;">${escapeHtml(applyVariables(c.cta_caption ?? '', vars))}</div>
+              </td>
+            </tr>
+            <tr>
+              <td style="padding:20px 36px 8px;">
+                <p style="margin:0 0 14px; font-size:14px; line-height:1.6; color:#666; background:#F7F3FD; border-left:3px solid #B598E2; padding:10px 14px; border-radius:0 8px 8px 0;">
+                  ${applyVariables(c.skool_note ?? '', vars)}
+                </p>
+                <p style="margin:0 0 12px; font-size:15px; line-height:1.6; color:#333;">${escapeHtml(applyVariables(c.signature ?? '', vars))}</p>
+              </td>
+            </tr>
+            <tr>
+              <td align="center" style="padding:24px 32px 16px; border-top:1px solid #EEE8E0;">
+                <div style="font-size:11px; line-height:1.5; color:#999; text-align:center; word-break:break-all;">${applyVariables(c.footer_note ?? '', vars)}</div>
+              </td>
+            </tr>
+            ${renderFooter(siteUrl)}
+          </table>
+        </td>
+      </tr>
+    </table>
+  </body>
+</html>`
+}
