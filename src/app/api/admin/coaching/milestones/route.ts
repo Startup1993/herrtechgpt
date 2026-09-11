@@ -3,7 +3,7 @@ import { revalidatePath } from 'next/cache'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { requireAdmin } from '@/lib/coaching/auth'
 import { logEvent } from '@/lib/coaching/queries'
-import { createCoachCadenceTasks, milestoneDefaults } from '@/lib/coaching/template'
+import { createCoachCadenceTasks, milestoneDefaults, skipCadenceForMilestone } from '@/lib/coaching/template'
 import { fmtDate } from '@/lib/coaching/derive'
 import type { Milestone, MilestoneKind, Program } from '@/lib/coaching/types'
 
@@ -110,9 +110,11 @@ export async function PATCH(request: Request) {
   }
   if (prev.status !== 'done' && next.status === 'done') {
     await logEvent(admin, { enrollment_id: next.enrollment_id, kind: 'milestone_done', body: next.title, payload: { milestone_id: next.id }, client_visible: true, ...author })
+    await skipCadenceForMilestone(admin, next.id)
   }
   if (prev.status !== 'cancelled' && next.status === 'cancelled') {
     await logEvent(admin, { enrollment_id: next.enrollment_id, kind: 'plan_change', body: `${next.title} entfällt`, payload: { milestone_id: next.id }, client_visible: true, ...author })
+    await skipCadenceForMilestone(admin, next.id)
   }
 
   invalidate(next.enrollment_id)

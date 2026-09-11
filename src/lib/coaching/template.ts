@@ -47,6 +47,12 @@ export async function createCoachCadenceTasks(
   if (rows.length) await admin.from('coaching_tasks').insert(rows)
 }
 
+/** Session erledigt oder abgesagt: offene Coach-Erinnerungen dazu werden übersprungen, nicht gelöscht. */
+export async function skipCadenceForMilestone(admin: SupabaseClient, milestoneId: string) {
+  await admin.from('coaching_tasks').update({ status: 'skipped' })
+    .eq('milestone_id', milestoneId).eq('assignee', 'coach').eq('kind', 'cadence').eq('status', 'open')
+}
+
 /** Nächster freier Vorlagen-Eintrag, der bei dieser Teilnahme noch nicht existiert. */
 export function nextTemplateMilestone(program: Program | null, existing: Milestone[]) {
   const list = program?.template.milestones ?? []

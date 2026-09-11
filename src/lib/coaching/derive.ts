@@ -141,6 +141,18 @@ export function deriveSignals(
   return signals
 }
 
+/**
+ * Automatische Coach-Erinnerung, die niemand mehr braucht: die Session ist erledigt oder abgesagt,
+ * oder der Termin liegt länger als zwei Tage zurück. Solche Aufgaben verschwinden aus der Heute-Liste.
+ */
+export function isStaleCadence(task: Task, milestones: Milestone[], now: Date = new Date()): boolean {
+  if (task.assignee !== 'coach' || task.kind !== 'cadence' || task.status !== 'open') return false
+  const m = task.milestone_id ? milestones.find((x) => x.id === task.milestone_id) : null
+  if (m && (m.status === 'done' || m.status === 'cancelled')) return true
+  if (task.due_at && now.getTime() - new Date(task.due_at).getTime() > 2 * DAY) return true
+  return false
+}
+
 export function latestMood(events: CoachingEvent[]): { score: number; note: string | null; at: string } | null {
   const mood = events.filter((e) => e.kind === 'mood' && e.mood_score != null)
   if (!mood.length) return null
