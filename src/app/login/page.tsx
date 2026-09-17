@@ -1,4 +1,5 @@
 import { AuthForm } from '@/components/auth-form'
+import { PublicFooter } from '@/components/public-footer'
 
 const ERROR_MESSAGES: Record<string, string> = {
   link_invalid:
@@ -14,7 +15,8 @@ export default async function LoginPage({
   const initialError = error ? (ERROR_MESSAGES[error] ?? null) : null
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-background px-4">
+    <div className="min-h-screen flex flex-col bg-background">
+      <div className="flex-1 flex items-center justify-center px-4">
       <div className="bg-surface p-8 rounded-2xl shadow-sm border border-border w-full max-w-md">
         <div className="text-center mb-8">
           <img src="/logo.png" alt="Herr Tech" className="h-8 w-auto mx-auto" />
@@ -28,6 +30,8 @@ export default async function LoginPage({
           <AuthForm initialError={initialError} />
         </div>
       </div>
+      </div>
+      <PublicFooter />
     </div>
   )
 }
