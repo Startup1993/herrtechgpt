@@ -1,6 +1,6 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
 import type { Enrollment, EventKind, Goal, GoalStatus, Material, MaterialKind, Milestone, MilestoneKind, MilestoneStatus, Program, Task, TaskAssignee, TaskKind, TaskStatus, WorldMode } from './types'
-import { createCoachCadenceTasks } from './template'
+import { createCoachCadenceTasks, skipCadenceForMilestone } from './template'
 import { logEvent } from './queries'
 import { sendCoachingInviteEmail } from './emails'
 import { getAppSettings } from '@/lib/app-settings'
@@ -263,6 +263,7 @@ export async function importBundle(admin: SupabaseClient, payload: ImportPayload
       }
       if (current.status !== 'done' && next.status === 'done') {
         await logEvent(admin, { enrollment_id: enrollment.id, kind: 'milestone_done', body: next.title, payload: { milestone_id: next.id }, client_visible: true, author_name: author })
+        await skipCadenceForMilestone(admin, next.id)
       }
     } else {
       const maxSort = milestones.reduce((mx, x) => Math.max(mx, x.sort_order), 0)
@@ -284,6 +285,7 @@ export async function importBundle(admin: SupabaseClient, payload: ImportPayload
       }
       if (next.status === 'done') {
         await logEvent(admin, { enrollment_id: enrollment.id, kind: 'milestone_done', body: next.title, payload: { milestone_id: next.id }, client_visible: true, author_name: author })
+        await skipCadenceForMilestone(admin, next.id)
       }
     }
     msCount++
