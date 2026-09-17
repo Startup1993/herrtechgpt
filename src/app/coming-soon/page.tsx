@@ -1,4 +1,5 @@
 import { SignupForm } from './SignupForm'
+import { PublicFooter } from '@/components/public-footer'
 
 export const metadata = {
   title: 'Herr Tech World — Bald verfügbar',
@@ -58,9 +59,7 @@ export default function ComingSoonPage() {
           </div>
         </main>
 
-        <footer className="px-6 sm:px-10 py-8 text-center text-xs text-muted">
-          © Herr Tech · Powered by Claude
-        </footer>
+        <PublicFooter note="Powered by Claude" />
       </div>
     </div>
   )
