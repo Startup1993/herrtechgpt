@@ -11,9 +11,7 @@ export function PublicFooter({ note }: { note?: string }) {
   return (
     <footer className="px-6 sm:px-10 py-8 text-center text-xs text-muted">
       <div className="flex flex-wrap items-center justify-center gap-x-5 gap-y-2">
-        <span>
-          © {new Date().getFullYear()} Herr Tech{note ? ` · ${note}` : ''}
-        </span>
+        <span>© Herr Tech{note ? ` · ${note}` : ''}</span>
         {LINKS.map((l) => (
           <a key={l.href} href={l.href} className="hover:text-foreground transition-colors">
             {l.label}
