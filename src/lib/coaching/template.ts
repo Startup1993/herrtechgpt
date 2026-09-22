@@ -18,6 +18,9 @@ export async function createCoachCadenceTasks(
   if (milestone.kind !== 'call' && milestone.kind !== 'kickoff') return
 
   const at = new Date(milestone.scheduled_at).getTime()
+  const { data: enr } = await admin.from('coaching_enrollments').select('client_name').eq('id', milestone.enrollment_id).maybeSingle()
+  const firstName = ((enr as { client_name?: string } | null)?.client_name ?? 'dem Kunden').split(' ')[0]
+  const fill = (s?: string) => (s ? s.replaceAll('{Vorname}', firstName) : null)
   const rows: Array<Record<string, unknown>> = []
   let order = 0
 
@@ -26,6 +29,7 @@ export async function createCoachCadenceTasks(
       enrollment_id: milestone.enrollment_id,
       milestone_id: milestone.id,
       title: `${prep.title} · ${milestone.title}`,
+      description: fill(prep.description),
       assignee: 'coach',
       kind: 'cadence',
       due_at: new Date(at + (prep.offset_days ?? -1) * DAY).toISOString(),
@@ -38,6 +42,7 @@ export async function createCoachCadenceTasks(
       enrollment_id: milestone.enrollment_id,
       milestone_id: milestone.id,
       title: `${step.title} · nach ${milestone.title}`,
+      description: fill(step.description),
       assignee: 'coach',
       kind: 'cadence',
       due_at: new Date(at + offset).toISOString(),

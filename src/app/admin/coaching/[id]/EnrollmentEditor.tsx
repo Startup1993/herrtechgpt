@@ -855,7 +855,17 @@ function LageSection({ bundle, milestones, onTab }: { bundle: EnrollmentBundle; 
   const coach = useOptimisticTasks(coachOpen)
   const todos = showAllTodos ? coach.display : coach.display.slice(0, 5)
 
-  const blocker = events.find((e) => e.kind === 'client_blocker' && !events.some((r) => r.kind === 'coach_reply' && new Date(r.occurred_at).getTime() > new Date(e.occurred_at).getTime()) && now.getTime() - new Date(e.occurred_at).getTime() < 14 * 24 * 60 * 60 * 1000)
+  const blocker = events.find((e) => e.kind === 'client_blocker'
+    && !events.some((r) => (r.kind === 'coach_reply' || r.kind === 'blocker_resolved') && (new Date(r.occurred_at).getTime() > new Date(e.occurred_at).getTime() || r.payload?.resolves === e.id))
+    && now.getTime() - new Date(e.occurred_at).getTime() < 14 * 24 * 60 * 60 * 1000)
+  const [resolving, setResolving] = useState(false)
+  async function resolveBlocker() {
+    if (!blocker) return
+    setResolving(true)
+    try { await api('/api/admin/coaching/events', 'POST', { enrollment_id: enrollment.id, kind: 'blocker_resolved', resolves: blocker.id }); router.refresh() }
+    catch (e) { alert((e as Error).message) }
+    setResolving(false)
+  }
   const win = events.find((e) => e.kind === 'client_win' && now.getTime() - new Date(e.occurred_at).getTime() < 14 * 24 * 60 * 60 * 1000)
 
   const topics: Array<{ tag: string; text: string }> = []
@@ -894,8 +904,8 @@ function LageSection({ bundle, milestones, onTab }: { bundle: EnrollmentBundle; 
                 <div key={t.id} className={`grid grid-cols-[20px_minmax(0,1fr)_auto] items-start gap-2.5 py-2 border-b border-border last:border-0 ${done ? 'opacity-60' : ''}`}>
                   <div className="pt-0.5"><TaskCheck done={done} onToggle={() => coach.setStatus(t, done ? 'open' : 'done')} size={20} /></div>
                   <span className="min-w-0">
-                    <span className={`block text-[13px] leading-snug line-clamp-2 ${done ? 'text-muted line-through' : 'text-foreground'}`} title={t.title}>{t.title.split(' · ')[0]}</span>
-                    {t.description && <span className="block text-[11px] text-muted line-clamp-1 mt-0.5" title={t.description}>{t.description}</span>}
+                    <span className={`block text-[13px] leading-snug line-clamp-2 ${done ? 'text-muted line-through' : 'text-foreground'}`} title={t.description ? `${t.title}\n\n${t.description}` : t.title}>{t.title.split(' · ')[0]}</span>
+                    {t.description && <span className="block text-[11px] leading-snug text-muted line-clamp-2 mt-0.5" title={t.description}>{t.description}</span>}
                   </span>
                   {coach.canUndo(t.id)
                     ? <button type="button" onClick={() => coach.undo(t)} className="inline-flex items-center gap-1 text-[11px] font-mono text-primary hover:underline"><Undo2 size={11} /> Rückgängig</button>
@@ -940,8 +950,9 @@ function LageSection({ bundle, milestones, onTab }: { bundle: EnrollmentBundle; 
             <section className="rounded-[var(--radius-2xl)] border border-danger/40 bg-danger/5 p-4 space-y-2">
               <div className="flex items-center gap-2 text-[11px] font-mono uppercase tracking-[0.1em] text-danger"><AlertTriangle size={13} /> Blocker · {relativeDays(blocker.occurred_at)}</div>
               <p className="text-sm text-foreground line-clamp-3" title={blocker.body ?? ''}>{blocker.body}</p>
-              <div className="flex gap-2 pt-1">
-                <button type="button" onClick={() => onTab('history')} className="rounded-lg bg-primary px-3 py-1.5 text-xs font-bold text-white hover:bg-primary-hover">Antworten</button>
+              <div className="flex flex-wrap gap-2 pt-1">
+                <button type="button" onClick={resolveBlocker} disabled={resolving} className="inline-flex items-center gap-1.5 rounded-lg bg-success px-3 py-1.5 text-xs font-bold text-white hover:opacity-90 disabled:opacity-50">{resolving ? <Loader2 size={12} className="animate-spin" /> : <Check size={12} strokeWidth={3} />} Erledigt</button>
+                <button type="button" onClick={() => onTab('history')} className="rounded-lg border border-border bg-surface px-3 py-1.5 text-xs font-semibold text-foreground hover:bg-surface-hover">Antworten</button>
                 {enrollment.whatsapp_url && <a href={enrollment.whatsapp_url} target="_blank" rel="noreferrer" className="rounded-lg border border-border px-3 py-1.5 text-xs font-medium text-foreground hover:bg-surface-hover">WhatsApp</a>}
               </div>
             </section>

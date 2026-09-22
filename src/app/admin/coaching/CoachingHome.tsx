@@ -59,6 +59,7 @@ export interface HomeTodo {
   clientName: string
   coach: string | null
   title: string
+  description: string | null
   dueAt: string
   kind: string
   isPrep: boolean
@@ -390,9 +391,10 @@ function TodoLine({ t, opt, showCoach, late, weekend }: { t: HomeTodo & { id: st
     <div className={`grid grid-cols-[18px_minmax(0,1fr)_auto] items-start gap-1.5 rounded-md px-0.5 py-1.5 border-b border-border/60 last:border-0 ${done ? 'opacity-50' : ''}`}>
       <div className="pt-0.5"><TaskCheck done={done} onToggle={() => opt.setStatus(t, done ? 'open' : 'done')} size={16} /></div>
       <Link href={`/admin/coaching/${t.enrollmentId}`} className="min-w-0 group">
-        <span className={`block text-[12px] leading-snug line-clamp-2 ${done ? 'line-through text-muted' : late ? 'text-danger' : 'text-foreground group-hover:text-primary'}`} title={t.title}>
+        <span className={`block text-[12px] leading-snug line-clamp-2 ${done ? 'line-through text-muted' : late ? 'text-danger' : 'text-foreground group-hover:text-primary'}`} title={t.description ? `${t.title}\n\n${t.description}` : t.title}>
           {t.isPrep && <ClipboardList size={10} className="inline mr-0.5 -mt-0.5 text-primary" />}{t.title.split(' · ')[0]}
         </span>
+        {t.description && <span className="block text-[10.5px] leading-snug text-muted line-clamp-2 mt-0.5" title={t.description}>{t.description}</span>}
         <span className="mt-0.5 flex items-center gap-1 text-[10px] font-mono text-muted"><Avatar name={t.clientName} size={12} />{t.clientName.split(' ')[0]}{t.title.includes(' · ') ? ` · ${t.title.split(' · ').slice(1).join(' · ')}` : ''}</span>
       </Link>
       {opt.canUndo(t.id)
@@ -487,6 +489,7 @@ function feedText(f: FeedItem): string {
   switch (f.kind) {
     case 'client_win': return `meldet: läuft. „${b}“`
     case 'client_blocker': return `meldet Blocker: „${b}“`
+    case 'blocker_resolved': return 'Blocker erledigt'
     case 'task_done': return `hat abgehakt: ${b}`
     case 'coach_reply': return `Antwort an den Kunden: „${b}“`
     case 'schedule_change': return `Termin: ${b}`

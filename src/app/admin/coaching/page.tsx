@@ -82,6 +82,7 @@ export default async function AdminCoachingPage() {
         clientName: r.enrollment.client_name,
         coach: r.enrollment.coach_name,
         title: t.title,
+        description: t.description ?? null,
         dueAt: t.due_at as string,
         kind: t.kind,
         isPrep: /vorbereit/i.test(t.title),

@@ -11,7 +11,7 @@ export type Visibility = 'internal' | 'client'
 export type EventKind =
   | 'whatsapp_in' | 'whatsapp_out' | 'note' | 'schedule_change' | 'plan_change'
   | 'task_done' | 'task_reopened' | 'milestone_done' | 'material_added'
-  | 'login' | 'client_win' | 'client_blocker' | 'mood' | 'invite_sent' | 'coach_reply' | 'sync'
+  | 'login' | 'client_win' | 'client_blocker' | 'blocker_resolved' | 'mood' | 'invite_sent' | 'coach_reply' | 'sync'
 
 export type EventSource = 'coach' | 'client' | 'plugin' | 'system'
 
@@ -25,8 +25,8 @@ export interface Program {
 
 export interface ProgramTemplate {
   milestones?: Array<{ kind: MilestoneKind; number: number; title: string; goal?: string; offset_days?: number }>
-  coach_cadence?: Array<{ title: string; offset_days?: number; offset_hours?: number }>
-  coach_prep?: Array<{ title: string; offset_days?: number }>
+  coach_cadence?: Array<{ title: string; description?: string; offset_days?: number; offset_hours?: number }>
+  coach_prep?: Array<{ title: string; description?: string; offset_days?: number }>
 }
 
 export interface Enrollment {
@@ -203,6 +203,7 @@ export const EVENT_KIND_META: Record<EventKind, { label: string }> = {
   login: { label: 'Login' },
   client_win: { label: 'Das läuft (Kunde)' },
   client_blocker: { label: 'Hier hänge ich (Kunde)' },
+  blocker_resolved: { label: 'Blocker erledigt' },
   mood: { label: 'Stimmung' },
   invite_sent: { label: 'Einladung verschickt' },
   coach_reply: { label: 'Antwort an den Kunden' },
@@ -221,7 +222,7 @@ export interface OverviewRow {
   milestones: Milestone[]
   goals: Array<Pick<Goal, 'id' | 'title' | 'status'>>
   tasks: { open_client: number; overdue_client: number; done_client: number; coach_open: number; coach_due: number; coach_expired: number }
-  coach_tasks: Array<Pick<Task, 'id' | 'title' | 'due_at' | 'kind' | 'milestone_id'>>
+  coach_tasks: Array<Pick<Task, 'id' | 'title' | 'description' | 'due_at' | 'kind' | 'milestone_id'>>
   blocker: { body: string | null; at: string } | null
   mood: { score: number; body: string | null; at: string; trend: number[] } | null
   last_contact: { kind: string; at: string } | null
