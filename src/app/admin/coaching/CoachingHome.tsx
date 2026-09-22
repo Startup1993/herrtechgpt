@@ -204,43 +204,8 @@ export function CoachingHome({ rows, upcoming, feed, todos, programs, clientAcce
         </button>
       </div>
 
-      {/* Zu tun */}
-      <TodoBoard todos={myTodos} showCoach={filter === 'Alle'} />
-
-      {/* Wochenleiste */}
-      <section className="card-static p-4 space-y-3">
-        <div className="flex items-baseline justify-between"><span className={LABEL}>Die nächsten sieben Tage</span><span className="text-[11px] font-mono text-muted">{calls.length} Call{calls.length === 1 ? '' : 's'}</span></div>
-        <div className="overflow-x-auto -mx-1 px-1">
-          <div className="grid grid-cols-7 gap-2 min-w-[760px]">
-            {days.map((d, i) => {
-              const list = callsByDay[i]
-              const isToday = i === 0
-              const weekend = d.getDay() === 0 || d.getDay() === 6
-              return (
-                <div key={i} className={`rounded-xl border p-2 min-h-[112px] space-y-1.5 ${isToday ? 'border-primary/50 bg-primary/5' : weekend ? 'border-border/60 bg-surface-secondary/40' : 'border-border bg-background'}`}>
-                  <div className="flex items-baseline justify-between px-0.5">
-                    <span className={`text-[11px] font-semibold ${isToday ? 'text-primary' : 'text-foreground'}`}>{isToday ? 'Heute' : i === 1 ? 'Morgen' : d.toLocaleDateString('de-DE', { weekday: 'short' })}</span>
-                    <span className="text-[10px] font-mono text-muted">{d.toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit' })}</span>
-                  </div>
-                  {list.map((c) => (
-                    <Link key={`${c.enrollmentId}-${c.at}`} href={`/admin/coaching/${c.enrollmentId}`} className={`block rounded-lg border px-2 py-1.5 bg-surface hover:border-primary/60 transition-colors ${c.blocker ? 'border-danger/50' : c.prepOpen ? 'border-warning/50' : 'border-border'}`} title={`${c.clientName} · ${c.title}${c.goal ? ` · ${c.goal}` : ''}`}>
-                      <div className="flex items-center gap-1.5 min-w-0">
-                        <Avatar name={c.clientName} size={20} />
-                        <span className="text-[12px] font-semibold text-foreground truncate">{c.clientName.split(' ')[0]}</span>
-                        <span className="ml-auto text-[10.5px] font-mono text-muted">{new Date(c.at).toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' })}</span>
-                      </div>
-                      <div className="mt-0.5 flex items-center gap-1 text-[10.5px] font-mono text-muted truncate">
-                        <span className="truncate">{c.title}</span>
-                        {c.meetingUrl && <Video size={10} className="text-primary shrink-0" />}
-                      </div>
-                    </Link>
-                  ))}
-                </div>
-              )
-            })}
-          </div>
-        </div>
-      </section>
+      {/* Deine Woche: Calls und To-dos pro Arbeitstag */}
+      <WeekAgenda calls={calls} todos={myTodos} showCoach={filter === 'Alle'} />
 
       {/* Braucht dich · Passiert */}
       <div className="grid gap-4 lg:grid-cols-2">
@@ -328,68 +293,112 @@ export function CoachingHome({ rows, upcoming, feed, todos, programs, clientAcce
   )
 }
 
-/** Was du zu tun hast: heute (mit Überfälligem, rot), morgen, Rest der Woche. Haken reagieren sofort. */
-function TodoBoard({ todos, showCoach }: { todos: HomeTodo[]; showCoach: boolean }) {
+/** Fünf Arbeitstage ab heute. Was auf Samstag oder Sonntag fällt, rutscht auf den Montag. */
+function workdays(from: Date, n: number): Date[] {
+  const out: Date[] = []
+  const d = new Date(from)
+  while (out.length < n) {
+    if (d.getDay() !== 0 && d.getDay() !== 6) out.push(new Date(d))
+    d.setDate(d.getDate() + 1)
+  }
+  return out
+}
+function workdayFor(iso: string, days: Date[]): number {
+  const d = new Date(iso); d.setHours(0, 0, 0, 0)
+  while (d.getDay() === 0 || d.getDay() === 6) d.setDate(d.getDate() + 1)
+  return days.findIndex((x) => x.getTime() === d.getTime())
+}
+
+function WeekAgenda({ calls, todos, showCoach }: { calls: UpcomingItem[]; todos: HomeTodo[]; showCoach: boolean }) {
   const opt = useOptimisticTasks(todos.map((t) => ({ ...t, id: t.taskId })))
-  const [now] = useState(() => Date.now())
-  const startToday = new Date(now); startToday.setHours(0, 0, 0, 0)
-  const startTomorrow = startToday.getTime() + DAY
-  const startAfter = startTomorrow + DAY
-  const groups: Array<{ key: string; label: string; tone: 'primary' | 'muted'; items: typeof opt.display }> = [
-    { key: 'today', label: 'Heute', tone: 'primary', items: opt.display.filter((t) => new Date(t.dueAt).getTime() < startTomorrow) },
-    { key: 'tomorrow', label: 'Morgen', tone: 'muted', items: opt.display.filter((t) => { const x = new Date(t.dueAt).getTime(); return x >= startTomorrow && x < startAfter }) },
-    { key: 'week', label: 'Diese Woche', tone: 'muted', items: opt.display.filter((t) => new Date(t.dueAt).getTime() >= startAfter) },
-  ]
-  const open = opt.display.filter((t) => t.status === 'open').length
-  const late = opt.display.filter((t) => t.status === 'open' && new Date(t.dueAt).getTime() < startToday.getTime()).length
+  const [today] = useState(() => { const d = new Date(); d.setHours(0, 0, 0, 0); return d })
+  const [showLate, setShowLate] = useState(false)
+  const days = workdays(today, 5)
+  const late = opt.display.filter((t) => new Date(t.dueAt).getTime() < today.getTime())
+  const lateOpen = late.filter((t) => t.status === 'open')
+  const byDay = days.map((_, i) => ({
+    calls: calls.filter((c) => workdayFor(c.at, days) === i),
+    todos: opt.display.filter((t) => new Date(t.dueAt).getTime() >= today.getTime() && workdayFor(t.dueAt, days) === i),
+  }))
+  const openTotal = opt.display.filter((t) => t.status === 'open' && new Date(t.dueAt).getTime() >= today.getTime()).length
   const prepOpen = opt.display.filter((t) => t.status === 'open' && t.isPrep).length
+  const isWeekend = (iso: string) => { const g = new Date(iso).getDay(); return g === 0 || g === 6 }
 
   return (
     <section className="card-static p-4 space-y-3">
       <div className="flex items-baseline justify-between">
-        <span className={LABEL}>Zu tun</span>
-        <span className="text-[11px] font-mono text-muted">{open} offen{late ? <span className="text-danger"> · {late} überfällig</span> : null}{prepOpen ? ` · ${prepOpen} Vorbereitung${prepOpen === 1 ? '' : 'en'}` : ''}</span>
+        <span className={LABEL}>Deine Woche</span>
+        <span className="text-[11px] font-mono text-muted">{calls.filter((c) => workdayFor(c.at, days) >= 0).length} Calls · {openTotal} To-dos{prepOpen ? ` · ${prepOpen} Vorbereitung${prepOpen === 1 ? '' : 'en'}` : ''}</span>
       </div>
       {opt.error && <p className="text-xs text-danger">{opt.error}</p>}
-      {todos.length === 0 ? (
-        <div className="flex items-center gap-3 rounded-xl border border-success/30 bg-success/5 px-3 py-3 text-sm text-foreground"><span className="h-2.5 w-2.5 rounded-full bg-success" /> Nichts fällig in den nächsten sieben Tagen.</div>
-      ) : (
-        <div className="grid gap-3 md:grid-cols-3">
-          {groups.map((g) => (
-            <div key={g.key} className={`rounded-xl border p-2.5 space-y-1 ${g.tone === 'primary' ? 'border-primary/30 bg-primary/5' : 'border-border bg-background'}`}>
-              <div className="flex items-baseline justify-between px-1 pb-1">
-                <span className={`text-[10.5px] font-mono uppercase tracking-[0.08em] ${g.tone === 'primary' ? 'text-primary' : 'text-muted'}`}>{g.label}</span>
-                <span className="text-[10.5px] font-mono text-muted">{g.items.filter((t) => t.status === 'open').length}</span>
-              </div>
-              {g.items.length === 0 && <div className="px-1 py-2 text-xs text-muted">–</div>}
-              {g.items.map((t) => {
-                const done = t.status !== 'open'
-                const due = new Date(t.dueAt)
-                const isLate = !done && due.getTime() < startToday.getTime()
-                const isToday = due.getTime() >= startToday.getTime() && due.getTime() < startTomorrow
-                return (
-                  <div key={t.id} className={`grid grid-cols-[20px_22px_minmax(0,1fr)_auto] items-center gap-2 rounded-lg px-1 py-1.5 ${done ? 'opacity-55' : ''} ${isLate ? 'bg-danger/10' : ''}`}>
-                    <TaskCheck done={done} onToggle={() => opt.setStatus(t, done ? 'open' : 'done')} size={18} />
-                    <Link href={`/admin/coaching/${t.enrollmentId}`} title={t.clientName}><Avatar name={t.clientName} size={22} ring={isLate ? 'bad' : undefined} /></Link>
-                    <Link href={`/admin/coaching/${t.enrollmentId}`} className="min-w-0 group">
-                      <span className={`block text-[12.5px] truncate ${done ? 'line-through text-muted' : isLate ? 'text-danger font-semibold' : 'text-foreground group-hover:text-primary'}`} title={t.title}>
-                        {t.isPrep && <ClipboardList size={11} className="inline mr-1 -mt-0.5 text-primary" />}{t.title.split(' · ')[0]}
-                      </span>
-                      <span className="block text-[10.5px] font-mono text-muted truncate">{t.clientName.split(' ')[0]}{t.title.includes(' · ') ? ` · ${t.title.split(' · ').slice(1).join(' · ')}` : ''}{showCoach && t.coach ? ` · ${t.coach}` : ''}</span>
-                    </Link>
-                    {opt.canUndo(t.id)
-                      ? <button type="button" onClick={() => opt.undo(t)} className="inline-flex items-center gap-1 text-[10.5px] font-mono text-primary hover:underline"><Undo2 size={10} /> zurück</button>
-                      : <span className={`text-right text-[10.5px] font-mono leading-tight ${isLate ? 'text-danger font-semibold' : 'text-muted'}`}>
-                          {isLate ? <>{due.toLocaleDateString('de-DE', { weekday: 'short', day: '2-digit', month: '2-digit' })}<br />überfällig</> : isToday ? due.toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' }) : g.key === 'week' ? <>{due.toLocaleDateString('de-DE', { weekday: 'short' })}<br />{due.toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit' })}</> : due.toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' })}
-                        </span>}
-                  </div>
-                )
-              })}
+
+      {late.length > 0 && (
+        <div className="rounded-xl border border-danger/40 bg-danger/5 px-3 py-2 space-y-1">
+          <button type="button" onClick={() => setShowLate((v) => !v)} className="flex w-full items-center justify-between text-left">
+            <span className="flex items-center gap-2 text-[12.5px] font-semibold text-danger"><span className="h-2 w-2 rounded-full bg-danger" /> {lateOpen.length} überfällig</span>
+            <span className="flex items-center gap-2">
+              <span className="flex -space-x-1.5">{[...new Map(lateOpen.map((t) => [t.enrollmentId, t])).values()].slice(0, 6).map((t) => <Avatar key={t.enrollmentId} name={t.clientName} size={20} />)}</span>
+              <span className="text-[10.5px] font-mono text-danger">{showLate ? 'zuklappen' : 'anzeigen'}</span>
+            </span>
+          </button>
+          {showLate && (
+            <div className="pt-1 grid gap-0.5 sm:grid-cols-2">
+              {late.map((t) => <TodoLine key={t.id} t={t} opt={opt} showCoach={showCoach} late />)}
             </div>
-          ))}
+          )}
         </div>
       )}
+
+      <div className="overflow-x-auto -mx-1 px-1">
+        <div className="grid grid-cols-5 gap-2 min-w-[820px]">
+          {days.map((d, i) => {
+            const isToday = i === 0
+            const { calls: dayCalls, todos: dayTodos } = byDay[i]
+            const openHere = dayTodos.filter((t) => t.status === 'open').length
+            return (
+              <div key={i} className={`rounded-xl border p-2 min-h-[150px] space-y-1.5 ${isToday ? 'border-primary/50 bg-primary/5' : 'border-border bg-background'}`}>
+                <div className="flex items-baseline justify-between px-0.5">
+                  <span className={`text-[12px] font-bold ${isToday ? 'text-primary' : 'text-foreground'}`}>{isToday ? 'Heute' : i === 1 && d.getTime() === today.getTime() + DAY ? 'Morgen' : d.toLocaleDateString('de-DE', { weekday: 'long' })}</span>
+                  <span className="text-[10px] font-mono text-muted">{d.toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit' })}{openHere ? ` · ${openHere}` : ''}</span>
+                </div>
+                {dayCalls.map((c) => (
+                  <Link key={`${c.enrollmentId}-${c.at}`} href={`/admin/coaching/${c.enrollmentId}`} className={`block rounded-lg border px-2 py-1.5 bg-surface hover:border-primary/60 transition-colors ${c.blocker ? 'border-danger/50' : c.prepOpen ? 'border-warning/50' : 'border-primary/30'}`} title={`${c.clientName} · ${c.title}${c.goal ? ` · ${c.goal}` : ''}`}>
+                    <div className="flex items-center gap-1.5 min-w-0">
+                      <Video size={11} className="text-primary shrink-0" />
+                      <Avatar name={c.clientName} size={18} />
+                      <span className="text-[12px] font-bold text-foreground truncate">{c.clientName.split(' ')[0]}</span>
+                      <span className="ml-auto text-[10.5px] font-mono text-foreground">{new Date(c.at).toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' })}</span>
+                    </div>
+                    <div className="mt-0.5 text-[10.5px] font-mono text-muted truncate">{c.title.split(' · ')[0]}{c.prepOpen ? ' · Prep offen' : ''}{c.blocker ? ' · Blocker' : ''}</div>
+                  </Link>
+                ))}
+                {dayTodos.length > 0 && <div className="pt-0.5">{dayTodos.map((t) => <TodoLine key={t.id} t={t} opt={opt} showCoach={showCoach} weekend={isWeekend(t.dueAt)} />)}</div>}
+                {dayCalls.length === 0 && dayTodos.length === 0 && <div className="px-0.5 pt-3 text-[11px] text-muted">frei</div>}
+              </div>
+            )
+          })}
+        </div>
+      </div>
     </section>
+  )
+}
+
+function TodoLine({ t, opt, showCoach, late, weekend }: { t: HomeTodo & { id: string }; opt: ReturnType<typeof useOptimisticTasks<HomeTodo & { id: string }>>; showCoach: boolean; late?: boolean; weekend?: boolean }) {
+  const done = t.status !== 'open'
+  const due = new Date(t.dueAt)
+  return (
+    <div className={`grid grid-cols-[18px_minmax(0,1fr)_auto] items-center gap-1.5 rounded-md px-0.5 py-1 ${done ? 'opacity-50' : ''}`}>
+      <TaskCheck done={done} onToggle={() => opt.setStatus(t, done ? 'open' : 'done')} size={16} />
+      <Link href={`/admin/coaching/${t.enrollmentId}`} className="min-w-0 group flex items-center gap-1.5">
+        <Avatar name={t.clientName} size={16} />
+        <span className={`text-[11.5px] truncate ${done ? 'line-through text-muted' : late ? 'text-danger' : 'text-foreground group-hover:text-primary'}`} title={`${t.clientName} · ${t.title}`}>
+          {t.isPrep && <ClipboardList size={10} className="inline mr-0.5 -mt-0.5 text-primary" />}{t.title.split(' · ')[0]}
+        </span>
+      </Link>
+      {opt.canUndo(t.id)
+        ? <button type="button" onClick={() => opt.undo(t)} className="text-[10px] font-mono text-primary hover:underline"><Undo2 size={10} className="inline" /></button>
+        : <span className={`text-[10px] font-mono ${late ? 'text-danger' : 'text-muted'}`} title={showCoach && t.coach ? t.coach : undefined}>{late ? due.toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit' }) : weekend ? 'WE' : due.toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' })}</span>}
+    </div>
   )
 }
 
