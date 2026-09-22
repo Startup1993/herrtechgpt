@@ -11,7 +11,9 @@ export type Visibility = 'internal' | 'client'
 export type EventKind =
   | 'whatsapp_in' | 'whatsapp_out' | 'note' | 'schedule_change' | 'plan_change'
   | 'task_done' | 'task_reopened' | 'milestone_done' | 'material_added'
-  | 'login' | 'client_win' | 'client_blocker' | 'mood' | 'invite_sent' | 'coach_reply'
+  | 'login' | 'client_win' | 'client_blocker' | 'mood' | 'invite_sent' | 'coach_reply' | 'sync'
+
+export type EventSource = 'coach' | 'client' | 'plugin' | 'system'
 
 export interface Program {
   key: string
@@ -148,6 +150,9 @@ export interface CoachingEvent {
   mood_score: number | null
   client_visible: boolean
   created_at: string
+  /** Wann es wirklich passiert ist. created_at ist nur der Datenbank-Zeitpunkt. */
+  occurred_at: string
+  source: EventSource
 }
 
 export const WORLD_MODE_META: Record<WorldMode, { label: string; hint: string }> = {
@@ -201,6 +206,7 @@ export const EVENT_KIND_META: Record<EventKind, { label: string }> = {
   mood: { label: 'Stimmung' },
   invite_sent: { label: 'Einladung verschickt' },
   coach_reply: { label: 'Antwort an den Kunden' },
+  sync: { label: 'Plugin-Sync' },
 }
 
 /** Ereignisse, die auf der Kundenseite als Nachrichten-Verlauf erscheinen. */
@@ -208,3 +214,16 @@ export const MESSAGE_KINDS: EventKind[] = ['client_win', 'client_blocker', 'coac
 
 export const COACH_OPTIONS = ['Jacob', 'Jonas', 'Flo'] as const
 export const TRACK_OPTIONS = ['A', 'B', 'C', 'D', 'A/B', 'B/C', 'C/B', 'C/D', 'B+C'] as const
+
+/** Eine Zeile aus coaching_admin_overview(): alles, was die Coach-Startseite pro Teilnahme braucht. */
+export interface OverviewRow {
+  enrollment: Enrollment
+  milestones: Milestone[]
+  goals: Array<Pick<Goal, 'id' | 'title' | 'status'>>
+  tasks: { open_client: number; overdue_client: number; done_client: number; coach_open: number; coach_due: number; coach_expired: number }
+  coach_tasks: Array<Pick<Task, 'id' | 'title' | 'due_at' | 'kind' | 'milestone_id'>>
+  blocker: { body: string | null; at: string } | null
+  mood: { score: number; body: string | null; at: string; trend: number[] } | null
+  last_contact: { kind: string; at: string } | null
+  recent: Array<{ kind: EventKind; body: string | null; at: string; source: EventSource; author: string | null }>
+}

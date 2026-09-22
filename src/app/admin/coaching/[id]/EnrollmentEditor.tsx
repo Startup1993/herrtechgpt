@@ -4,14 +4,17 @@ import { useMemo, useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import {
-  Check, ChevronLeft, ExternalLink, Eye, Loader2, Mail, Plus, Trash2, Upload, X, Pencil, RefreshCw,
+  AlertTriangle, Check, ChevronLeft, ExternalLink, Eye, Loader2, Mail, MessageCircle, Plus, Trash2, Upload, X, Pencil, RefreshCw, Undo2,
 } from 'lucide-react'
 import type { EnrollmentBundle } from '@/lib/coaching/queries'
 import type { CoachingEvent, Enrollment, EventKind, Goal, Material, Milestone, Program, Task } from '@/lib/coaching/types'
 import {
   COACH_OPTIONS, ENROLLMENT_STATUS_META, EVENT_KIND_META, GOAL_STATUS_META, MATERIAL_KIND_META, TRACK_OPTIONS, WORLD_MODE_META,
 } from '@/lib/coaching/types'
-import { computeProgress, derivePhase, deriveSignals, fmtDate, sortMilestones } from '@/lib/coaching/derive'
+import { computeProgress, derivePhase, deriveSignals, fmtDate, sortMilestones, nextMilestone, lastDoneMilestone, lastContact, latestMood, relativeDays, daysUntil, isStaleCadence, isExpiredPromise } from '@/lib/coaching/derive'
+import { TaskCheck } from '@/components/coaching/TaskCheck'
+import { useOptimisticTasks } from '@/components/coaching/useOptimisticTasks'
+import type { EditorTab } from './page'
 import { nextTemplateMilestone } from '@/lib/coaching/template'
 import { Markdown } from '@/components/coaching/Markdown'
 
@@ -42,7 +45,7 @@ function toLocalInput(iso: string | null | undefined): string {
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`
 }
 
-export function EnrollmentEditor({ bundle, programs }: { bundle: EnrollmentBundle; programs: Program[] }) {
+export function EnrollmentEditor({ bundle, programs, initialTab = 'lage' }: { bundle: EnrollmentBundle; programs: Program[]; initialTab?: EditorTab }) {
   const router = useRouter()
   const { enrollment, goals, materials, events } = bundle
   const milestones = useMemo(() => sortMilestones(bundle.milestones), [bundle.milestones])
@@ -50,8 +53,14 @@ export function EnrollmentEditor({ bundle, programs }: { bundle: EnrollmentBundl
   const phase = derivePhase(enrollment, milestones)
   const signals = deriveSignals(enrollment, milestones, bundle.tasks, events)
   const program = programs.find((p) => p.key === enrollment.program_key) ?? bundle.program
-  const [tab, setTab] = useState<'overview' | 'sessions' | 'tasks' | 'material' | 'history'>('overview')
+  const [tab, setTab] = useState<EditorTab>(initialTab)
+  const next = nextMilestone(milestones)
+  const contact = lastContact(events, enrollment)
+  const mood = latestMood(events)
+  const openClient = bundle.tasks.filter((x) => x.assignee === 'client' && x.status === 'open')
   const [inviting, setInviting] = useState(false)
+  const [nowTs] = useState(() => Date.now())
+  const overdueClient = openClient.filter((x) => x.due_at && new Date(x.due_at).getTime() < nowTs).length
 
   async function sendInvite() {
     if (!enrollment.client_email) { alert('Erst eine E-Mail-Adresse eintragen.'); return }
@@ -74,15 +83,16 @@ export function EnrollmentEditor({ bundle, programs }: { bundle: EnrollmentBundl
     <div className="p-6 sm:p-8 max-w-6xl">
       <Link href="/admin/coaching" className="inline-flex items-center gap-1 text-sm text-muted hover:text-foreground mb-4"><ChevronLeft size={15} /> Alle Kunden</Link>
 
-      <div className="flex flex-wrap items-start justify-between gap-4 mb-5">
+      <div className="flex flex-wrap items-start justify-between gap-4 mb-4">
         <div>
           <div className="flex flex-wrap items-center gap-2">
             <h1 className="text-2xl font-bold text-foreground">{enrollment.client_name}</h1>
-            <span className={`rounded-full px-2 py-0.5 text-[11px] font-mono ${statusMeta.badge}`}>{statusMeta.label}</span>
-            <span className="text-sm text-muted">{phase.short}{enrollment.coach_name ? ` · ${enrollment.coach_name}` : ''}</span>
+            <span className={`rounded-full px-2 py-0.5 text-[11px] font-mono ${statusMeta.badge}`}>{phase.short}</span>
+            {enrollment.track && <span className="rounded-full px-2 py-0.5 text-[11px] font-mono bg-surface-secondary text-muted">Track {enrollment.track}</span>}
+            {enrollment.coach_name && <span className="text-sm text-muted">{enrollment.coach_name}</span>}
           </div>
           <div className="text-sm text-muted mt-1">
-            {[enrollment.company, enrollment.client_email, program?.title, `${progress.percent} % Fortschritt`].filter(Boolean).join(' · ')}
+            {[enrollment.company, enrollment.client_email, program?.title].filter(Boolean).join(' · ')}
           </div>
           {signals.length > 0 && (
             <div className="mt-2 flex flex-wrap gap-1.5">
@@ -91,32 +101,43 @@ export function EnrollmentEditor({ bundle, programs }: { bundle: EnrollmentBundl
           )}
         </div>
         <div className="flex flex-wrap gap-2">
-          <Link href={`/admin/coaching/${enrollment.id}/preview`} className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-surface px-3 py-2 text-sm font-medium text-foreground hover:bg-surface-hover"><Eye size={15} /> Kundenansicht</Link>
-          <button type="button" onClick={sendInvite} disabled={inviting} className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-surface px-3 py-2 text-sm font-medium text-foreground hover:bg-surface-hover disabled:opacity-50">
-            {inviting ? <Loader2 size={15} className="animate-spin" /> : <Mail size={15} />} {enrollment.invited_at ? 'Einladung erneut senden' : 'Einladung senden'}
-          </button>
+          {enrollment.whatsapp_url && <a href={enrollment.whatsapp_url} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1.5 rounded-lg bg-primary px-3 py-2 text-sm font-semibold text-white hover:bg-primary-hover"><MessageCircle size={15} /> WhatsApp</a>}
           {enrollment.notion_url && <a href={enrollment.notion_url} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-surface px-3 py-2 text-sm text-foreground hover:bg-surface-hover"><ExternalLink size={14} /> Notion</a>}
           {enrollment.drive_url && <a href={enrollment.drive_url} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-surface px-3 py-2 text-sm text-foreground hover:bg-surface-hover"><ExternalLink size={14} /> Drive</a>}
+          <Link href={`/admin/coaching/${enrollment.id}/preview`} className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-surface px-3 py-2 text-sm font-medium text-foreground hover:bg-surface-hover"><Eye size={15} /> Kundenansicht</Link>
+          <button type="button" onClick={sendInvite} disabled={inviting} className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-surface px-3 py-2 text-sm font-medium text-foreground hover:bg-surface-hover disabled:opacity-50">
+            {inviting ? <Loader2 size={15} className="animate-spin" /> : <Mail size={15} />} {enrollment.invited_at ? 'Einladung erneut' : 'Einladen'}
+          </button>
         </div>
+      </div>
+
+      <div className="grid gap-2.5 sm:grid-cols-2 lg:grid-cols-4 mb-5">
+        <Stat label="Nächster Call" value={next?.scheduled_at ? fmtDate(next.scheduled_at, 'datetime') : next ? next.title : '–'} sub={next?.scheduled_at ? `${relativeDays(next.scheduled_at)} · ${next.title}` : next ? 'Termin fehlt' : enrollment.status === 'completed' ? 'abgeschlossen' : 'kein Meilenstein'} tone={next && !next.scheduled_at && enrollment.status === 'active' ? 'bad' : undefined} />
+        <Stat label="Kunde ist dran" value={`${openClient.length} offen`} sub={overdueClient ? `${overdueClient} überfällig` : `${bundle.tasks.filter((x) => x.assignee === 'client' && x.status === 'done').length} erledigt · ${progress.percent} % Fortschritt`} tone={overdueClient ? 'warn' : undefined} />
+        <Stat label="Letzter Kontakt" value={contact ? relativeDays(contact.at) : '–'} sub={contact ? `${contact.label} · ${fmtDate(contact.at)}` : 'noch keiner'} />
+        <Stat label="Stimmung" value={mood ? `${mood.score} / 5` : '–'} sub={mood ? (mood.note ?? fmtDate(mood.at)) : 'noch nicht erfasst'} tone={mood && mood.score <= 2 ? 'bad' : mood && mood.score === 3 ? 'warn' : undefined} />
       </div>
 
       <div className="flex gap-1 border-b border-border mb-6 overflow-x-auto">
         {([
-          ['overview', 'Stammdaten & Workflows'],
+          ['lage', 'Lage'],
           ['sessions', `Sessions (${milestones.length})`],
           ['tasks', `Aufgaben (${bundle.tasks.filter((t) => t.status === 'open').length} offen)`],
+          ['goals', `Workflows (${goals.length})`],
           ['material', `Material (${materials.length})`],
           ['history', `Verlauf (${events.length})`],
+          ['stammdaten', 'Stammdaten'],
         ] as const).map(([k, l]) => (
           <button key={k} type="button" onClick={() => setTab(k)} className={`px-3.5 py-2.5 text-sm whitespace-nowrap border-b-2 -mb-px ${tab === k ? 'border-primary text-primary font-semibold' : 'border-transparent text-muted hover:text-foreground'}`}>{l}</button>
         ))}
       </div>
 
-      {tab === 'overview' && (
+      {tab === 'lage' && <LageSection bundle={bundle} milestones={milestones} onTab={setTab} />}
+      {tab === 'goals' && <GoalsSection enrollment={enrollment} goals={goals} milestones={milestones} />}
+      {tab === 'stammdaten' && (
         <div className="grid lg:grid-cols-[1.2fr_.8fr] gap-6 items-start">
           <StammdatenForm enrollment={enrollment} programs={programs} />
           <div className="space-y-6">
-            <GoalsSection enrollment={enrollment} goals={goals} milestones={milestones} />
             <div className="card-static p-5">
               <h3 className="text-sm font-semibold text-foreground mb-2">Gefahrenzone</h3>
               <p className="text-xs text-muted mb-3">Löscht die Teilnahme mit allem, was dazugehört. Der World-Account des Kunden bleibt.</p>
@@ -449,7 +470,9 @@ function TasksSection({ enrollment, tasks, milestones }: { enrollment: Enrollmen
   const [scope, setScope] = useState<'client' | 'coach'>('client')
   const [now] = useState(() => Date.now())
 
-  const list = tasks.filter((t) => t.assignee === scope && (showDone || t.status === 'open')).sort((a, b) => (a.due_at ? new Date(a.due_at).getTime() : Infinity) - (b.due_at ? new Date(b.due_at).getTime() : Infinity))
+  const opt = useOptimisticTasks(tasks)
+  const expired = tasks.filter((t) => isExpiredPromise(t))
+  const list = opt.display.filter((t) => t.assignee === scope && (showDone || t.status === 'open')).sort((a, b) => (a.due_at ? new Date(a.due_at).getTime() : Infinity) - (b.due_at ? new Date(b.due_at).getTime() : Infinity))
 
   async function save(t: Partial<Task>) {
     try {
@@ -458,8 +481,12 @@ function TasksSection({ enrollment, tasks, milestones }: { enrollment: Enrollmen
       setEditing(null); router.refresh()
     } catch (e) { alert((e as Error).message) }
   }
-  async function toggle(t: Task) { await api('/api/admin/coaching/tasks', 'PATCH', { id: t.id, status: t.status === 'done' ? 'open' : 'done' }); router.refresh() }
-  async function skip(t: Task) { await api('/api/admin/coaching/tasks', 'PATCH', { id: t.id, status: 'skipped' }); router.refresh() }
+  function toggle(t: Task) { void opt.setStatus(t, t.status === 'done' ? 'open' : 'done') }
+  function skip(t: Task) { void opt.setStatus(t, 'skipped') }
+  async function cleanExpired() {
+    if (!confirm(`${expired.length} Versprechen sind älter als zwei Wochen. Alle als gestrichen markieren?`)) return
+    await api('/api/admin/coaching/tasks', 'PATCH', { action: 'skip_expired', enrollment_id: enrollment.id }); router.refresh()
+  }
   async function remove(t: Task) { if (!confirm(`„${t.title}“ löschen?`)) return; await api(`/api/admin/coaching/tasks?id=${t.id}`, 'DELETE'); router.refresh() }
 
   return (
@@ -469,18 +496,20 @@ function TasksSection({ enrollment, tasks, milestones }: { enrollment: Enrollmen
           {(['client', 'coach'] as const).map((s) => <button key={s} type="button" onClick={() => setScope(s)} className={`rounded-md px-3 py-1.5 text-sm ${scope === s ? 'bg-primary text-white font-semibold' : 'text-muted hover:text-foreground'}`}>{s === 'client' ? `Kunde (${tasks.filter((t) => t.assignee === 'client' && t.status === 'open').length})` : `Coach (${tasks.filter((t) => t.assignee === 'coach' && t.status === 'open').length})`}</button>)}
         </div>
         <div className="flex items-center gap-3">
+          {scope === 'coach' && expired.length > 0 && <button type="button" onClick={cleanExpired} className="text-xs text-muted hover:text-foreground">{expired.length} verjährt · aufräumen</button>}
           <label className="text-xs text-muted flex items-center gap-1.5"><input type="checkbox" checked={showDone} onChange={(e) => setShowDone(e.target.checked)} /> erledigte zeigen</label>
           <button type="button" onClick={() => setEditing({ assignee: scope, kind: scope === 'client' ? 'homework' : 'promise', status: 'open' })} className="btn-primary !py-2 !px-3.5 !text-sm"><Plus size={15} /> Aufgabe</button>
         </div>
       </div>
       <p className="text-sm text-muted">{scope === 'client' ? 'Hausaufgaben des Kunden. Anleitung und Copy-Prompt erscheinen im Dashboard hinter dem Button „Anleitung“.' : 'Deine Zusagen und die Cadence-Erinnerungen. Sieht der Kunde nie. Erscheinen in der Heute-Liste des Cockpits.'}</p>
+      {opt.error && <p className="text-xs text-danger">{opt.error}</p>}
       {list.length === 0 && <div className="card-static p-8 text-center text-sm text-muted">Nichts offen.</div>}
       <div className="space-y-2">
         {list.map((t) => {
           const overdue = t.status === 'open' && t.due_at && new Date(t.due_at).getTime() < now
           return (
             <div key={t.id} className={`card-static p-4 flex items-start gap-3 ${t.status !== 'open' ? 'opacity-60' : ''}`}>
-              <button type="button" onClick={() => toggle(t)} className={`mt-0.5 grid h-5 w-5 place-items-center rounded-md border-2 ${t.status === 'done' ? 'bg-primary border-primary text-white' : 'border-border hover:border-primary'}`} aria-label="Umschalten">{t.status === 'done' && <Check size={12} strokeWidth={3} />}</button>
+              <div className="mt-0.5"><TaskCheck done={t.status === 'done'} onToggle={() => toggle(t)} size={20} label="Umschalten" /></div>
               <div className="min-w-0 flex-1">
                 <div className={`text-sm font-semibold ${t.status === 'done' ? 'line-through text-muted' : 'text-foreground'}`}>{t.title}</div>
                 <div className="text-[11px] font-mono text-muted mt-0.5">
@@ -491,7 +520,8 @@ function TasksSection({ enrollment, tasks, milestones }: { enrollment: Enrollmen
                 {t.description && <div className="text-xs text-muted mt-1">{t.description}</div>}
                 {(t.instructions || t.copy_prompt) && <div className="text-[11px] text-primary mt-1">{t.instructions ? 'Anleitung' : ''}{t.instructions && t.copy_prompt ? ' + ' : ''}{t.copy_prompt ? 'Copy-Prompt' : ''} hinterlegt</div>}
               </div>
-              <div className="flex gap-1 shrink-0">
+              <div className="flex gap-1 shrink-0 items-center">
+                {opt.canUndo(t.id) && <button type="button" onClick={() => opt.undo(t)} className="inline-flex items-center gap-1 px-1.5 text-[11px] font-mono text-primary hover:underline"><Undo2 size={11} /> Rückgängig</button>}
                 {t.status === 'open' && <button type="button" onClick={() => skip(t)} className="p-1.5 text-muted hover:text-foreground text-xs" title="Streichen">streichen</button>}
                 <button type="button" onClick={() => setEditing(t)} className="p-1.5 text-muted hover:text-foreground" aria-label="Bearbeiten"><Pencil size={14} /></button>
                 <button type="button" onClick={() => remove(t)} className="p-1.5 text-muted hover:text-danger" aria-label="Löschen"><Trash2 size={14} /></button>
@@ -778,6 +808,165 @@ function HistorySection({ enrollment, events }: { enrollment: Enrollment; events
           )
         })}
       </div>
+    </div>
+  )
+}
+
+// ─── Kopf-Kennzahl ────────────────────────────────────────────────────────────
+
+function Stat({ label, value, sub, tone }: { label: string; value: string; sub: string; tone?: 'bad' | 'warn' }) {
+  return (
+    <div className="card-static px-4 py-3 grid gap-0.5">
+      <span className="text-[10.5px] font-mono uppercase tracking-[0.1em] text-muted">{label}</span>
+      <span className={`text-[15px] font-bold truncate ${tone === 'bad' ? 'text-danger' : tone === 'warn' ? 'text-warning' : 'text-foreground'}`} title={value}>{value}</span>
+      <span className="text-xs text-muted truncate" title={sub}>{sub}</span>
+    </div>
+  )
+}
+
+// ─── Lage: was ansteht, bevor man irgendetwas bearbeitet ─────────────────────
+
+function LageSection({ bundle, milestones, onTab }: { bundle: EnrollmentBundle; milestones: Milestone[]; onTab: (t: EditorTab) => void }) {
+  const router = useRouter()
+  const { enrollment, goals, events } = bundle
+  const [now] = useState(() => new Date())
+  const next = nextMilestone(milestones)
+  const last = lastDoneMilestone(milestones)
+
+  const coachOpen = bundle.tasks.filter((t) => t.assignee === 'coach' && t.status === 'open' && !isStaleCadence(t, milestones, now) && !isExpiredPromise(t, now))
+    .sort((a, b) => (a.due_at ? new Date(a.due_at).getTime() : Infinity) - (b.due_at ? new Date(b.due_at).getTime() : Infinity))
+  const expired = bundle.tasks.filter((t) => isExpiredPromise(t, now))
+  const clientTasks = bundle.tasks.filter((t) => t.assignee === 'client' && t.status !== 'skipped')
+    .filter((t) => t.status === 'open' || (t.completed_at && now.getTime() - new Date(t.completed_at).getTime() < 14 * 24 * 60 * 60 * 1000))
+    .sort((a, b) => (a.status === b.status ? 0 : a.status === 'open' ? -1 : 1) || (a.due_at ? new Date(a.due_at).getTime() : Infinity) - (b.due_at ? new Date(b.due_at).getTime() : Infinity))
+  const coach = useOptimisticTasks(coachOpen)
+
+  const blocker = events.find((e) => e.kind === 'client_blocker' && !events.some((r) => r.kind === 'coach_reply' && new Date(r.occurred_at).getTime() > new Date(e.occurred_at).getTime()) && now.getTime() - new Date(e.occurred_at).getTime() < 14 * 24 * 60 * 60 * 1000)
+  const wins = events.filter((e) => e.kind === 'client_win' && now.getTime() - new Date(e.occurred_at).getTime() < 14 * 24 * 60 * 60 * 1000).slice(0, 2)
+
+  const topics: Array<{ tag: string; text: string }> = []
+  if (blocker?.body) topics.push({ tag: 'Blocker', text: blocker.body })
+  for (const t of clientTasks.filter((x) => x.status === 'open' && x.due_at && new Date(x.due_at).getTime() < now.getTime())) topics.push({ tag: 'Überfällig', text: t.title })
+  for (const g of goals.filter((x) => x.status === 'stuck')) topics.push({ tag: 'Hängt', text: `${g.title}${g.status_note ? `: ${g.status_note}` : ''}` })
+  if (last?.open_items) for (const line of last.open_items.split('\n').map((l) => l.replace(/^[-*•]\s*/, '').trim()).filter(Boolean).slice(0, 4)) topics.push({ tag: `Offen aus ${last.title}`, text: line })
+  if (next?.goal) topics.push({ tag: 'Ziel', text: next.goal })
+
+  async function cleanExpired() {
+    if (!confirm(`${expired.length} Versprechen sind älter als zwei Wochen. Alle als gestrichen markieren?`)) return
+    await api('/api/admin/coaching/tasks', 'PATCH', { action: 'skip_expired', enrollment_id: enrollment.id })
+    router.refresh()
+  }
+
+  return (
+    <div className="space-y-5">
+      <div className="grid gap-4 lg:grid-cols-3">
+        <section className="card-static p-4 space-y-2">
+          <div className="flex items-baseline justify-between"><span className="text-[11px] font-mono uppercase tracking-[0.12em] text-primary font-semibold">{next ? `Bis ${next.title} zu tun` : 'Deine To-dos'}</span><span className="text-[11px] font-mono text-muted">{coach.display.filter((t) => t.status === 'open').length} offen</span></div>
+          {coach.error && <p className="text-xs text-danger">{coach.error}</p>}
+          {coach.display.length === 0 && <p className="text-sm text-muted py-2">Nichts offen. Erinnerungen entstehen mit dem nächsten Termin.</p>}
+          <div>
+            {coach.display.map((t) => {
+              const done = t.status !== 'open'
+              const late = !done && !!t.due_at && new Date(t.due_at).getTime() < now.getTime() - 60 * 60 * 1000
+              return (
+                <div key={t.id} className="grid grid-cols-[18px_minmax(0,1fr)_auto] items-center gap-2.5 py-1.5 border-b border-border last:border-0">
+                  <TaskCheck done={done} onToggle={() => coach.setStatus(t, done ? 'open' : 'done')} />
+                  <span className={`text-[13px] truncate ${done ? 'text-muted line-through' : 'text-foreground'}`} title={t.title}>{t.title.split(' · ')[0]}</span>
+                  {coach.canUndo(t.id)
+                    ? <button type="button" onClick={() => coach.undo(t)} className="inline-flex items-center gap-1 text-[11px] font-mono text-primary hover:underline"><Undo2 size={11} /> Rückgängig</button>
+                    : <span className={`text-[11px] font-mono ${late ? 'text-danger' : 'text-muted'}`}>{t.due_at ? relativeDays(t.due_at) : '–'}</span>}
+                </div>
+              )
+            })}
+          </div>
+          <div className="flex flex-wrap items-center justify-between gap-2 pt-1">
+            <button type="button" onClick={() => onTab('tasks')} className="text-xs text-primary hover:underline">Alle Aufgaben</button>
+            {expired.length > 0 && <button type="button" onClick={cleanExpired} className="text-xs text-muted hover:text-foreground">{expired.length} verjährt · aufräumen</button>}
+          </div>
+        </section>
+
+        <section className="card-static p-4 space-y-2">
+          <div className="flex items-baseline justify-between"><span className="text-[11px] font-mono uppercase tracking-[0.12em] text-primary font-semibold">Kunde ist dran</span><span className="text-[11px] font-mono text-muted">{clientTasks.filter((t) => t.status === 'open').length} offen</span></div>
+          {clientTasks.length === 0 && <p className="text-sm text-muted py-2">Keine Kundenaufgaben. Die kommen mit der Nachbereitung des nächsten Calls.</p>}
+          <div>
+            {clientTasks.slice(0, 8).map((t) => {
+              const done = t.status === 'done'
+              const late = !done && !!t.due_at && new Date(t.due_at).getTime() < now.getTime()
+              return (
+                <div key={t.id} className="grid grid-cols-[14px_minmax(0,1fr)_auto] items-center gap-2.5 py-1.5 border-b border-border last:border-0">
+                  <span className={`h-3 w-3 rounded-full ${done ? 'bg-success' : late ? 'bg-danger' : 'border-2 border-border'}`} />
+                  <span className={`text-[13px] truncate ${done ? 'text-muted line-through' : 'text-foreground'}`} title={t.title}>{t.title}</span>
+                  <span className={`text-[11px] font-mono ${late ? 'text-danger' : 'text-muted'}`}>{done ? `erledigt ${relativeDays(t.completed_at)}` : t.due_at ? relativeDays(t.due_at) : '–'}</span>
+                </div>
+              )
+            })}
+          </div>
+          <p className="text-[11px] text-muted pt-1">Der Kunde hakt selbst ab. Nachfassen per WhatsApp, nicht hier abhaken.</p>
+        </section>
+
+        <div className="space-y-4">
+          {blocker ? (
+            <section className="rounded-[var(--radius-xl)] border border-danger/40 bg-danger/5 p-4 space-y-2">
+              <div className="flex items-center gap-2 text-xs font-mono text-danger"><AlertTriangle size={13} /> Blocker · {relativeDays(blocker.occurred_at)} · {fmtDate(blocker.occurred_at, 'datetime')}</div>
+              <p className="text-sm text-foreground whitespace-pre-wrap">{blocker.body}</p>
+              <div className="flex gap-2 pt-1">
+                <button type="button" onClick={() => onTab('history')} className="rounded-lg bg-primary px-3 py-1.5 text-xs font-bold text-white hover:bg-primary-hover">Antworten</button>
+                {enrollment.whatsapp_url && <a href={enrollment.whatsapp_url} target="_blank" rel="noreferrer" className="rounded-lg border border-border px-3 py-1.5 text-xs font-medium text-foreground hover:bg-surface-hover">WhatsApp</a>}
+              </div>
+            </section>
+          ) : wins.length > 0 ? (
+            <section className="rounded-[var(--radius-xl)] border border-success/40 bg-success/5 p-4 space-y-1.5">
+              <div className="text-xs font-mono text-success">Das läuft · {relativeDays(wins[0].occurred_at)}</div>
+              <p className="text-sm text-foreground whitespace-pre-wrap">{wins[0].body}</p>
+            </section>
+          ) : null}
+
+          <section className="card-static p-4 space-y-2">
+            <div className="flex items-baseline justify-between"><span className="text-[11px] font-mono uppercase tracking-[0.12em] text-primary font-semibold">{next ? `Themen für ${next.title}` : 'Offene Themen'}</span><span className="text-[11px] font-mono text-muted">aus Verlauf</span></div>
+            {topics.length === 0 && <p className="text-sm text-muted py-2">Nichts Offenes. Gute Ausgangslage.</p>}
+            <div className="space-y-1.5">
+              {topics.slice(0, 7).map((tp, i) => (
+                <div key={i} className="grid grid-cols-[minmax(64px,auto)_minmax(0,1fr)] gap-2 text-[13px] items-baseline">
+                  <span className={`text-[10px] font-mono uppercase tracking-[0.06em] ${tp.tag === 'Blocker' ? 'text-danger' : tp.tag === 'Hängt' || tp.tag === 'Überfällig' ? 'text-warning' : 'text-muted'}`}>{tp.tag}</span>
+                  <span className="text-foreground">{tp.text}</span>
+                </div>
+              ))}
+            </div>
+          </section>
+        </div>
+      </div>
+
+      <section className="card-static p-4 space-y-3">
+        <div className="flex items-baseline justify-between"><span className="text-[11px] font-mono uppercase tracking-[0.12em] text-primary font-semibold">Workflows</span><button type="button" onClick={() => onTab('goals')} className="text-xs text-primary hover:underline">Bearbeiten</button></div>
+        {goals.length === 0 && <p className="text-sm text-muted">Noch keine Workflows. Die kommen aus dem Kickoff.</p>}
+        <div className="grid gap-2.5 sm:grid-cols-2 lg:grid-cols-3">
+          {goals.map((g) => (
+            <div key={g.id} className="rounded-[var(--radius-lg)] border border-border bg-background px-3.5 py-3 space-y-1">
+              <div className="flex items-center justify-between gap-2"><span className="text-[13px] font-semibold text-foreground truncate">{g.title}</span><span className={`h-2.5 w-2.5 shrink-0 rounded-full ${GOAL_STATUS_META[g.status].dot}`} title={GOAL_STATUS_META[g.status].label} /></div>
+              <p className="text-xs text-muted">{g.status_note || GOAL_STATUS_META[g.status].label}</p>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      <section className="card-static p-4 space-y-3">
+        <div className="flex items-baseline justify-between"><span className="text-[11px] font-mono uppercase tracking-[0.12em] text-primary font-semibold">Sessions</span><button type="button" onClick={() => onTab('sessions')} className="text-xs text-primary hover:underline">Bearbeiten</button></div>
+        <div className="overflow-x-auto">
+          <div className="grid gap-1.5 min-w-[560px]" style={{ gridTemplateColumns: `repeat(${Math.max(milestones.length, 1)}, minmax(0, 1fr))` }}>
+            {milestones.map((m) => {
+              const isNext = next?.id === m.id
+              const d = m.scheduled_at ? daysUntil(m.scheduled_at, now) : null
+              return (
+                <div key={m.id} className="text-center space-y-1">
+                  <div className={`h-1 rounded-full ${m.status === 'done' ? 'bg-success' : isNext ? 'bg-primary' : m.status === 'cancelled' ? 'bg-danger/40' : 'bg-border'}`} />
+                  <div className={`text-xs font-semibold truncate ${isNext ? 'text-primary' : m.status === 'done' ? 'text-foreground' : 'text-muted'}`} title={m.title}>{m.title.split(' · ')[0]}</div>
+                  <div className="text-[10.5px] font-mono text-muted">{m.scheduled_at ? (isNext && d !== null && d >= 0 && d < 7 ? relativeDays(m.scheduled_at) : fmtDate(m.scheduled_at)) : m.status === 'cancelled' ? 'entfällt' : 'offen'}</div>
+                </div>
+              )
+            })}
+          </div>
+        </div>
+      </section>
     </div>
   )
 }

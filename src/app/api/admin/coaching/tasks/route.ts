@@ -56,6 +56,15 @@ export async function PATCH(request: Request) {
   const ctx = await requireAdmin()
   if (!ctx) return NextResponse.json({ error: 'Unauthorized' }, { status: 403 })
   const body = await request.json().catch(() => null) as Record<string, unknown> | null
+  if (body && body.action === 'skip_expired' && typeof body.enrollment_id === 'string') {
+    const admin = createAdminClient()
+    const cutoff = new Date(Date.now() - 14 * 24 * 60 * 60 * 1000).toISOString()
+    const { data, error } = await admin.from('coaching_tasks').update({ status: 'skipped' })
+      .eq('enrollment_id', body.enrollment_id).eq('assignee', 'coach').eq('status', 'open').neq('kind', 'cadence').lt('due_at', cutoff).select('id')
+    if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+    invalidate(body.enrollment_id)
+    return NextResponse.json({ skipped: data?.length ?? 0 })
+  }
   if (!body || typeof body.id !== 'string') return NextResponse.json({ error: 'id erforderlich' }, { status: 400 })
   const admin = createAdminClient()
   const { data: before } = await admin.from('coaching_tasks').select('*').eq('id', body.id).maybeSingle()

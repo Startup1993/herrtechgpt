@@ -1,4 +1,4 @@
-import type { Enrollment, Goal, Milestone, Task, CoachingEvent } from './types'
+import type { Enrollment, Goal, Milestone, Task, CoachingEvent, OverviewRow } from './types'
 
 const DAY = 24 * 60 * 60 * 1000
 
@@ -223,4 +223,72 @@ export function relativeDays(iso: string | null | undefined, now: Date = new Dat
   if (d === -1) return 'gestern'
   if (d > 1) return `in ${d} Tagen`
   return `vor ${Math.abs(d)} Tagen`
+}
+
+/** Coach-Versprechen, das länger als 14 Tage überfällig ist: gehört in „Verjährt“, nicht in „Heute“. */
+export function isExpiredPromise(task: Pick<Task, 'assignee' | 'kind' | 'status' | 'due_at'>, now: Date = new Date()): boolean {
+  return task.assignee === 'coach' && task.kind !== 'cadence' && task.status === 'open' && !!task.due_at && now.getTime() - new Date(task.due_at).getTime() > 14 * DAY
+}
+
+export type Lane = 'vor_kickoff' | 'w1' | 'w2' | 'w3' | 'w4' | 'nachlauf'
+export const LANE_META: Record<Lane, string> = { vor_kickoff: 'Vor Kickoff', w1: 'Woche 1', w2: 'Woche 2', w3: 'Woche 3', w4: 'Woche 4', nachlauf: 'Nachlauf' }
+
+/** Spalte im Board: wo steht der Kunde im 4-Wochen-Prozess. */
+export function deriveLane(milestones: Milestone[]): Lane {
+  const sorted = sortMilestones(milestones)
+  const last = lastDoneMilestone(sorted)
+  const next = nextMilestone(sorted)
+  if (!last) return 'vor_kickoff'
+  if (next?.kind === 'call') return (`w${Math.min(Math.max(next.number, 1), 4)}` as Lane)
+  if (next?.kind === 'kickoff') return 'vor_kickoff'
+  if (last.kind === 'kickoff') return 'w1'
+  if (last.kind === 'call' && last.number < 4 && !next) return (`w${Math.min(last.number + 1, 4)}` as Lane)
+  return 'nachlauf'
+}
+
+export interface Urgency {
+  score: number
+  signals: Signal[]
+}
+
+/**
+ * Reihenfolge auf der Startseite. Blocker und fehlende Termine vor allem anderen,
+ * alte Erinnerungen zählen nie. Gleichstand entscheidet der frühere nächste Termin.
+ */
+export function urgencyFromOverview(row: OverviewRow, opts: { now?: Date; clientAccess?: boolean } = {}): Urgency {
+  const now = opts.now ?? new Date()
+  const e = row.enrollment
+  const signals: Signal[] = []
+  let score = 0
+  if (e.status !== 'active') return { score: -1, signals }
+
+  if (row.blocker) { score += 100; signals.push({ level: 'bad', label: 'Blocker offen' }) }
+
+  const next = nextMilestone(row.milestones)
+  const hasOpenCalls = row.milestones.some((m) => m.kind === 'call' && m.status !== 'done' && m.status !== 'cancelled')
+  if (hasOpenCalls && (!next || !next.scheduled_at)) { score += 80; signals.push({ level: 'bad', label: 'Termin fehlt' }) }
+
+  if (next?.scheduled_at) {
+    const diff = new Date(next.scheduled_at).getTime() - now.getTime()
+    if (diff > -2 * 60 * 60 * 1000 && diff < 2 * DAY) {
+      score += 60
+      signals.push({ level: 'ok', label: diff < DAY ? `${next.title} ${diff < 0 ? 'jetzt' : 'heute'}` : `${next.title} morgen` })
+    }
+  }
+
+  if (row.tasks.coach_due > 0) { score += Math.min(30 * row.tasks.coach_due, 60); signals.push({ level: 'info', label: `${row.tasks.coach_due} To-do${row.tasks.coach_due === 1 ? '' : 's'} fällig` }) }
+  if (row.tasks.overdue_client > 0) { score += Math.min(10 * row.tasks.overdue_client, 40); signals.push({ level: 'warn', label: `${row.tasks.overdue_client} Kundenaufgabe${row.tasks.overdue_client === 1 ? '' : 'n'} überfällig` }) }
+
+  if (opts.clientAccess && e.profile_id && e.invited_at) {
+    const seen = e.last_client_seen_at ? new Date(e.last_client_seen_at).getTime() : 0
+    if (!seen) signals.push({ level: 'warn', label: 'noch nie eingeloggt' })
+    else if (now.getTime() - seen > 7 * DAY) { score += 5; signals.push({ level: 'warn', label: `seit ${Math.floor((now.getTime() - seen) / DAY)} Tagen kein Login` }) }
+  }
+  if (e.profile_id && !e.invited_at) signals.push({ level: 'info', label: 'nicht eingeladen' })
+
+  return { score, signals }
+}
+
+export function contactLabelFor(kind: string): string {
+  return contactLabel(kind)
 }
