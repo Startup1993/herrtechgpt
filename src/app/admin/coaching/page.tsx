@@ -70,8 +70,8 @@ export default async function AdminCoachingPage() {
     })
     .sort((a, b) => new Date(a.at).getTime() - new Date(b.at).getTime())
 
-  // Coach-To-dos, die bis morgen fällig oder schon überfällig sind, quer über alle Kunden.
-  const endOfTomorrow = new Date(now); endOfTomorrow.setHours(23, 59, 59, 999); endOfTomorrow.setDate(endOfTomorrow.getDate() + 1)
+  // Coach-To-dos der nächsten sieben Tage plus Überfälliges, quer über alle Kunden.
+  const endOfTomorrow = new Date(now); endOfTomorrow.setHours(23, 59, 59, 999); endOfTomorrow.setDate(endOfTomorrow.getDate() + 7)
   const todos: HomeTodo[] = overview
     .filter((r) => r.enrollment.status === 'active')
     .flatMap((r) => r.coach_tasks
