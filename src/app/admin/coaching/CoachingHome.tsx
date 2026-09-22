@@ -3,11 +3,12 @@
 import { useState, useSyncExternalStore } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
-import { AlertTriangle, BarChart3, ChevronDown, ChevronRight, Loader2, Plus, Video } from 'lucide-react'
+import { BarChart3, ChevronDown, ChevronRight, Loader2, Plus, Video } from 'lucide-react'
 import type { EnrollmentStatus, EventKind, EventSource, GoalStatus } from '@/lib/coaching/types'
 import { COACH_OPTIONS, GOAL_STATUS_META } from '@/lib/coaching/types'
 import type { Lane, Signal } from '@/lib/coaching/derive'
 import { LANE_META, relativeDays } from '@/lib/coaching/derive'
+import { Avatar, MoodDots } from '@/components/coaching/visual'
 import { NewEnrollmentModal } from './NewEnrollmentModal'
 
 export interface HomeRow {
@@ -24,6 +25,7 @@ export interface HomeRow {
   nextPrepOpen: boolean
   openClient: number
   overdueClient: number
+  doneClient: number
   coachDue: number
   coachExpired: number
   blocker: { body: string | null; at: string } | null
@@ -60,15 +62,11 @@ export interface FeedItem {
   author: string | null
 }
 
-const SIGNAL_CLASS: Record<Signal['level'], string> = {
-  ok: 'bg-green-100 text-green-700 dark:bg-green-950/30 dark:text-green-400',
-  warn: 'bg-amber-100 text-amber-700 dark:bg-amber-950/30 dark:text-amber-400',
-  bad: 'bg-red-100 text-red-700 dark:bg-red-950/30 dark:text-red-400',
-  info: 'bg-primary/10 text-primary',
-}
 const LABEL = 'text-[11px] font-mono uppercase tracking-[0.12em] text-primary font-semibold'
 const LANES: Lane[] = ['vor_kickoff', 'w1', 'w2', 'w3', 'w4', 'nachlauf']
+const LANE_COLOR: Record<Lane, string> = { vor_kickoff: 'bg-muted-light', w1: 'bg-primary/40', w2: 'bg-primary/60', w3: 'bg-primary/80', w4: 'bg-primary', nachlauf: 'bg-success' }
 const FILTER_KEY = 'coaching.coachFilter'
+const DAY = 24 * 60 * 60 * 1000
 
 type CoachFilter = 'Alle' | (typeof COACH_OPTIONS)[number]
 
@@ -105,8 +103,7 @@ export function CoachingHome({ rows, upcoming, feed, programs, clientAccess, sla
   const [showCompleted, setShowCompleted] = useState(false)
   const [access, setAccess] = useState(clientAccess)
   const [togglingAccess, setTogglingAccess] = useState(false)
-
-  function pick(f: CoachFilter) { writeFilter(f) }
+  const [today] = useState(() => { const d = new Date(); d.setHours(0, 0, 0, 0); return d })
 
   async function toggleAccess() {
     const next = !access
@@ -130,21 +127,23 @@ export function CoachingHome({ rows, upcoming, feed, programs, clientAccess, sla
   const calls = byCoach(upcoming)
   const events = byCoach(feed)
   const laneCounts = LANES.map((l) => ({ lane: l, n: active.filter((r) => r.lane === l).length }))
-  const inWeeks = laneCounts.filter((x) => x.lane.startsWith('w')).reduce((s, x) => s + x.n, 0)
-  const today = new Date()
+  const days = Array.from({ length: 7 }, (_, i) => new Date(today.getTime() + i * DAY))
+  const callsByDay = days.map((d) => calls.filter((c) => sameDay(new Date(c.at), d)))
 
   return (
     <div className="space-y-6">
       {/* Kopf */}
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div>
-          <div className={LABEL}>Coaching-Cockpit · {today.toLocaleDateString('de-DE', { weekday: 'long', day: '2-digit', month: '2-digit' })}</div>
-          <h1 className="text-2xl font-bold text-foreground mt-1">Heute</h1>
+          <div className={LABEL}>Coaching-Cockpit</div>
+          <h1 className="text-3xl font-extrabold tracking-tight text-foreground mt-1">
+            {today.toLocaleDateString('de-DE', { weekday: 'long' })}<span className="text-muted font-semibold">, {today.toLocaleDateString('de-DE', { day: '2-digit', month: 'long' })}</span>
+          </h1>
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <div className="flex gap-0.5 rounded-lg border border-border bg-surface p-0.5">
             {(['Alle', ...COACH_OPTIONS] as CoachFilter[]).map((f) => (
-              <button key={f} type="button" onClick={() => pick(f)} className={`rounded-md px-3 py-1.5 text-xs font-medium ${filter === f ? 'bg-primary/15 text-primary' : 'text-muted hover:text-foreground'}`}>{f}</button>
+              <button key={f} type="button" onClick={() => writeFilter(f)} className={`rounded-md px-3 py-1.5 text-xs font-medium transition-colors ${filter === f ? 'bg-primary/15 text-primary' : 'text-muted hover:text-foreground'}`}>{f}</button>
             ))}
           </div>
           <Link href="/admin/coaching/stats" className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-surface px-3 py-1.5 text-xs font-medium text-foreground hover:bg-surface-hover"><BarChart3 size={14} /> Statistik</Link>
@@ -154,88 +153,132 @@ export function CoachingHome({ rows, upcoming, feed, programs, clientAccess, sla
 
       {/* Kennzahlen */}
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-        <Kpi label="Aktiv" value={String(active.length)} sub={`${laneCounts[0].n} vor Kickoff · ${inWeeks} in den Wochen · ${laneCounts[5].n} im Nachlauf${paused.length ? ` · ${paused.length} pausiert` : ''}`} />
-        <Kpi label="Calls diese Woche" value={String(calls.length)} sub={calls[0] ? `nächster ${relativeDays(calls[0].at)} · ${calls[0].clientName.split(' ')[0]}` : 'keiner terminiert'} />
-        <Kpi label="Braucht dich" value={String(attention.length)} tone={attention.length ? 'bad' : 'ok'} sub={attention.length ? summarizeAttention(attention) : 'alles ruhig'} />
-        <button type="button" onClick={toggleAccess} disabled={togglingAccess} className={`card-static p-4 text-left grid gap-0.5 hover:border-primary/40 transition-colors ${access ? '' : ''}`} title="Klick schaltet um">
-          <span className="text-[11px] font-mono uppercase tracking-[0.1em] text-muted">Kunden-Zugang</span>
-          <span className={`text-xl font-bold flex items-center gap-2 ${access ? 'text-success' : 'text-warning'}`}>{togglingAccess ? <Loader2 size={16} className="animate-spin" /> : null}{access ? 'an' : 'aus'}</span>
-          <span className="text-xs text-muted">{rows.filter((r) => r.invitedAt).length} eingeladen · Slack {slackConfigured ? 'verbunden' : 'fehlt'}</span>
+        <div className="card-static p-4 grid gap-2">
+          <div className="flex items-baseline justify-between"><span className="text-[11px] font-mono uppercase tracking-[0.1em] text-muted">Aktiv</span><span className="text-3xl font-extrabold tabular-nums text-foreground leading-none">{active.length}</span></div>
+          <div className="flex h-2 w-full overflow-hidden rounded-full bg-border gap-px">
+            {laneCounts.filter((x) => x.n > 0).map((x) => <span key={x.lane} className={`${LANE_COLOR[x.lane]} h-full`} style={{ width: `${(x.n / Math.max(active.length, 1)) * 100}%` }} title={`${LANE_META[x.lane]}: ${x.n}`} />)}
+          </div>
+          <div className="flex flex-wrap gap-x-2 text-[10.5px] font-mono text-muted">
+            {laneCounts.filter((x) => x.n > 0).map((x) => <span key={x.lane} className="inline-flex items-center gap-1"><i className={`h-1.5 w-1.5 rounded-full ${LANE_COLOR[x.lane]}`} />{x.n} {LANE_META[x.lane]}</span>)}
+            {active.length === 0 && <span>keine aktiven Kunden</span>}
+          </div>
+        </div>
+
+        <div className="card-static p-4 grid gap-2">
+          <div className="flex items-baseline justify-between"><span className="text-[11px] font-mono uppercase tracking-[0.1em] text-muted">Calls · 7 Tage</span><span className="text-3xl font-extrabold tabular-nums text-foreground leading-none">{calls.length}</span></div>
+          <div className="grid grid-cols-7 gap-1">
+            {days.map((d, i) => <span key={i} className={`h-2 rounded-full ${callsByDay[i].length ? 'bg-primary' : 'bg-border'}`} title={`${d.toLocaleDateString('de-DE', { weekday: 'short' })}: ${callsByDay[i].length}`} />)}
+          </div>
+          <div className="text-[10.5px] font-mono text-muted truncate">{calls[0] ? `nächster ${relativeDays(calls[0].at)} · ${calls[0].clientName.split(' ')[0]} · ${calls[0].title}` : 'keiner terminiert'}</div>
+        </div>
+
+        <div className={`card-static p-4 grid gap-2 ${attention.length ? 'border-danger/40' : ''}`}>
+          <div className="flex items-baseline justify-between"><span className="text-[11px] font-mono uppercase tracking-[0.1em] text-muted">Braucht dich</span><span className={`text-3xl font-extrabold tabular-nums leading-none ${attention.length ? 'text-danger' : 'text-success'}`}>{attention.length}</span></div>
+          <div className="flex items-center -space-x-1.5 h-6">
+            {attention.slice(0, 6).map((r) => <Avatar key={r.id} name={r.clientName} size={24} ring="bad" />)}
+            {attention.length === 0 && <span className="text-xs text-muted">alles ruhig</span>}
+          </div>
+          <div className="text-[10.5px] font-mono text-muted truncate">{attention.length ? summarizeAttention(attention) : 'kein Blocker, kein fehlender Termin'}</div>
+        </div>
+
+        <button type="button" onClick={toggleAccess} disabled={togglingAccess} className="card-static p-4 text-left grid gap-2 hover:border-primary/40 transition-colors" title="Klick schaltet um">
+          <div className="flex items-baseline justify-between"><span className="text-[11px] font-mono uppercase tracking-[0.1em] text-muted">Kunden-Zugang</span><span className={`text-xl font-extrabold leading-none flex items-center gap-2 ${access ? 'text-success' : 'text-warning'}`}>{togglingAccess ? <Loader2 size={16} className="animate-spin" /> : null}{access ? 'an' : 'aus'}</span></div>
+          <div className={`h-2 rounded-full ${access ? 'bg-success' : 'bg-warning/60'}`} />
+          <div className="text-[10.5px] font-mono text-muted truncate">{rows.filter((r) => r.invitedAt).length} eingeladen · Slack {slackConfigured ? 'verbunden' : 'fehlt'}</div>
         </button>
       </div>
 
-      {/* Termine · Braucht dich · Passiert */}
-      <div className="grid gap-4 lg:grid-cols-[minmax(0,1.15fr)_minmax(0,1fr)]">
+      {/* Wochenleiste */}
+      <section className="card-static p-4 space-y-3">
+        <div className="flex items-baseline justify-between"><span className={LABEL}>Die nächsten sieben Tage</span><span className="text-[11px] font-mono text-muted">{calls.length} Call{calls.length === 1 ? '' : 's'}</span></div>
+        <div className="overflow-x-auto -mx-1 px-1">
+          <div className="grid grid-cols-7 gap-2 min-w-[760px]">
+            {days.map((d, i) => {
+              const list = callsByDay[i]
+              const isToday = i === 0
+              const weekend = d.getDay() === 0 || d.getDay() === 6
+              return (
+                <div key={i} className={`rounded-xl border p-2 min-h-[112px] space-y-1.5 ${isToday ? 'border-primary/50 bg-primary/5' : weekend ? 'border-border/60 bg-surface-secondary/40' : 'border-border bg-background'}`}>
+                  <div className="flex items-baseline justify-between px-0.5">
+                    <span className={`text-[11px] font-semibold ${isToday ? 'text-primary' : 'text-foreground'}`}>{isToday ? 'Heute' : i === 1 ? 'Morgen' : d.toLocaleDateString('de-DE', { weekday: 'short' })}</span>
+                    <span className="text-[10px] font-mono text-muted">{d.toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit' })}</span>
+                  </div>
+                  {list.map((c) => (
+                    <Link key={`${c.enrollmentId}-${c.at}`} href={`/admin/coaching/${c.enrollmentId}`} className={`block rounded-lg border px-2 py-1.5 bg-surface hover:border-primary/60 transition-colors ${c.blocker ? 'border-danger/50' : c.prepOpen ? 'border-warning/50' : 'border-border'}`} title={`${c.clientName} · ${c.title}${c.goal ? ` · ${c.goal}` : ''}`}>
+                      <div className="flex items-center gap-1.5 min-w-0">
+                        <Avatar name={c.clientName} size={20} />
+                        <span className="text-[12px] font-semibold text-foreground truncate">{c.clientName.split(' ')[0]}</span>
+                        <span className="ml-auto text-[10.5px] font-mono text-muted">{new Date(c.at).toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' })}</span>
+                      </div>
+                      <div className="mt-0.5 flex items-center gap-1 text-[10.5px] font-mono text-muted truncate">
+                        <span className="truncate">{c.title}</span>
+                        {c.meetingUrl && <Video size={10} className="text-primary shrink-0" />}
+                      </div>
+                    </Link>
+                  ))}
+                </div>
+              )
+            })}
+          </div>
+        </div>
+      </section>
+
+      {/* Braucht dich · Passiert */}
+      <div className="grid gap-4 lg:grid-cols-2">
         <section className="card-static p-4 space-y-2.5">
-          <div className="flex items-baseline justify-between"><span className={LABEL}>Nächste Calls</span><span className="text-[11px] font-mono text-muted">7 Tage</span></div>
-          {calls.length === 0 && <p className="text-sm text-muted py-4">Kein Call in den nächsten sieben Tagen. Wenn das nicht stimmt, fehlt ein Termin, siehe „Braucht dich“.</p>}
-          {calls.map((c, i) => (
-            <div key={`${c.enrollmentId}-${c.at}`} className={`grid grid-cols-[72px_minmax(0,1fr)_auto] items-center gap-3 rounded-xl border px-3 py-2.5 ${i === 0 ? 'border-primary/40 bg-primary/5' : 'border-border bg-background'}`}>
-              <div className="font-mono text-[11px] text-primary leading-tight">
-                {new Date(c.at).toLocaleDateString('de-DE', { weekday: 'short', day: '2-digit', month: '2-digit' })}
-                <div className="text-[15px] font-bold text-foreground">{new Date(c.at).toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' })}</div>
-              </div>
+          <div className="flex items-baseline justify-between"><span className={LABEL}>Braucht dich</span><span className="text-[11px] font-mono text-muted">{attention.length} Kunde{attention.length === 1 ? '' : 'n'}</span></div>
+          {attention.length === 0 && (
+            <div className="flex items-center gap-3 rounded-xl border border-success/30 bg-success/5 px-3 py-3 text-sm text-foreground"><span className="h-2.5 w-2.5 rounded-full bg-success" /> Alles ruhig. Kein Blocker, kein fehlender Termin.</div>
+          )}
+          {attention.map((r) => (
+            <div key={r.id} className="grid grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-3 rounded-xl border border-danger/30 bg-danger/5 px-3 py-2.5">
+              <Avatar name={r.clientName} size={36} ring="bad" />
               <div className="min-w-0">
-                <div className="text-sm font-semibold text-foreground truncate"><Link href={`/admin/coaching/${c.enrollmentId}`} className="hover:text-primary">{c.clientName}</Link> · {c.title}</div>
-                <div className="text-xs text-muted truncate">{relativeDays(c.at)}{c.goal ? ` · ${c.goal}` : ''}{filter === 'Alle' && c.coach ? ` · ${c.coach}` : ''}</div>
+                <div className="flex items-center gap-2 min-w-0"><Link href={`/admin/coaching/${r.id}`} className="text-sm font-bold text-foreground hover:text-primary truncate">{r.clientName}</Link><span className="text-[10.5px] font-mono text-muted">{r.phase}</span></div>
+                <div className="mt-0.5 flex flex-wrap gap-1">
+                  {r.signals.filter((s) => s.level === 'bad').map((s, i) => <span key={i} className="rounded-full bg-danger/15 px-2 py-0.5 text-[10.5px] font-mono text-danger">{s.label}</span>)}
+                </div>
+                {r.blocker?.body && <p className="mt-1 text-xs text-muted line-clamp-2" title={r.blocker.body}>„{r.blocker.body}“</p>}
               </div>
-              <div className="flex items-center gap-1.5">
-                {c.blocker && <span className={`hidden sm:inline rounded-full px-2 py-0.5 text-[11px] font-mono ${SIGNAL_CLASS.bad}`}>Blocker</span>}
-                {c.prepOpen && <span className={`hidden sm:inline rounded-full px-2 py-0.5 text-[11px] font-mono ${SIGNAL_CLASS.warn}`}>Prep offen</span>}
-                {c.meetingUrl && <a href={c.meetingUrl} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 rounded-lg border border-border px-2 py-1 text-[11px] font-medium text-foreground hover:bg-surface-hover" title="Meeting öffnen"><Video size={12} /> Meet</a>}
-                <Link href={`/admin/coaching/${c.enrollmentId}`} className={`rounded-lg px-2.5 py-1 text-[11px] font-semibold ${i === 0 ? 'bg-primary text-white hover:bg-primary-hover' : 'border border-border text-foreground hover:bg-surface-hover'}`}>{c.prepOpen ? 'Vorbereiten' : 'Öffnen'}</Link>
-              </div>
+              <Link href={`/admin/coaching/${r.id}?tab=${r.blocker ? 'history' : 'sessions'}`} className="rounded-lg bg-primary px-2.5 py-1.5 text-[11px] font-bold text-white hover:bg-primary-hover whitespace-nowrap">{r.blocker ? 'Antworten' : 'Termin'}</Link>
             </div>
           ))}
         </section>
 
-        <div className="space-y-4">
-          <section className="card-static p-4 space-y-2.5">
-            <div className="flex items-baseline justify-between"><span className={LABEL}>Braucht dich</span><span className="text-[11px] font-mono text-muted">{attention.length} Kunde{attention.length === 1 ? '' : 'n'}</span></div>
-            {attention.length === 0 && <p className="text-sm text-muted py-2">Alles ruhig. Kein Blocker, kein fehlender Termin.</p>}
-            {attention.map((r) => (
-              <div key={r.id} className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-3 rounded-xl border border-border bg-background px-3 py-2.5">
-                <div className="min-w-0">
-                  <div className="flex items-center gap-2"><AlertTriangle size={13} className="text-danger shrink-0" /><Link href={`/admin/coaching/${r.id}`} className="text-sm font-semibold text-foreground hover:text-primary truncate">{r.clientName}</Link></div>
-                  <div className="mt-1 flex flex-wrap gap-1">
-                    {r.signals.filter((s) => s.level === 'bad').map((s, i) => <span key={i} className={`rounded-full px-2 py-0.5 text-[11px] font-mono ${SIGNAL_CLASS.bad}`}>{s.label}{s.label === 'Blocker offen' && r.blocker ? ` · ${relativeDays(r.blocker.at)}` : ''}</span>)}
-                  </div>
-                  {r.blocker?.body && <div className="mt-1 text-xs text-muted truncate" title={r.blocker.body}>„{r.blocker.body}“</div>}
+        <section className="card-static p-4 space-y-2.5">
+          <div className="flex items-baseline justify-between"><span className={LABEL}>Passiert</span><span className="text-[11px] font-mono text-muted">48 h</span></div>
+          {events.length === 0 && <p className="text-sm text-muted py-2">Nichts Neues in den letzten zwei Tagen.</p>}
+          <div className="space-y-1.5">
+            {groupFeed(events).slice(0, 8).map((f, i) => (
+              <Link key={i} href={`/admin/coaching/${f.enrollmentId}`} className="grid grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-2.5 rounded-lg px-1.5 py-1.5 hover:bg-surface-hover">
+                <Avatar name={f.clientName} size={26} />
+                <div className="min-w-0 text-[13px] leading-snug">
+                  <span className="font-semibold text-foreground">{f.clientName.split(' ')[0]}</span>{' '}
+                  <span className="text-muted line-clamp-1" title={f.text}>{f.text}</span>
                 </div>
-                <Link href={`/admin/coaching/${r.id}?tab=${r.blocker ? 'history' : 'sessions'}`} className="rounded-lg bg-primary px-2.5 py-1.5 text-[11px] font-semibold text-white hover:bg-primary-hover whitespace-nowrap">{r.blocker ? 'Antworten' : 'Termin setzen'}</Link>
-              </div>
+                <div className="text-right">
+                  <div className="text-[10.5px] font-mono text-muted">{feedWhen(f.at)}</div>
+                  <div className={`text-[10px] font-mono ${f.source === 'client' ? 'text-success' : f.source === 'plugin' ? 'text-primary' : 'text-muted'}`}>{sourceLabel(f.source, f.author)}</div>
+                </div>
+              </Link>
             ))}
-          </section>
-
-          <section className="card-static p-4 space-y-2.5">
-            <div className="flex items-baseline justify-between"><span className={LABEL}>Passiert</span><span className="text-[11px] font-mono text-muted">48 h · Kunde · Plugin · Coach</span></div>
-            {events.length === 0 && <p className="text-sm text-muted py-2">Nichts Neues in den letzten zwei Tagen.</p>}
-            <div className="space-y-2">
-              {groupFeed(events).map((f, i) => (
-                <div key={i} className="grid grid-cols-[56px_minmax(0,1fr)] gap-2.5 text-[13px] items-baseline">
-                  <span className="font-mono text-[11px] text-muted">{feedWhen(f.at)}</span>
-                  <div className="min-w-0">
-                    <Link href={`/admin/coaching/${f.enrollmentId}`} className="font-semibold text-foreground hover:text-primary">{f.clientName.split(' ')[0]}</Link>{' '}
-                    <span className="text-muted">{f.text}</span>
-                    <span className="ml-1.5 font-mono text-[10px] text-primary">{sourceLabel(f.source, f.author)}</span>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </section>
-        </div>
+          </div>
+        </section>
       </div>
 
       {/* Board */}
       <section className="card-static p-4 space-y-3">
-        <div className="flex items-baseline justify-between"><span className={LABEL}>Wo alle stehen</span><span className="text-[11px] font-mono text-muted">{active.length} aktiv · sortiert nach Dringlichkeit</span></div>
+        <div className="flex items-baseline justify-between"><span className={LABEL}>Wo alle stehen</span><span className="text-[11px] font-mono text-muted">{active.length} aktiv · dringend zuerst</span></div>
         <div className="overflow-x-auto -mx-1 px-1">
-          <div className="grid grid-cols-6 gap-2 min-w-[880px]">
+          <div className="grid grid-cols-6 gap-2 min-w-[900px]">
             {LANES.map((lane) => {
               const list = active.filter((r) => r.lane === lane)
               return (
-                <div key={lane} className="rounded-xl border border-border bg-background p-2 min-h-[120px] space-y-1.5">
-                  <div className="flex justify-between px-1 pb-1 text-[10px] font-mono uppercase tracking-[0.08em] text-muted"><span>{LANE_META[lane]}</span><span>{list.length}</span></div>
+                <div key={lane} className="rounded-xl border border-border bg-background p-2 min-h-[140px] space-y-1.5">
+                  <div className="flex items-center justify-between px-1 pb-1">
+                    <span className="inline-flex items-center gap-1.5 text-[10px] font-mono uppercase tracking-[0.08em] text-muted"><i className={`h-1.5 w-1.5 rounded-full ${LANE_COLOR[lane]}`} />{LANE_META[lane]}</span>
+                    <span className="text-[10px] font-mono text-muted">{list.length}</span>
+                  </div>
                   {list.map((r) => <BoardChip key={r.id} r={r} showCoach={filter === 'Alle'} />)}
                 </div>
               )
@@ -244,23 +287,21 @@ export function CoachingHome({ rows, upcoming, feed, programs, clientAccess, sla
         </div>
       </section>
 
-      {/* Pausiert / Abgeschlossen */}
       {(completed.length > 0 || paused.length > 0) && (
         <div>
           <button type="button" onClick={() => setShowCompleted((v) => !v)} className="flex items-center gap-1.5 text-sm text-muted hover:text-foreground px-1 mb-2">
             {showCompleted ? <ChevronDown size={15} /> : <ChevronRight size={15} />}
-            {completed.length} abgeschlossen{paused.length ? `, ${paused.length} pausiert` : ''}{showCompleted ? '' : ` · ${[...paused, ...completed].map((c) => c.clientName.split(' ')[0]).join(', ')}`}
+            {completed.length} abgeschlossen{paused.length ? `, ${paused.length} pausiert` : ''}
+            {!showCompleted && <span className="ml-2 flex -space-x-1.5">{[...paused, ...completed].slice(0, 8).map((c) => <Avatar key={c.id} name={c.clientName} size={20} />)}</span>}
           </button>
           {showCompleted && (
-            <div className="space-y-1.5">
+            <div className="grid gap-1.5 sm:grid-cols-2">
               {[...paused, ...completed].map((r) => (
-                <Link key={r.id} href={`/admin/coaching/${r.id}`} className="flex flex-wrap items-center gap-x-4 gap-y-1 rounded-lg border border-border/60 bg-surface/60 px-4 py-2 text-[13px] text-muted hover:text-foreground hover:border-primary/40">
-                  <span className="font-medium text-foreground">{r.clientName}</span>
-                  {r.company && <span className="truncate">{r.company}</span>}
-                  <span className="ml-auto flex items-center gap-3 font-mono text-[11px]">
-                    <span>{r.status === 'paused' ? 'pausiert' : 'abgeschlossen'}</span>
-                    {r.coach && <span>{r.coach}</span>}
-                    <span className="inline-flex items-center gap-1">{r.goals.map((g, i) => <span key={i} className={`h-2 w-2 rounded-full ${GOAL_STATUS_META[g].dot}`} />)}</span>
+                <Link key={r.id} href={`/admin/coaching/${r.id}`} className="flex items-center gap-3 rounded-lg border border-border/60 bg-surface/60 px-3 py-2 text-[13px] text-muted hover:text-foreground hover:border-primary/40">
+                  <Avatar name={r.clientName} size={28} />
+                  <span className="min-w-0"><span className="block font-medium text-foreground truncate">{r.clientName}</span><span className="block text-[11px] truncate">{r.company ?? ''}</span></span>
+                  <span className="ml-auto flex items-center gap-2 font-mono text-[10.5px] whitespace-nowrap">
+                    <span className="inline-flex items-center gap-0.5">{r.goals.map((g, i) => <span key={i} className={`h-2 w-2 rounded-full ${GOAL_STATUS_META[g].dot}`} />)}</span>
                     {r.nps != null && <span>NPS {r.nps}</span>}
                   </span>
                 </Link>
@@ -275,30 +316,30 @@ export function CoachingHome({ rows, upcoming, feed, programs, clientAccess, sla
   )
 }
 
-function Kpi({ label, value, sub, tone }: { label: string; value: string; sub: string; tone?: 'bad' | 'ok' }) {
-  return (
-    <div className="card-static p-4 grid gap-0.5">
-      <span className="text-[11px] font-mono uppercase tracking-[0.1em] text-muted">{label}</span>
-      <span className={`text-2xl font-extrabold tracking-tight tabular-nums ${tone === 'bad' ? 'text-danger' : 'text-foreground'}`}>{value}</span>
-      <span className="text-xs text-muted truncate" title={sub}>{sub}</span>
-    </div>
-  )
-}
-
 function BoardChip({ r, showCoach }: { r: HomeRow; showCoach: boolean }) {
   const hot = r.signals.some((s) => s.level === 'bad')
+  const total = r.openClient + r.doneClient
+  const pct = total ? Math.round((r.doneClient / total) * 100) : 0
   return (
-    <Link href={`/admin/coaching/${r.id}`} className={`block rounded-lg border bg-surface px-2 py-1.5 hover:border-primary/50 ${hot ? 'border-danger/50' : 'border-border'}`}>
-      <div className="text-[12.5px] font-semibold text-foreground truncate">{r.clientName}</div>
-      <div className="text-[11px] font-mono text-muted truncate">
-        {r.nextAt ? `${r.nextTitle} · ${shortDate(r.nextAt)}` : r.status === 'active' ? 'Termin fehlt' : '–'}{showCoach && r.coach ? ` · ${r.coach}` : ''}
+    <Link href={`/admin/coaching/${r.id}`} className={`block rounded-lg border bg-surface px-2 py-2 hover:border-primary/60 hover:shadow-[var(--ht-shadow-card)] transition-all ${hot ? 'border-danger/50' : 'border-border'}`}>
+      <div className="flex items-center gap-2 min-w-0">
+        <Avatar name={r.clientName} size={24} ring={hot ? 'bad' : undefined} />
+        <div className="min-w-0 flex-1">
+          <div className="text-[12.5px] font-semibold text-foreground truncate">{r.clientName}</div>
+          <div className="text-[10.5px] font-mono text-muted truncate">{r.nextAt ? `${r.nextTitle?.split(' · ')[0]} · ${shortDate(r.nextAt)}` : 'Termin fehlt'}{showCoach && r.coach ? ` · ${r.coach}` : ''}</div>
+        </div>
       </div>
-      <div className="mt-1 flex items-center gap-1">
-        {r.goals.map((g, i) => <span key={i} className={`h-2 w-2 rounded-full ${GOAL_STATUS_META[g].dot}`} />)}
-        {r.blocker && <span className="ml-auto text-[10px] font-mono text-danger">Blocker</span>}
+      <div className="mt-2 flex items-center gap-2">
+        <span className="h-1 flex-1 rounded-full bg-border overflow-hidden"><span className="block h-full bg-primary" style={{ width: `${pct}%` }} /></span>
+        <span className="inline-flex items-center gap-0.5">{r.goals.map((g, i) => <span key={i} className={`h-1.5 w-1.5 rounded-full ${GOAL_STATUS_META[g].dot}`} />)}</span>
+        <MoodDots score={r.mood?.score ?? null} size={4} />
       </div>
     </Link>
   )
+}
+
+function sameDay(a: Date, b: Date): boolean {
+  return a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate()
 }
 
 function nextTime(r: HomeRow): number {
@@ -332,22 +373,20 @@ function sourceLabel(source: EventSource, author: string | null): string {
 
 function feedText(f: FeedItem): string {
   const b = f.body ? f.body.replace(/\s+/g, ' ').trim() : ''
-  const short = b.length > 90 ? `${b.slice(0, 88)}…` : b
   switch (f.kind) {
-    case 'client_win': return `meldet: läuft. „${short}“`
-    case 'client_blocker': return `meldet Blocker: „${short}“`
-    case 'task_done': return `hat abgehakt: ${short}`
-    case 'coach_reply': return `Antwort an den Kunden: „${short}“`
-    case 'schedule_change': return `Termin: ${short}`
-    case 'sync': return `Nachbereitung eingespielt: ${short}`
-    case 'whatsapp_in': return `WhatsApp vom Kunden: „${short}“`
-    case 'whatsapp_out': return `WhatsApp an den Kunden: „${short}“`
-    case 'milestone_done': return `${short} abgeschlossen`
-    default: return short
+    case 'client_win': return `meldet: läuft. „${b}“`
+    case 'client_blocker': return `meldet Blocker: „${b}“`
+    case 'task_done': return `hat abgehakt: ${b}`
+    case 'coach_reply': return `Antwort an den Kunden: „${b}“`
+    case 'schedule_change': return `Termin: ${b}`
+    case 'sync': return `Nachbereitung eingespielt: ${b}`
+    case 'whatsapp_in': return `WhatsApp vom Kunden: „${b}“`
+    case 'whatsapp_out': return `WhatsApp an den Kunden: „${b}“`
+    case 'milestone_done': return `${b} abgeschlossen`
+    default: return b
   }
 }
 
-/** Mehrere Haken desselben Kunden hintereinander werden eine Zeile. */
 function groupFeed(items: FeedItem[]): Array<{ enrollmentId: string; clientName: string; at: string; text: string; source: EventSource; author: string | null }> {
   const out: Array<{ enrollmentId: string; clientName: string; at: string; text: string; source: EventSource; author: string | null; n: number; kind: EventKind }> = []
   for (const f of items) {

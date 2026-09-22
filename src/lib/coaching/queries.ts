@@ -114,16 +114,17 @@ async function loadBundle(
   let ms = (milestones ?? []) as Milestone[]
   if (opts.signUrls) {
     const admin = createAdminClient()
-    mats = await Promise.all(
-      mats.map(async (m) => ({ ...m, signed_url: await signedUrl(admin, m.storage_path) })),
-    )
-    ms = await Promise.all(
-      ms.map(async (m) => {
+    // Alle Signaturen gleichzeitig, nicht Material und Recaps nacheinander.
+    const [signedMats, signedMs] = await Promise.all([
+      Promise.all(mats.map(async (m) => (m.storage_path ? { ...m, signed_url: await signedUrl(admin, m.storage_path) } : m))),
+      Promise.all(ms.map(async (m) => {
         if (!m.recap_storage_path) return m
         const url = await signedUrl(admin, m.recap_storage_path)
         return { ...m, recap_url: url ?? m.recap_url }
-      }),
-    )
+      })),
+    ])
+    mats = signedMats
+    ms = signedMs
   }
 
   return {
