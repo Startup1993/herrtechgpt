@@ -11,8 +11,9 @@ import type { CoachingEvent, Enrollment, EventKind, Goal, Material, Milestone, P
 import {
   COACH_OPTIONS, ENROLLMENT_STATUS_META, EVENT_KIND_META, GOAL_STATUS_META, MATERIAL_KIND_META, TRACK_OPTIONS, WORLD_MODE_META,
 } from '@/lib/coaching/types'
-import { computeProgress, derivePhase, deriveSignals, fmtDate, sortMilestones, nextMilestone, lastDoneMilestone, lastContact, latestMood, relativeDays, daysUntil, isStaleCadence, isExpiredPromise } from '@/lib/coaching/derive'
+import { derivePhase, deriveSignals, fmtDate, sortMilestones, nextMilestone, lastDoneMilestone, lastContact, latestMood, relativeDays, isStaleCadence, isExpiredPromise } from '@/lib/coaching/derive'
 import { TaskCheck } from '@/components/coaching/TaskCheck'
+import { Avatar, Countdown, MoodDots, PhaseStepper, Ring } from '@/components/coaching/visual'
 import { useOptimisticTasks } from '@/components/coaching/useOptimisticTasks'
 import type { EditorTab } from './page'
 import { nextTemplateMilestone } from '@/lib/coaching/template'
@@ -49,7 +50,6 @@ export function EnrollmentEditor({ bundle, programs, initialTab = 'lage' }: { bu
   const router = useRouter()
   const { enrollment, goals, materials, events } = bundle
   const milestones = useMemo(() => sortMilestones(bundle.milestones), [bundle.milestones])
-  const progress = computeProgress(milestones, bundle.tasks)
   const phase = derivePhase(enrollment, milestones)
   const signals = deriveSignals(enrollment, milestones, bundle.tasks, events)
   const program = programs.find((p) => p.key === enrollment.program_key) ?? bundle.program
@@ -61,6 +61,8 @@ export function EnrollmentEditor({ bundle, programs, initialTab = 'lage' }: { bu
   const [inviting, setInviting] = useState(false)
   const [nowTs] = useState(() => Date.now())
   const overdueClient = openClient.filter((x) => x.due_at && new Date(x.due_at).getTime() < nowTs).length
+  const clientDone = bundle.tasks.filter((x) => x.assignee === 'client' && x.status === 'done').length
+  const clientTotal = clientDone + openClient.length
 
   async function sendInvite() {
     if (!enrollment.client_email) { alert('Erst eine E-Mail-Adresse eintragen.'); return }
@@ -83,40 +85,54 @@ export function EnrollmentEditor({ bundle, programs, initialTab = 'lage' }: { bu
     <div className="p-6 sm:p-8 max-w-6xl">
       <Link href="/admin/coaching" className="inline-flex items-center gap-1 text-sm text-muted hover:text-foreground mb-4"><ChevronLeft size={15} /> Alle Kunden</Link>
 
-      <div className="flex flex-wrap items-start justify-between gap-4 mb-4">
-        <div>
-          <div className="flex flex-wrap items-center gap-2">
-            <h1 className="text-2xl font-bold text-foreground">{enrollment.client_name}</h1>
-            <span className={`rounded-full px-2 py-0.5 text-[11px] font-mono ${statusMeta.badge}`}>{phase.short}</span>
-            {enrollment.track && <span className="rounded-full px-2 py-0.5 text-[11px] font-mono bg-surface-secondary text-muted">Track {enrollment.track}</span>}
-            {enrollment.coach_name && <span className="text-sm text-muted">{enrollment.coach_name}</span>}
-          </div>
-          <div className="text-sm text-muted mt-1">
-            {[enrollment.company, enrollment.client_email, program?.title].filter(Boolean).join(' · ')}
-          </div>
-          {signals.length > 0 && (
-            <div className="mt-2 flex flex-wrap gap-1.5">
-              {signals.map((s, i) => <span key={i} className={`rounded-full px-2 py-0.5 text-[11px] font-mono ${s.level === 'bad' ? 'bg-red-100 text-red-700 dark:bg-red-950/30 dark:text-red-400' : s.level === 'warn' ? 'bg-amber-100 text-amber-700 dark:bg-amber-950/30 dark:text-amber-400' : s.level === 'ok' ? 'bg-green-100 text-green-700 dark:bg-green-950/30 dark:text-green-400' : 'bg-primary/10 text-primary'}`}>{s.label}</span>)}
+      <section className="card-static p-5 mb-4 grid gap-5 lg:grid-cols-[minmax(0,1fr)_300px] items-start">
+        <div className="min-w-0 space-y-4">
+          <div className="flex items-start gap-4 min-w-0">
+            <Avatar name={enrollment.client_name} size={56} ring={signals.some((s) => s.level === 'bad') ? 'bad' : undefined} />
+            <div className="min-w-0">
+              <div className="flex flex-wrap items-center gap-2">
+                <h1 className="text-2xl font-extrabold tracking-tight text-foreground">{enrollment.client_name}</h1>
+                <span className={`rounded-full px-2 py-0.5 text-[11px] font-mono ${statusMeta.badge}`}>{phase.short}</span>
+                {enrollment.track && <span className="rounded-full px-2 py-0.5 text-[11px] font-mono bg-surface-secondary text-muted">Track {enrollment.track}</span>}
+              </div>
+              <div className="text-sm text-muted mt-0.5 truncate">{[enrollment.company, enrollment.coach_name ? `Coach ${enrollment.coach_name}` : null].filter(Boolean).join(' · ')}</div>
+              {enrollment.north_star && <p className="mt-1.5 text-sm text-foreground line-clamp-2" title={enrollment.north_star}>„{enrollment.north_star}“</p>}
+              {signals.length > 0 && (
+                <div className="mt-2 flex flex-wrap gap-1.5">
+                  {signals.map((s, i) => <span key={i} className={`rounded-full px-2 py-0.5 text-[11px] font-mono ${s.level === 'bad' ? 'bg-red-100 text-red-700 dark:bg-red-950/30 dark:text-red-400' : s.level === 'warn' ? 'bg-amber-100 text-amber-700 dark:bg-amber-950/30 dark:text-amber-400' : s.level === 'ok' ? 'bg-green-100 text-green-700 dark:bg-green-950/30 dark:text-green-400' : 'bg-primary/10 text-primary'}`}>{s.label}</span>)}
+                </div>
+              )}
             </div>
-          )}
+          </div>
+          <PhaseStepper milestones={milestones} nextId={next?.id ?? null} />
+          <div className="flex flex-wrap gap-2">
+            {enrollment.whatsapp_url && <a href={enrollment.whatsapp_url} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1.5 rounded-lg bg-primary px-3 py-1.5 text-xs font-semibold text-white hover:bg-primary-hover"><MessageCircle size={14} /> WhatsApp</a>}
+            {enrollment.notion_url && <a href={enrollment.notion_url} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-surface px-3 py-1.5 text-xs text-foreground hover:bg-surface-hover"><ExternalLink size={13} /> Notion</a>}
+            {enrollment.drive_url && <a href={enrollment.drive_url} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-surface px-3 py-1.5 text-xs text-foreground hover:bg-surface-hover"><ExternalLink size={13} /> Drive</a>}
+            <Link href={`/admin/coaching/${enrollment.id}/preview`} className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-surface px-3 py-1.5 text-xs font-medium text-foreground hover:bg-surface-hover"><Eye size={14} /> Kundenansicht</Link>
+            <button type="button" onClick={sendInvite} disabled={inviting} className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-surface px-3 py-1.5 text-xs font-medium text-foreground hover:bg-surface-hover disabled:opacity-50">
+              {inviting ? <Loader2 size={14} className="animate-spin" /> : <Mail size={14} />} {enrollment.invited_at ? 'Einladung erneut' : 'Einladen'}
+            </button>
+          </div>
         </div>
-        <div className="flex flex-wrap gap-2">
-          {enrollment.whatsapp_url && <a href={enrollment.whatsapp_url} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1.5 rounded-lg bg-primary px-3 py-2 text-sm font-semibold text-white hover:bg-primary-hover"><MessageCircle size={15} /> WhatsApp</a>}
-          {enrollment.notion_url && <a href={enrollment.notion_url} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-surface px-3 py-2 text-sm text-foreground hover:bg-surface-hover"><ExternalLink size={14} /> Notion</a>}
-          {enrollment.drive_url && <a href={enrollment.drive_url} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-surface px-3 py-2 text-sm text-foreground hover:bg-surface-hover"><ExternalLink size={14} /> Drive</a>}
-          <Link href={`/admin/coaching/${enrollment.id}/preview`} className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-surface px-3 py-2 text-sm font-medium text-foreground hover:bg-surface-hover"><Eye size={15} /> Kundenansicht</Link>
-          <button type="button" onClick={sendInvite} disabled={inviting} className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-surface px-3 py-2 text-sm font-medium text-foreground hover:bg-surface-hover disabled:opacity-50">
-            {inviting ? <Loader2 size={15} className="animate-spin" /> : <Mail size={15} />} {enrollment.invited_at ? 'Einladung erneut' : 'Einladen'}
-          </button>
+        <div className="space-y-2.5">
+          <Countdown at={next?.scheduled_at ?? null} title={next ? next.title.split(' · ')[0] : enrollment.status === 'completed' ? 'Abgeschlossen' : null} meetingUrl={next?.meeting_url} />
+          <div className="grid grid-cols-3 gap-2">
+            <div className="rounded-xl border border-border bg-surface px-2.5 py-2 grid place-items-center gap-1 text-center">
+              <Ring value={clientTotal ? clientDone / clientTotal : 0} size={40} stroke={4} tone={overdueClient ? 'warn' : 'primary'}>{clientTotal ? `${clientDone}/${clientTotal}` : '–'}</Ring>
+              <span className="text-[10px] font-mono uppercase tracking-[0.06em] text-muted">Kunde</span>
+            </div>
+            <div className="rounded-xl border border-border bg-surface px-2.5 py-2 grid place-items-center gap-1 text-center">
+              <span className="text-[15px] font-bold text-foreground leading-tight h-10 grid place-items-center">{contact ? relativeDays(contact.at) : '–'}</span>
+              <span className="text-[10px] font-mono uppercase tracking-[0.06em] text-muted truncate max-w-full" title={contact ? contact.label : ''}>{contact ? contact.label : 'Kontakt'}</span>
+            </div>
+            <div className="rounded-xl border border-border bg-surface px-2.5 py-2 grid place-items-center gap-1 text-center">
+              <span className="h-10 grid place-items-center"><MoodDots score={mood?.score ?? null} size={7} /></span>
+              <span className="text-[10px] font-mono uppercase tracking-[0.06em] text-muted">Stimmung</span>
+            </div>
+          </div>
         </div>
-      </div>
-
-      <div className="grid gap-2.5 sm:grid-cols-2 lg:grid-cols-4 mb-5">
-        <Stat label="Nächster Call" value={next?.scheduled_at ? fmtDate(next.scheduled_at, 'datetime') : next ? next.title : '–'} sub={next?.scheduled_at ? `${relativeDays(next.scheduled_at)} · ${next.title}` : next ? 'Termin fehlt' : enrollment.status === 'completed' ? 'abgeschlossen' : 'kein Meilenstein'} tone={next && !next.scheduled_at && enrollment.status === 'active' ? 'bad' : undefined} />
-        <Stat label="Kunde ist dran" value={`${openClient.length} offen`} sub={overdueClient ? `${overdueClient} überfällig` : `${bundle.tasks.filter((x) => x.assignee === 'client' && x.status === 'done').length} erledigt · ${progress.percent} % Fortschritt`} tone={overdueClient ? 'warn' : undefined} />
-        <Stat label="Letzter Kontakt" value={contact ? relativeDays(contact.at) : '–'} sub={contact ? `${contact.label} · ${fmtDate(contact.at)}` : 'noch keiner'} />
-        <Stat label="Stimmung" value={mood ? `${mood.score} / 5` : '–'} sub={mood ? (mood.note ?? fmtDate(mood.at)) : 'noch nicht erfasst'} tone={mood && mood.score <= 2 ? 'bad' : mood && mood.score === 3 ? 'warn' : undefined} />
-      </div>
+      </section>
 
       <div className="flex gap-1 border-b border-border mb-6 overflow-x-auto">
         {([
@@ -812,43 +828,41 @@ function HistorySection({ enrollment, events }: { enrollment: Enrollment; events
   )
 }
 
-// ─── Kopf-Kennzahl ────────────────────────────────────────────────────────────
-
-function Stat({ label, value, sub, tone }: { label: string; value: string; sub: string; tone?: 'bad' | 'warn' }) {
-  return (
-    <div className="card-static px-4 py-3 grid gap-0.5">
-      <span className="text-[10.5px] font-mono uppercase tracking-[0.1em] text-muted">{label}</span>
-      <span className={`text-[15px] font-bold truncate ${tone === 'bad' ? 'text-danger' : tone === 'warn' ? 'text-warning' : 'text-foreground'}`} title={value}>{value}</span>
-      <span className="text-xs text-muted truncate" title={sub}>{sub}</span>
-    </div>
-  )
-}
-
 // ─── Lage: was ansteht, bevor man irgendetwas bearbeitet ─────────────────────
+
+const TAG_CLASS: Record<string, string> = {
+  Blocker: 'text-danger', Überfällig: 'text-warning', Hängt: 'text-warning', Offen: 'text-muted', Ziel: 'text-primary',
+}
 
 function LageSection({ bundle, milestones, onTab }: { bundle: EnrollmentBundle; milestones: Milestone[]; onTab: (t: EditorTab) => void }) {
   const router = useRouter()
   const { enrollment, goals, events } = bundle
   const [now] = useState(() => new Date())
+  const [showAllTodos, setShowAllTodos] = useState(false)
   const next = nextMilestone(milestones)
   const last = lastDoneMilestone(milestones)
+  const horizon = next?.scheduled_at ? new Date(next.scheduled_at).getTime() + 24 * 60 * 60 * 1000 : now.getTime() + 7 * 24 * 60 * 60 * 1000
 
-  const coachOpen = bundle.tasks.filter((t) => t.assignee === 'coach' && t.status === 'open' && !isStaleCadence(t, milestones, now) && !isExpiredPromise(t, now))
+  // Nur, was bis zum nächsten Call dran ist: Erinnerungen späterer Calls bleiben draußen.
+  const coachOpen = bundle.tasks
+    .filter((t) => t.assignee === 'coach' && t.status === 'open' && !isStaleCadence(t, milestones, now) && !isExpiredPromise(t, now))
+    .filter((t) => (t.kind === 'cadence' ? (!next || t.milestone_id === next.id || (!!t.due_at && new Date(t.due_at).getTime() <= horizon)) : (!t.due_at || new Date(t.due_at).getTime() <= horizon)))
     .sort((a, b) => (a.due_at ? new Date(a.due_at).getTime() : Infinity) - (b.due_at ? new Date(b.due_at).getTime() : Infinity))
   const expired = bundle.tasks.filter((t) => isExpiredPromise(t, now))
   const clientTasks = bundle.tasks.filter((t) => t.assignee === 'client' && t.status !== 'skipped')
-    .filter((t) => t.status === 'open' || (t.completed_at && now.getTime() - new Date(t.completed_at).getTime() < 14 * 24 * 60 * 60 * 1000))
-    .sort((a, b) => (a.status === b.status ? 0 : a.status === 'open' ? -1 : 1) || (a.due_at ? new Date(a.due_at).getTime() : Infinity) - (b.due_at ? new Date(b.due_at).getTime() : Infinity))
+  const clientOpen = clientTasks.filter((t) => t.status === 'open').sort((a, b) => (a.due_at ? new Date(a.due_at).getTime() : Infinity) - (b.due_at ? new Date(b.due_at).getTime() : Infinity))
+  const clientDone = clientTasks.filter((t) => t.status === 'done').length
   const coach = useOptimisticTasks(coachOpen)
+  const todos = showAllTodos ? coach.display : coach.display.slice(0, 5)
 
   const blocker = events.find((e) => e.kind === 'client_blocker' && !events.some((r) => r.kind === 'coach_reply' && new Date(r.occurred_at).getTime() > new Date(e.occurred_at).getTime()) && now.getTime() - new Date(e.occurred_at).getTime() < 14 * 24 * 60 * 60 * 1000)
-  const wins = events.filter((e) => e.kind === 'client_win' && now.getTime() - new Date(e.occurred_at).getTime() < 14 * 24 * 60 * 60 * 1000).slice(0, 2)
+  const win = events.find((e) => e.kind === 'client_win' && now.getTime() - new Date(e.occurred_at).getTime() < 14 * 24 * 60 * 60 * 1000)
 
   const topics: Array<{ tag: string; text: string }> = []
   if (blocker?.body) topics.push({ tag: 'Blocker', text: blocker.body })
-  for (const t of clientTasks.filter((x) => x.status === 'open' && x.due_at && new Date(x.due_at).getTime() < now.getTime())) topics.push({ tag: 'Überfällig', text: t.title })
-  for (const g of goals.filter((x) => x.status === 'stuck')) topics.push({ tag: 'Hängt', text: `${g.title}${g.status_note ? `: ${g.status_note}` : ''}` })
-  if (last?.open_items) for (const line of last.open_items.split('\n').map((l) => l.replace(/^[-*•]\s*/, '').trim()).filter(Boolean).slice(0, 4)) topics.push({ tag: `Offen aus ${last.title}`, text: line })
+  for (const t of clientOpen.filter((x) => x.due_at && new Date(x.due_at).getTime() < now.getTime())) topics.push({ tag: 'Überfällig', text: t.title })
+  for (const g of goals.filter((x) => x.status === 'stuck')) topics.push({ tag: 'Hängt', text: g.title })
+  if (last?.open_items) for (const line of last.open_items.split('\n').map((l) => l.replace(/^[-*•]\s*/, '').trim()).filter(Boolean).slice(0, 3)) topics.push({ tag: 'Offen', text: line })
   if (next?.goal) topics.push({ tag: 'Ziel', text: next.goal })
 
   async function cleanExpired() {
@@ -857,78 +871,92 @@ function LageSection({ bundle, milestones, onTab }: { bundle: EnrollmentBundle; 
     router.refresh()
   }
 
+  const eyebrow = 'text-[11px] font-mono uppercase tracking-[0.12em] text-primary font-semibold'
+
   return (
-    <div className="space-y-5">
+    <div className="space-y-4">
       <div className="grid gap-4 lg:grid-cols-3">
+        {/* Deine To-dos */}
         <section className="card-static p-4 space-y-2">
-          <div className="flex items-baseline justify-between"><span className="text-[11px] font-mono uppercase tracking-[0.12em] text-primary font-semibold">{next ? `Bis ${next.title} zu tun` : 'Deine To-dos'}</span><span className="text-[11px] font-mono text-muted">{coach.display.filter((t) => t.status === 'open').length} offen</span></div>
+          <div className="flex items-baseline justify-between">
+            <span className={eyebrow}>{next ? `Bis ${next.title.split(' · ')[0]}` : 'Deine To-dos'}</span>
+            <span className="text-[11px] font-mono text-muted">{coach.display.filter((t) => t.status === 'open').length} offen</span>
+          </div>
           {coach.error && <p className="text-xs text-danger">{coach.error}</p>}
-          {coach.display.length === 0 && <p className="text-sm text-muted py-2">Nichts offen. Erinnerungen entstehen mit dem nächsten Termin.</p>}
+          {coach.display.length === 0 && (
+            <div className="flex items-center gap-2 rounded-lg border border-success/30 bg-success/5 px-3 py-2.5 text-sm text-foreground"><span className="h-2 w-2 rounded-full bg-success" /> Nichts offen bis zum Call.</div>
+          )}
           <div>
-            {coach.display.map((t) => {
+            {todos.map((t) => {
               const done = t.status !== 'open'
               const late = !done && !!t.due_at && new Date(t.due_at).getTime() < now.getTime() - 60 * 60 * 1000
               return (
-                <div key={t.id} className="grid grid-cols-[18px_minmax(0,1fr)_auto] items-center gap-2.5 py-1.5 border-b border-border last:border-0">
-                  <TaskCheck done={done} onToggle={() => coach.setStatus(t, done ? 'open' : 'done')} />
+                <div key={t.id} className={`grid grid-cols-[20px_minmax(0,1fr)_auto] items-center gap-2.5 py-2 border-b border-border last:border-0 ${done ? 'opacity-60' : ''}`}>
+                  <TaskCheck done={done} onToggle={() => coach.setStatus(t, done ? 'open' : 'done')} size={20} />
                   <span className={`text-[13px] truncate ${done ? 'text-muted line-through' : 'text-foreground'}`} title={t.title}>{t.title.split(' · ')[0]}</span>
                   {coach.canUndo(t.id)
                     ? <button type="button" onClick={() => coach.undo(t)} className="inline-flex items-center gap-1 text-[11px] font-mono text-primary hover:underline"><Undo2 size={11} /> Rückgängig</button>
-                    : <span className={`text-[11px] font-mono ${late ? 'text-danger' : 'text-muted'}`}>{t.due_at ? relativeDays(t.due_at) : '–'}</span>}
+                    : <span className={`rounded-md px-1.5 py-0.5 text-[10.5px] font-mono ${late ? 'bg-danger/10 text-danger' : t.due_at && relativeDays(t.due_at) === 'heute' ? 'bg-primary/10 text-primary' : 'text-muted'}`}>{t.due_at ? relativeDays(t.due_at) : 'offen'}</span>}
                 </div>
               )
             })}
           </div>
-          <div className="flex flex-wrap items-center justify-between gap-2 pt-1">
-            <button type="button" onClick={() => onTab('tasks')} className="text-xs text-primary hover:underline">Alle Aufgaben</button>
-            {expired.length > 0 && <button type="button" onClick={cleanExpired} className="text-xs text-muted hover:text-foreground">{expired.length} verjährt · aufräumen</button>}
+          <div className="flex flex-wrap items-center justify-between gap-2 pt-1 text-xs">
+            {coach.display.length > 5 && <button type="button" onClick={() => setShowAllTodos((v) => !v)} className="text-primary hover:underline">{showAllTodos ? 'weniger' : `+${coach.display.length - 5} weitere`}</button>}
+            <button type="button" onClick={() => onTab('tasks')} className="text-muted hover:text-foreground">Alle Aufgaben</button>
+            {expired.length > 0 && <button type="button" onClick={cleanExpired} className="text-muted hover:text-foreground">{expired.length} verjährt · aufräumen</button>}
           </div>
         </section>
 
+        {/* Kunde ist dran */}
         <section className="card-static p-4 space-y-2">
-          <div className="flex items-baseline justify-between"><span className="text-[11px] font-mono uppercase tracking-[0.12em] text-primary font-semibold">Kunde ist dran</span><span className="text-[11px] font-mono text-muted">{clientTasks.filter((t) => t.status === 'open').length} offen</span></div>
-          {clientTasks.length === 0 && <p className="text-sm text-muted py-2">Keine Kundenaufgaben. Die kommen mit der Nachbereitung des nächsten Calls.</p>}
+          <div className="flex items-center justify-between">
+            <span className={eyebrow}>Kunde ist dran</span>
+            <Ring value={clientTasks.length ? clientDone / clientTasks.length : 0} size={36} stroke={4} tone={clientOpen.some((t) => t.due_at && new Date(t.due_at).getTime() < now.getTime()) ? 'warn' : 'primary'}>{clientTasks.length ? `${clientDone}/${clientTasks.length}` : '–'}</Ring>
+          </div>
+          {clientOpen.length === 0 && <p className="text-sm text-muted py-2">{clientTasks.length ? 'Alles erledigt. Stark.' : 'Keine Kundenaufgaben. Die kommen mit der nächsten Nachbereitung.'}</p>}
           <div>
-            {clientTasks.slice(0, 8).map((t) => {
-              const done = t.status === 'done'
-              const late = !done && !!t.due_at && new Date(t.due_at).getTime() < now.getTime()
+            {clientOpen.slice(0, 5).map((t) => {
+              const late = !!t.due_at && new Date(t.due_at).getTime() < now.getTime()
               return (
-                <div key={t.id} className="grid grid-cols-[14px_minmax(0,1fr)_auto] items-center gap-2.5 py-1.5 border-b border-border last:border-0">
-                  <span className={`h-3 w-3 rounded-full ${done ? 'bg-success' : late ? 'bg-danger' : 'border-2 border-border'}`} />
-                  <span className={`text-[13px] truncate ${done ? 'text-muted line-through' : 'text-foreground'}`} title={t.title}>{t.title}</span>
-                  <span className={`text-[11px] font-mono ${late ? 'text-danger' : 'text-muted'}`}>{done ? `erledigt ${relativeDays(t.completed_at)}` : t.due_at ? relativeDays(t.due_at) : '–'}</span>
+                <div key={t.id} className="grid grid-cols-[12px_minmax(0,1fr)_auto] items-center gap-2.5 py-2 border-b border-border last:border-0">
+                  <span className={`h-3 w-3 rounded-full ${late ? 'bg-danger' : 'border-2 border-border'}`} />
+                  <span className="text-[13px] text-foreground truncate" title={t.title}>{t.title}</span>
+                  <span className={`rounded-md px-1.5 py-0.5 text-[10.5px] font-mono ${late ? 'bg-danger/10 text-danger' : 'text-muted'}`}>{t.due_at ? relativeDays(t.due_at) : 'offen'}</span>
                 </div>
               )
             })}
+            {clientOpen.length > 5 && <div className="pt-1.5 text-[11px] text-muted">+{clientOpen.length - 5} weitere</div>}
           </div>
-          <p className="text-[11px] text-muted pt-1">Der Kunde hakt selbst ab. Nachfassen per WhatsApp, nicht hier abhaken.</p>
+          <p className="text-[11px] text-muted pt-1">Der Kunde hakt selbst ab. Nachfassen per WhatsApp.</p>
         </section>
 
+        {/* Blocker + Themen */}
         <div className="space-y-4">
           {blocker ? (
-            <section className="rounded-[var(--radius-xl)] border border-danger/40 bg-danger/5 p-4 space-y-2">
-              <div className="flex items-center gap-2 text-xs font-mono text-danger"><AlertTriangle size={13} /> Blocker · {relativeDays(blocker.occurred_at)} · {fmtDate(blocker.occurred_at, 'datetime')}</div>
-              <p className="text-sm text-foreground whitespace-pre-wrap">{blocker.body}</p>
+            <section className="rounded-[var(--radius-2xl)] border border-danger/40 bg-danger/5 p-4 space-y-2">
+              <div className="flex items-center gap-2 text-[11px] font-mono uppercase tracking-[0.1em] text-danger"><AlertTriangle size={13} /> Blocker · {relativeDays(blocker.occurred_at)}</div>
+              <p className="text-sm text-foreground line-clamp-3" title={blocker.body ?? ''}>{blocker.body}</p>
               <div className="flex gap-2 pt-1">
                 <button type="button" onClick={() => onTab('history')} className="rounded-lg bg-primary px-3 py-1.5 text-xs font-bold text-white hover:bg-primary-hover">Antworten</button>
                 {enrollment.whatsapp_url && <a href={enrollment.whatsapp_url} target="_blank" rel="noreferrer" className="rounded-lg border border-border px-3 py-1.5 text-xs font-medium text-foreground hover:bg-surface-hover">WhatsApp</a>}
               </div>
             </section>
-          ) : wins.length > 0 ? (
-            <section className="rounded-[var(--radius-xl)] border border-success/40 bg-success/5 p-4 space-y-1.5">
-              <div className="text-xs font-mono text-success">Das läuft · {relativeDays(wins[0].occurred_at)}</div>
-              <p className="text-sm text-foreground whitespace-pre-wrap">{wins[0].body}</p>
+          ) : win ? (
+            <section className="rounded-[var(--radius-2xl)] border border-success/40 bg-success/5 p-4 space-y-1.5">
+              <div className="text-[11px] font-mono uppercase tracking-[0.1em] text-success">Das läuft · {relativeDays(win.occurred_at)}</div>
+              <p className="text-sm text-foreground line-clamp-3" title={win.body ?? ''}>{win.body}</p>
             </section>
           ) : null}
 
           <section className="card-static p-4 space-y-2">
-            <div className="flex items-baseline justify-between"><span className="text-[11px] font-mono uppercase tracking-[0.12em] text-primary font-semibold">{next ? `Themen für ${next.title}` : 'Offene Themen'}</span><span className="text-[11px] font-mono text-muted">aus Verlauf</span></div>
+            <div className="flex items-baseline justify-between"><span className={eyebrow}>{next ? `Themen für ${next.title.split(' · ')[0]}` : 'Offene Themen'}</span><span className="text-[11px] font-mono text-muted">{topics.length}</span></div>
             {topics.length === 0 && <p className="text-sm text-muted py-2">Nichts Offenes. Gute Ausgangslage.</p>}
-            <div className="space-y-1.5">
-              {topics.slice(0, 7).map((tp, i) => (
-                <div key={i} className="grid grid-cols-[minmax(64px,auto)_minmax(0,1fr)] gap-2 text-[13px] items-baseline">
-                  <span className={`text-[10px] font-mono uppercase tracking-[0.06em] ${tp.tag === 'Blocker' ? 'text-danger' : tp.tag === 'Hängt' || tp.tag === 'Überfällig' ? 'text-warning' : 'text-muted'}`}>{tp.tag}</span>
-                  <span className="text-foreground">{tp.text}</span>
+            <div className="space-y-2">
+              {topics.slice(0, 5).map((tp, i) => (
+                <div key={i} className="grid grid-cols-[64px_minmax(0,1fr)] gap-2 items-start">
+                  <span className={`mt-0.5 text-[10px] font-mono uppercase tracking-[0.06em] ${TAG_CLASS[tp.tag] ?? 'text-muted'}`}>{tp.tag}</span>
+                  <span className="text-[13px] text-foreground line-clamp-2" title={tp.text}>{tp.text}</span>
                 </div>
               ))}
             </div>
@@ -936,35 +964,24 @@ function LageSection({ bundle, milestones, onTab }: { bundle: EnrollmentBundle; 
         </div>
       </div>
 
+      {/* Workflows */}
       <section className="card-static p-4 space-y-3">
-        <div className="flex items-baseline justify-between"><span className="text-[11px] font-mono uppercase tracking-[0.12em] text-primary font-semibold">Workflows</span><button type="button" onClick={() => onTab('goals')} className="text-xs text-primary hover:underline">Bearbeiten</button></div>
+        <div className="flex items-baseline justify-between"><span className={eyebrow}>Workflows</span><button type="button" onClick={() => onTab('goals')} className="text-xs text-muted hover:text-foreground">Bearbeiten</button></div>
         {goals.length === 0 && <p className="text-sm text-muted">Noch keine Workflows. Die kommen aus dem Kickoff.</p>}
         <div className="grid gap-2.5 sm:grid-cols-2 lg:grid-cols-3">
-          {goals.map((g) => (
-            <div key={g.id} className="rounded-[var(--radius-lg)] border border-border bg-background px-3.5 py-3 space-y-1">
-              <div className="flex items-center justify-between gap-2"><span className="text-[13px] font-semibold text-foreground truncate">{g.title}</span><span className={`h-2.5 w-2.5 shrink-0 rounded-full ${GOAL_STATUS_META[g.status].dot}`} title={GOAL_STATUS_META[g.status].label} /></div>
-              <p className="text-xs text-muted">{g.status_note || GOAL_STATUS_META[g.status].label}</p>
-            </div>
-          ))}
-        </div>
-      </section>
-
-      <section className="card-static p-4 space-y-3">
-        <div className="flex items-baseline justify-between"><span className="text-[11px] font-mono uppercase tracking-[0.12em] text-primary font-semibold">Sessions</span><button type="button" onClick={() => onTab('sessions')} className="text-xs text-primary hover:underline">Bearbeiten</button></div>
-        <div className="overflow-x-auto">
-          <div className="grid gap-1.5 min-w-[560px]" style={{ gridTemplateColumns: `repeat(${Math.max(milestones.length, 1)}, minmax(0, 1fr))` }}>
-            {milestones.map((m) => {
-              const isNext = next?.id === m.id
-              const d = m.scheduled_at ? daysUntil(m.scheduled_at, now) : null
-              return (
-                <div key={m.id} className="text-center space-y-1">
-                  <div className={`h-1 rounded-full ${m.status === 'done' ? 'bg-success' : isNext ? 'bg-primary' : m.status === 'cancelled' ? 'bg-danger/40' : 'bg-border'}`} />
-                  <div className={`text-xs font-semibold truncate ${isNext ? 'text-primary' : m.status === 'done' ? 'text-foreground' : 'text-muted'}`} title={m.title}>{m.title.split(' · ')[0]}</div>
-                  <div className="text-[10.5px] font-mono text-muted">{m.scheduled_at ? (isNext && d !== null && d >= 0 && d < 7 ? relativeDays(m.scheduled_at) : fmtDate(m.scheduled_at)) : m.status === 'cancelled' ? 'entfällt' : 'offen'}</div>
+          {goals.map((g) => {
+            const meta = GOAL_STATUS_META[g.status]
+            return (
+              <div key={g.id} className="rounded-[var(--radius-xl)] border border-border bg-background p-3.5 grid grid-cols-[auto_minmax(0,1fr)] gap-3 items-start">
+                <span className={`mt-0.5 h-3.5 w-3.5 rounded-full ${meta.dot} ${g.status === 'stuck' ? 'shadow-[0_0_0_4px_rgba(248,113,113,.2)]' : g.status === 'running' ? 'shadow-[0_0_0_4px_rgba(52,211,153,.2)]' : ''}`} />
+                <div className="min-w-0">
+                  <div className="text-[13px] font-semibold text-foreground truncate" title={g.title}>{g.title}</div>
+                  <div className="text-[10.5px] font-mono uppercase tracking-[0.06em] text-muted mt-0.5">{meta.label}</div>
+                  {g.status_note && <p className="text-xs text-muted mt-1 line-clamp-2" title={g.status_note}>{g.status_note}</p>}
                 </div>
-              )
-            })}
-          </div>
+              </div>
+            )
+          })}
         </div>
       </section>
     </div>

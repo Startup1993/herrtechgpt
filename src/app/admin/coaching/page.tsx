@@ -29,6 +29,7 @@ export default async function AdminCoachingPage() {
       nextPrepOpen,
       openClient: r.tasks.open_client,
       overdueClient: r.tasks.overdue_client,
+      doneClient: r.tasks.done_client,
       coachDue: r.tasks.coach_due,
       coachExpired: r.tasks.coach_expired,
       blocker: r.blocker,
