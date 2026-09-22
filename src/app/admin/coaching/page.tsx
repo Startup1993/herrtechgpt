@@ -54,7 +54,7 @@ export default async function AdminCoachingPage() {
         .filter((m) => m.scheduled_at && m.status !== 'done' && m.status !== 'cancelled')
         .filter((m) => {
           const t = new Date(m.scheduled_at as string).getTime()
-          return t >= now.getTime() - 2 * 60 * 60 * 1000 && t <= now.getTime() + 7 * DAY
+          return t >= now.getTime() - 2 * 60 * 60 * 1000 && t <= now.getTime() + 9 * DAY
         })
         .map((m) => ({
           enrollmentId: r.enrollment.id,
@@ -71,7 +71,7 @@ export default async function AdminCoachingPage() {
     .sort((a, b) => new Date(a.at).getTime() - new Date(b.at).getTime())
 
   // Coach-To-dos der nächsten sieben Tage plus Überfälliges, quer über alle Kunden.
-  const endOfTomorrow = new Date(now); endOfTomorrow.setHours(23, 59, 59, 999); endOfTomorrow.setDate(endOfTomorrow.getDate() + 7)
+  const endOfTomorrow = new Date(now); endOfTomorrow.setHours(23, 59, 59, 999); endOfTomorrow.setDate(endOfTomorrow.getDate() + 9)
   const todos: HomeTodo[] = overview
     .filter((r) => r.enrollment.status === 'active')
     .flatMap((r) => r.coach_tasks
