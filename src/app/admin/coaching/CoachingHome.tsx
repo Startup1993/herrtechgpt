@@ -328,53 +328,60 @@ export function CoachingHome({ rows, upcoming, feed, todos, programs, clientAcce
   )
 }
 
-/** Was du bis morgen zu tun hast, quer über alle Kunden. Haken reagieren sofort. */
+/** Was du zu tun hast: heute (mit Überfälligem, rot), morgen, Rest der Woche. Haken reagieren sofort. */
 function TodoBoard({ todos, showCoach }: { todos: HomeTodo[]; showCoach: boolean }) {
   const opt = useOptimisticTasks(todos.map((t) => ({ ...t, id: t.taskId })))
   const [now] = useState(() => Date.now())
   const startToday = new Date(now); startToday.setHours(0, 0, 0, 0)
   const startTomorrow = startToday.getTime() + DAY
-  const groups: Array<{ key: string; label: string; tone: 'bad' | 'primary' | 'muted'; items: typeof opt.display }> = [
-    { key: 'late', label: 'Überfällig', tone: 'bad', items: opt.display.filter((t) => new Date(t.dueAt).getTime() < startToday.getTime()) },
-    { key: 'today', label: 'Heute', tone: 'primary', items: opt.display.filter((t) => { const x = new Date(t.dueAt).getTime(); return x >= startToday.getTime() && x < startTomorrow }) },
-    { key: 'tomorrow', label: 'Morgen', tone: 'muted', items: opt.display.filter((t) => new Date(t.dueAt).getTime() >= startTomorrow) },
+  const startAfter = startTomorrow + DAY
+  const groups: Array<{ key: string; label: string; tone: 'primary' | 'muted'; items: typeof opt.display }> = [
+    { key: 'today', label: 'Heute', tone: 'primary', items: opt.display.filter((t) => new Date(t.dueAt).getTime() < startTomorrow) },
+    { key: 'tomorrow', label: 'Morgen', tone: 'muted', items: opt.display.filter((t) => { const x = new Date(t.dueAt).getTime(); return x >= startTomorrow && x < startAfter }) },
+    { key: 'week', label: 'Diese Woche', tone: 'muted', items: opt.display.filter((t) => new Date(t.dueAt).getTime() >= startAfter) },
   ]
   const open = opt.display.filter((t) => t.status === 'open').length
+  const late = opt.display.filter((t) => t.status === 'open' && new Date(t.dueAt).getTime() < startToday.getTime()).length
   const prepOpen = opt.display.filter((t) => t.status === 'open' && t.isPrep).length
 
   return (
     <section className="card-static p-4 space-y-3">
       <div className="flex items-baseline justify-between">
         <span className={LABEL}>Zu tun</span>
-        <span className="text-[11px] font-mono text-muted">{open} offen{prepOpen ? ` · ${prepOpen} Vorbereitung${prepOpen === 1 ? '' : 'en'}` : ''}</span>
+        <span className="text-[11px] font-mono text-muted">{open} offen{late ? <span className="text-danger"> · {late} überfällig</span> : null}{prepOpen ? ` · ${prepOpen} Vorbereitung${prepOpen === 1 ? '' : 'en'}` : ''}</span>
       </div>
       {opt.error && <p className="text-xs text-danger">{opt.error}</p>}
       {todos.length === 0 ? (
-        <div className="flex items-center gap-3 rounded-xl border border-success/30 bg-success/5 px-3 py-3 text-sm text-foreground"><span className="h-2.5 w-2.5 rounded-full bg-success" /> Nichts fällig bis morgen. Erinnerungen entstehen mit den nächsten Terminen.</div>
+        <div className="flex items-center gap-3 rounded-xl border border-success/30 bg-success/5 px-3 py-3 text-sm text-foreground"><span className="h-2.5 w-2.5 rounded-full bg-success" /> Nichts fällig in den nächsten sieben Tagen.</div>
       ) : (
         <div className="grid gap-3 md:grid-cols-3">
           {groups.map((g) => (
-            <div key={g.key} className={`rounded-xl border p-2.5 space-y-1 ${g.tone === 'bad' && g.items.some((t) => t.status === 'open') ? 'border-danger/40 bg-danger/5' : g.tone === 'primary' ? 'border-primary/30 bg-primary/5' : 'border-border bg-background'}`}>
+            <div key={g.key} className={`rounded-xl border p-2.5 space-y-1 ${g.tone === 'primary' ? 'border-primary/30 bg-primary/5' : 'border-border bg-background'}`}>
               <div className="flex items-baseline justify-between px-1 pb-1">
-                <span className={`text-[10.5px] font-mono uppercase tracking-[0.08em] ${g.tone === 'bad' ? 'text-danger' : g.tone === 'primary' ? 'text-primary' : 'text-muted'}`}>{g.label}</span>
+                <span className={`text-[10.5px] font-mono uppercase tracking-[0.08em] ${g.tone === 'primary' ? 'text-primary' : 'text-muted'}`}>{g.label}</span>
                 <span className="text-[10.5px] font-mono text-muted">{g.items.filter((t) => t.status === 'open').length}</span>
               </div>
               {g.items.length === 0 && <div className="px-1 py-2 text-xs text-muted">–</div>}
               {g.items.map((t) => {
                 const done = t.status !== 'open'
+                const due = new Date(t.dueAt)
+                const isLate = !done && due.getTime() < startToday.getTime()
+                const isToday = due.getTime() >= startToday.getTime() && due.getTime() < startTomorrow
                 return (
-                  <div key={t.id} className={`grid grid-cols-[20px_22px_minmax(0,1fr)_auto] items-center gap-2 rounded-lg px-1 py-1.5 ${done ? 'opacity-55' : ''}`}>
+                  <div key={t.id} className={`grid grid-cols-[20px_22px_minmax(0,1fr)_auto] items-center gap-2 rounded-lg px-1 py-1.5 ${done ? 'opacity-55' : ''} ${isLate ? 'bg-danger/10' : ''}`}>
                     <TaskCheck done={done} onToggle={() => opt.setStatus(t, done ? 'open' : 'done')} size={18} />
-                    <Link href={`/admin/coaching/${t.enrollmentId}`} title={t.clientName}><Avatar name={t.clientName} size={22} /></Link>
+                    <Link href={`/admin/coaching/${t.enrollmentId}`} title={t.clientName}><Avatar name={t.clientName} size={22} ring={isLate ? 'bad' : undefined} /></Link>
                     <Link href={`/admin/coaching/${t.enrollmentId}`} className="min-w-0 group">
-                      <span className={`block text-[12.5px] truncate ${done ? 'line-through text-muted' : 'text-foreground group-hover:text-primary'}`} title={t.title}>
+                      <span className={`block text-[12.5px] truncate ${done ? 'line-through text-muted' : isLate ? 'text-danger font-semibold' : 'text-foreground group-hover:text-primary'}`} title={t.title}>
                         {t.isPrep && <ClipboardList size={11} className="inline mr-1 -mt-0.5 text-primary" />}{t.title.split(' · ')[0]}
                       </span>
                       <span className="block text-[10.5px] font-mono text-muted truncate">{t.clientName.split(' ')[0]}{t.title.includes(' · ') ? ` · ${t.title.split(' · ').slice(1).join(' · ')}` : ''}{showCoach && t.coach ? ` · ${t.coach}` : ''}</span>
                     </Link>
                     {opt.canUndo(t.id)
                       ? <button type="button" onClick={() => opt.undo(t)} className="inline-flex items-center gap-1 text-[10.5px] font-mono text-primary hover:underline"><Undo2 size={10} /> zurück</button>
-                      : <span className="text-[10.5px] font-mono text-muted">{new Date(t.dueAt).toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' })}</span>}
+                      : <span className={`text-right text-[10.5px] font-mono leading-tight ${isLate ? 'text-danger font-semibold' : 'text-muted'}`}>
+                          {isLate ? <>{due.toLocaleDateString('de-DE', { weekday: 'short', day: '2-digit', month: '2-digit' })}<br />überfällig</> : isToday ? due.toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' }) : g.key === 'week' ? <>{due.toLocaleDateString('de-DE', { weekday: 'short' })}<br />{due.toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit' })}</> : due.toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' })}
+                        </span>}
                   </div>
                 )
               })}
