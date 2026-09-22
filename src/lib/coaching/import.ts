@@ -223,7 +223,7 @@ export async function importBundle(admin: SupabaseClient, payload: ImportPayload
     if (error) throw new Error(error.message)
     enrollment = data as Enrollment
     created = true
-    await logEvent(admin, { enrollment_id: enrollment.id, kind: 'note', body: 'Teilnahme per Import angelegt', author_name: author })
+    await logEvent(admin, { enrollment_id: enrollment.id, kind: 'note', body: 'Teilnahme per Import angelegt', author_name: author, source: 'plugin' })
   }
 
   const { data: programRow } = await admin.from('coaching_programs').select('*').eq('key', enrollment.program_key).maybeSingle()
@@ -252,7 +252,7 @@ export async function importBundle(admin: SupabaseClient, payload: ImportPayload
       Object.assign(current, next)
       if ('scheduled_at' in fields && prevDate !== next.scheduled_at) {
         await logEvent(admin, {
-          enrollment_id: enrollment.id, kind: 'schedule_change', client_visible: true, author_name: author,
+          enrollment_id: enrollment.id, kind: 'schedule_change', client_visible: true, author_name: author, source: 'plugin',
           body: `${next.title}: ${prevDate ? fmt(prevDate) : 'offen'} → ${next.scheduled_at ? fmt(next.scheduled_at) : 'offen'}${m.change_reason ? ` · Grund: ${m.change_reason}` : ''}`,
           payload: { milestone_id: next.id, from: prevDate, to: next.scheduled_at },
         })
@@ -262,7 +262,7 @@ export async function importBundle(admin: SupabaseClient, payload: ImportPayload
         }
       }
       if (current.status !== 'done' && next.status === 'done') {
-        await logEvent(admin, { enrollment_id: enrollment.id, kind: 'milestone_done', body: next.title, payload: { milestone_id: next.id }, client_visible: true, author_name: author })
+        await logEvent(admin, { enrollment_id: enrollment.id, kind: 'milestone_done', body: next.title, payload: { milestone_id: next.id }, client_visible: true, author_name: author, source: 'plugin', occurred_at: next.scheduled_at ?? undefined })
         await skipCadenceForMilestone(admin, next.id)
       }
     } else {
@@ -284,7 +284,7 @@ export async function importBundle(admin: SupabaseClient, payload: ImportPayload
         await createCoachCadenceTasks(admin, program, next)
       }
       if (next.status === 'done') {
-        await logEvent(admin, { enrollment_id: enrollment.id, kind: 'milestone_done', body: next.title, payload: { milestone_id: next.id }, client_visible: true, author_name: author })
+        await logEvent(admin, { enrollment_id: enrollment.id, kind: 'milestone_done', body: next.title, payload: { milestone_id: next.id }, client_visible: true, author_name: author, source: 'plugin', occurred_at: next.scheduled_at ?? undefined })
         await skipCadenceForMilestone(admin, next.id)
       }
     }
@@ -309,7 +309,7 @@ export async function importBundle(admin: SupabaseClient, payload: ImportPayload
     if (current) {
       if (fields.status && fields.status !== current.status) {
         fields.stuck_since = fields.status === 'stuck' ? (current.stuck_since ?? new Date().toISOString()) : null
-        await logEvent(admin, { enrollment_id: enrollment.id, kind: 'plan_change', client_visible: true, author_name: author, body: `Workflow „${current.title}“: ${current.status} → ${fields.status}`, payload: { goal_id: current.id } })
+        await logEvent(admin, { enrollment_id: enrollment.id, kind: 'plan_change', client_visible: true, author_name: author, source: 'plugin', body: `Workflow „${current.title}“: ${current.status} → ${fields.status}`, payload: { goal_id: current.id } })
       }
       if (Object.keys(fields).length) {
         const { error } = await admin.from('coaching_goals').update(fields).eq('id', current.id)
@@ -368,24 +368,25 @@ export async function importBundle(admin: SupabaseClient, payload: ImportPayload
         const { error } = await admin.from('coaching_materials').update(fields).eq('id', current.id)
         if (error) throw new Error(error.message)
       }
-      if (becameVisible) await logEvent(admin, { enrollment_id: enrollment.id, kind: 'material_added', body: `${current.title} freigegeben`, client_visible: true, author_name: author })
+      if (becameVisible) await logEvent(admin, { enrollment_id: enrollment.id, kind: 'material_added', body: `${current.title} freigegeben`, client_visible: true, author_name: author, source: 'plugin' })
     } else {
       const { data, error } = await admin.from('coaching_materials').insert({ enrollment_id: enrollment.id, title: m.title.trim(), kind: 'document', visibility: 'internal', ...fields }).select().single()
       if (error) throw new Error(error.message)
       const next = data as Material
       materials.push(next)
-      await logEvent(admin, { enrollment_id: enrollment.id, kind: 'material_added', body: next.title, payload: { material_id: next.id }, client_visible: next.visibility === 'client', author_name: author })
+      await logEvent(admin, { enrollment_id: enrollment.id, kind: 'material_added', body: next.title, payload: { material_id: next.id }, client_visible: next.visibility === 'client', author_name: author, source: 'plugin' })
     }
     matCount++
   }
 
   // ── Ereignisse (Verlauf, Stimmung) ──────────────────────────────────
+  // occurred_at = wann es beim Kunden passiert ist (aus dem Payload), created_at = jetzt.
   let evCount = 0
   for (const ev of payload.events ?? []) {
     if (!ev.kind) continue
-    const createdAt = isoOrNull(ev.created_at) ?? new Date().toISOString()
-    const minute = createdAt.slice(0, 16)
-    const { data: dupe } = await admin.from('coaching_events').select('id, created_at').eq('enrollment_id', enrollment.id).eq('kind', ev.kind).eq('body', ev.body ?? null).gte('created_at', `${minute}:00`).lt('created_at', `${minute}:59.999`).limit(1)
+    const occurredAt = isoOrNull(ev.created_at) ?? new Date().toISOString()
+    const minute = occurredAt.slice(0, 16)
+    const { data: dupe } = await admin.from('coaching_events').select('id').eq('enrollment_id', enrollment.id).eq('kind', ev.kind).eq('body', ev.body ?? null).gte('occurred_at', `${minute}:00`).lt('occurred_at', `${minute}:59.999`).limit(1)
     if (dupe && dupe.length) continue
     const { error } = await admin.from('coaching_events').insert({
       enrollment_id: enrollment.id,
@@ -395,10 +396,27 @@ export async function importBundle(admin: SupabaseClient, payload: ImportPayload
       payload: ev.payload ?? {},
       client_visible: ev.kind === 'mood' ? false : (ev.client_visible ?? false),
       author_name: author,
-      created_at: createdAt,
+      occurred_at: occurredAt,
+      source: 'plugin',
     })
     if (error) throw new Error(error.message)
     evCount++
+  }
+
+  // ── Eine Sammelzeile pro Sync, damit der Feed die Wahrheit zeigt ─────
+  const touched = [
+    msCount ? `${msCount} Session${msCount === 1 ? '' : 's'}` : '',
+    goalCount ? `${goalCount} Workflow${goalCount === 1 ? '' : 's'}` : '',
+    taskCount ? `${taskCount} Aufgabe${taskCount === 1 ? '' : 'n'}` : '',
+    matCount ? `${matCount} Material` : '',
+    evCount ? `${evCount} Verlauf` : '',
+  ].filter(Boolean)
+  if (created || touched.length) {
+    await logEvent(admin, {
+      enrollment_id: enrollment.id, kind: 'sync', source: 'plugin', author_name: author,
+      body: created ? `Teilnahme angelegt${touched.length ? ` · ${touched.join(', ')}` : ''}` : touched.join(', '),
+      payload: { counts: { goals: goalCount, milestones: msCount, tasks: taskCount, materials: matCount, events: evCount } },
+    })
   }
 
   // ── Einladung ───────────────────────────────────────────────────────
@@ -411,7 +429,7 @@ export async function importBundle(admin: SupabaseClient, payload: ImportPayload
     if (res.ok) {
       inviteSent = true
       await admin.from('coaching_enrollments').update({ invited_at: new Date().toISOString() }).eq('id', enrollment.id)
-      await logEvent(admin, { enrollment_id: enrollment.id, kind: 'invite_sent', body: email, author_name: author })
+      await logEvent(admin, { enrollment_id: enrollment.id, kind: 'invite_sent', body: email, author_name: author, source: 'plugin' })
     } else {
       inviteError = res.error
     }

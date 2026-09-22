@@ -45,6 +45,7 @@ export async function PATCH(request: Request) {
     payload: { task_id: t.id },
     author_profile_id: user.id,
     author_name: e.client_name,
+    source: 'client',
     client_visible: true,
   })
 
