@@ -1,7 +1,7 @@
 import { listAdminOverview, listPrograms } from '@/lib/coaching/queries'
 import { derivePhase, deriveLane, nextMilestone, urgencyFromOverview, contactLabelFor } from '@/lib/coaching/derive'
 import { getAppSettings } from '@/lib/app-settings'
-import { CoachingHome, type HomeRow, type UpcomingItem, type FeedItem } from './CoachingHome'
+import { CoachingHome, type HomeRow, type UpcomingItem, type FeedItem, type HomeTodo } from './CoachingHome'
 
 export const dynamic = 'force-dynamic'
 
@@ -70,6 +70,25 @@ export default async function AdminCoachingPage() {
     })
     .sort((a, b) => new Date(a.at).getTime() - new Date(b.at).getTime())
 
+  // Coach-To-dos, die bis morgen fällig oder schon überfällig sind, quer über alle Kunden.
+  const endOfTomorrow = new Date(now); endOfTomorrow.setHours(23, 59, 59, 999); endOfTomorrow.setDate(endOfTomorrow.getDate() + 1)
+  const todos: HomeTodo[] = overview
+    .filter((r) => r.enrollment.status === 'active')
+    .flatMap((r) => r.coach_tasks
+      .filter((t) => t.due_at && new Date(t.due_at).getTime() <= endOfTomorrow.getTime())
+      .map((t) => ({
+        taskId: t.id,
+        enrollmentId: r.enrollment.id,
+        clientName: r.enrollment.client_name,
+        coach: r.enrollment.coach_name,
+        title: t.title,
+        dueAt: t.due_at as string,
+        kind: t.kind,
+        isPrep: /vorbereit/i.test(t.title),
+        status: 'open' as const,
+      })))
+    .sort((a, b) => new Date(a.dueAt).getTime() - new Date(b.dueAt).getTime())
+
   const feed: FeedItem[] = overview
     .flatMap((r) => r.recent.map((ev) => ({ enrollmentId: r.enrollment.id, clientName: r.enrollment.client_name, coach: r.enrollment.coach_name, kind: ev.kind, body: ev.body, at: ev.at, source: ev.source, author: ev.author })))
     .sort((a, b) => new Date(b.at).getTime() - new Date(a.at).getTime())
@@ -81,6 +100,7 @@ export default async function AdminCoachingPage() {
         rows={rows}
         upcoming={upcoming}
         feed={feed}
+        todos={todos}
         programs={programs.map((p) => ({ key: p.key, title: p.title }))}
         clientAccess={settings.coachingClientAccess}
         slackConfigured={!!process.env.SLACK_COACHING_WEBHOOK_URL}
