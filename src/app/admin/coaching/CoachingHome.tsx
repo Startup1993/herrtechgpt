@@ -387,13 +387,13 @@ function TodoLine({ t, opt, showCoach, late, weekend }: { t: HomeTodo & { id: st
   const done = t.status !== 'open'
   const due = new Date(t.dueAt)
   return (
-    <div className={`grid grid-cols-[18px_minmax(0,1fr)_auto] items-center gap-1.5 rounded-md px-0.5 py-1 ${done ? 'opacity-50' : ''}`}>
-      <TaskCheck done={done} onToggle={() => opt.setStatus(t, done ? 'open' : 'done')} size={16} />
-      <Link href={`/admin/coaching/${t.enrollmentId}`} className="min-w-0 group flex items-center gap-1.5">
-        <Avatar name={t.clientName} size={16} />
-        <span className={`text-[11.5px] truncate ${done ? 'line-through text-muted' : late ? 'text-danger' : 'text-foreground group-hover:text-primary'}`} title={`${t.clientName} · ${t.title}`}>
+    <div className={`grid grid-cols-[18px_minmax(0,1fr)_auto] items-start gap-1.5 rounded-md px-0.5 py-1.5 border-b border-border/60 last:border-0 ${done ? 'opacity-50' : ''}`}>
+      <div className="pt-0.5"><TaskCheck done={done} onToggle={() => opt.setStatus(t, done ? 'open' : 'done')} size={16} /></div>
+      <Link href={`/admin/coaching/${t.enrollmentId}`} className="min-w-0 group">
+        <span className={`block text-[12px] leading-snug line-clamp-2 ${done ? 'line-through text-muted' : late ? 'text-danger' : 'text-foreground group-hover:text-primary'}`} title={t.title}>
           {t.isPrep && <ClipboardList size={10} className="inline mr-0.5 -mt-0.5 text-primary" />}{t.title.split(' · ')[0]}
         </span>
+        <span className="mt-0.5 flex items-center gap-1 text-[10px] font-mono text-muted"><Avatar name={t.clientName} size={12} />{t.clientName.split(' ')[0]}{t.title.includes(' · ') ? ` · ${t.title.split(' · ').slice(1).join(' · ')}` : ''}</span>
       </Link>
       {opt.canUndo(t.id)
         ? <button type="button" onClick={() => opt.undo(t)} className="text-[10px] font-mono text-primary hover:underline"><Undo2 size={10} className="inline" /></button>
