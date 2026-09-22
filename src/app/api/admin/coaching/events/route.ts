@@ -6,7 +6,7 @@ import type { EventKind, Enrollment } from '@/lib/coaching/types'
 import { sendCoachReplyEmail } from '@/lib/coaching/emails'
 import { getAppSettings } from '@/lib/app-settings'
 
-const COACH_KINDS: EventKind[] = ['whatsapp_in', 'whatsapp_out', 'note', 'schedule_change', 'plan_change', 'mood', 'coach_reply']
+const COACH_KINDS: EventKind[] = ['whatsapp_in', 'whatsapp_out', 'note', 'schedule_change', 'plan_change', 'mood', 'coach_reply', 'blocker_resolved']
 
 /** Quick-Log im Cockpit: WhatsApp rein/raus, Notiz, Planänderung, Stimmung. */
 export async function POST(request: Request) {
@@ -17,7 +17,7 @@ export async function POST(request: Request) {
   const kind = COACH_KINDS.includes(body.kind as EventKind) ? (body.kind as EventKind) : 'note'
   const text = typeof body.body === 'string' ? body.body.trim() : ''
   const mood = body.mood_score != null && body.mood_score !== '' ? Number(body.mood_score) : null
-  if (!text && mood === null) return NextResponse.json({ error: 'Text oder Stimmung erforderlich' }, { status: 400 })
+  if (!text && mood === null && kind !== 'blocker_resolved') return NextResponse.json({ error: 'Text oder Stimmung erforderlich' }, { status: 400 })
   if (mood !== null && (!Number.isInteger(mood) || mood < 1 || mood > 5)) return NextResponse.json({ error: 'Stimmung 1 bis 5' }, { status: 400 })
 
   const isReply = kind === 'coach_reply'
@@ -26,11 +26,12 @@ export async function POST(request: Request) {
   const admin = createAdminClient()
   const payload: Record<string, unknown> = typeof body.payload === 'object' && body.payload ? { ...(body.payload as Record<string, unknown>) } : {}
   if (isReply && typeof body.reply_to === 'string') payload.reply_to = body.reply_to
+  if (kind === 'blocker_resolved' && typeof body.resolves === 'string') payload.resolves = body.resolves
 
   const { data, error } = await admin.from('coaching_events').insert({
     enrollment_id: body.enrollment_id,
     kind: mood !== null && !text && kind === 'note' ? 'mood' : kind,
-    body: text || null,
+    body: text || (kind === 'blocker_resolved' ? 'Blocker erledigt' : null),
     payload,
     mood_score: mood,
     // Antworten an den Kunden sind immer sichtbar, Stimmung nie.
