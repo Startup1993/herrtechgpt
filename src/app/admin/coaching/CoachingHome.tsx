@@ -3,12 +3,14 @@
 import { useState, useSyncExternalStore } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
-import { BarChart3, ChevronDown, ChevronRight, Loader2, Plus, Video } from 'lucide-react'
+import { BarChart3, ChevronDown, ChevronRight, ClipboardList, Loader2, Plus, Undo2, Video } from 'lucide-react'
 import type { EnrollmentStatus, EventKind, EventSource, GoalStatus } from '@/lib/coaching/types'
 import { COACH_OPTIONS, GOAL_STATUS_META } from '@/lib/coaching/types'
 import type { Lane, Signal } from '@/lib/coaching/derive'
 import { LANE_META, relativeDays } from '@/lib/coaching/derive'
 import { Avatar, MoodDots } from '@/components/coaching/visual'
+import { TaskCheck } from '@/components/coaching/TaskCheck'
+import { useOptimisticTasks } from '@/components/coaching/useOptimisticTasks'
 import { NewEnrollmentModal } from './NewEnrollmentModal'
 
 export interface HomeRow {
@@ -51,6 +53,18 @@ export interface UpcomingItem {
   blocker: boolean
 }
 
+export interface HomeTodo {
+  taskId: string
+  enrollmentId: string
+  clientName: string
+  coach: string | null
+  title: string
+  dueAt: string
+  kind: string
+  isPrep: boolean
+  status: 'open' | 'done' | 'skipped'
+}
+
 export interface FeedItem {
   enrollmentId: string
   clientName: string
@@ -88,10 +102,11 @@ function writeFilter(f: CoachFilter) {
   window.dispatchEvent(new Event(FILTER_EVENT))
 }
 
-export function CoachingHome({ rows, upcoming, feed, programs, clientAccess, slackConfigured }: {
+export function CoachingHome({ rows, upcoming, feed, todos, programs, clientAccess, slackConfigured }: {
   rows: HomeRow[]
   upcoming: UpcomingItem[]
   feed: FeedItem[]
+  todos: HomeTodo[]
   programs: Array<{ key: string; title: string }>
   clientAccess: boolean
   slackConfigured: boolean
@@ -126,6 +141,7 @@ export function CoachingHome({ rows, upcoming, feed, programs, clientAccess, sla
   const attention = active.filter((r) => r.signals.some((s) => s.level === 'bad'))
   const calls = byCoach(upcoming)
   const events = byCoach(feed)
+  const myTodos = byCoach(todos)
   const laneCounts = LANES.map((l) => ({ lane: l, n: active.filter((r) => r.lane === l).length }))
   const days = Array.from({ length: 7 }, (_, i) => new Date(today.getTime() + i * DAY))
   const callsByDay = days.map((d) => calls.filter((c) => sameDay(new Date(c.at), d)))
@@ -187,6 +203,9 @@ export function CoachingHome({ rows, upcoming, feed, programs, clientAccess, sla
           <div className="text-[10.5px] font-mono text-muted truncate">{rows.filter((r) => r.invitedAt).length} eingeladen · Slack {slackConfigured ? 'verbunden' : 'fehlt'}</div>
         </button>
       </div>
+
+      {/* Zu tun */}
+      <TodoBoard todos={myTodos} showCoach={filter === 'Alle'} />
 
       {/* Wochenleiste */}
       <section className="card-static p-4 space-y-3">
@@ -266,23 +285,16 @@ export function CoachingHome({ rows, upcoming, feed, programs, clientAccess, sla
         </section>
       </div>
 
-      {/* Board */}
-      <section className="card-static p-4 space-y-3">
-        <div className="flex items-baseline justify-between"><span className={LABEL}>Wo alle stehen</span><span className="text-[11px] font-mono text-muted">{active.length} aktiv · dringend zuerst</span></div>
+      {/* Aktive Kunden: Stand auf einen Blick */}
+      <section className="card-static p-4 space-y-2">
+        <div className="flex items-baseline justify-between"><span className={LABEL}>Aktive Kunden</span><span className="text-[11px] font-mono text-muted">{active.length} · dringend zuerst</span></div>
         <div className="overflow-x-auto -mx-1 px-1">
-          <div className="grid grid-cols-6 gap-2 min-w-[900px]">
-            {LANES.map((lane) => {
-              const list = active.filter((r) => r.lane === lane)
-              return (
-                <div key={lane} className="rounded-xl border border-border bg-background p-2 min-h-[140px] space-y-1.5">
-                  <div className="flex items-center justify-between px-1 pb-1">
-                    <span className="inline-flex items-center gap-1.5 text-[10px] font-mono uppercase tracking-[0.08em] text-muted"><i className={`h-1.5 w-1.5 rounded-full ${LANE_COLOR[lane]}`} />{LANE_META[lane]}</span>
-                    <span className="text-[10px] font-mono text-muted">{list.length}</span>
-                  </div>
-                  {list.map((r) => <BoardChip key={r.id} r={r} showCoach={filter === 'Alle'} />)}
-                </div>
-              )
-            })}
+          <div className="min-w-[860px]">
+            <div className="grid grid-cols-[minmax(0,2.2fr)_120px_minmax(0,1.4fr)_70px_90px_90px_60px_minmax(0,1.2fr)] gap-3 px-2 pb-1 text-[10px] font-mono uppercase tracking-[0.08em] text-muted">
+              <span>Kunde</span><span>Weg</span><span>Nächster Call</span><span>Workflows</span><span>Kunde dran</span><span>Kontakt</span><span>Stimmung</span><span>Signal</span>
+            </div>
+            {active.length === 0 && <div className="px-2 py-6 text-sm text-muted">Keine aktiven Kunden{filter !== 'Alle' ? ` bei ${filter}` : ''}.</div>}
+            {active.map((r) => <RosterRow key={r.id} r={r} showCoach={filter === 'Alle'} />)}
           </div>
         </div>
       </section>
@@ -316,23 +328,106 @@ export function CoachingHome({ rows, upcoming, feed, programs, clientAccess, sla
   )
 }
 
-function BoardChip({ r, showCoach }: { r: HomeRow; showCoach: boolean }) {
-  const hot = r.signals.some((s) => s.level === 'bad')
-  const total = r.openClient + r.doneClient
-  const pct = total ? Math.round((r.doneClient / total) * 100) : 0
+/** Was du bis morgen zu tun hast, quer über alle Kunden. Haken reagieren sofort. */
+function TodoBoard({ todos, showCoach }: { todos: HomeTodo[]; showCoach: boolean }) {
+  const opt = useOptimisticTasks(todos.map((t) => ({ ...t, id: t.taskId })))
+  const [now] = useState(() => Date.now())
+  const startToday = new Date(now); startToday.setHours(0, 0, 0, 0)
+  const startTomorrow = startToday.getTime() + DAY
+  const groups: Array<{ key: string; label: string; tone: 'bad' | 'primary' | 'muted'; items: typeof opt.display }> = [
+    { key: 'late', label: 'Überfällig', tone: 'bad', items: opt.display.filter((t) => new Date(t.dueAt).getTime() < startToday.getTime()) },
+    { key: 'today', label: 'Heute', tone: 'primary', items: opt.display.filter((t) => { const x = new Date(t.dueAt).getTime(); return x >= startToday.getTime() && x < startTomorrow }) },
+    { key: 'tomorrow', label: 'Morgen', tone: 'muted', items: opt.display.filter((t) => new Date(t.dueAt).getTime() >= startTomorrow) },
+  ]
+  const open = opt.display.filter((t) => t.status === 'open').length
+  const prepOpen = opt.display.filter((t) => t.status === 'open' && t.isPrep).length
+
   return (
-    <Link href={`/admin/coaching/${r.id}`} className={`block rounded-lg border bg-surface px-2 py-2 hover:border-primary/60 hover:shadow-[var(--ht-shadow-card)] transition-all ${hot ? 'border-danger/50' : 'border-border'}`}>
-      <div className="flex items-center gap-2 min-w-0">
-        <Avatar name={r.clientName} size={24} ring={hot ? 'bad' : undefined} />
-        <div className="min-w-0 flex-1">
-          <div className="text-[12.5px] font-semibold text-foreground truncate">{r.clientName}</div>
-          <div className="text-[10.5px] font-mono text-muted truncate">{r.nextAt ? `${r.nextTitle?.split(' · ')[0]} · ${shortDate(r.nextAt)}` : 'Termin fehlt'}{showCoach && r.coach ? ` · ${r.coach}` : ''}</div>
+    <section className="card-static p-4 space-y-3">
+      <div className="flex items-baseline justify-between">
+        <span className={LABEL}>Zu tun</span>
+        <span className="text-[11px] font-mono text-muted">{open} offen{prepOpen ? ` · ${prepOpen} Vorbereitung${prepOpen === 1 ? '' : 'en'}` : ''}</span>
+      </div>
+      {opt.error && <p className="text-xs text-danger">{opt.error}</p>}
+      {todos.length === 0 ? (
+        <div className="flex items-center gap-3 rounded-xl border border-success/30 bg-success/5 px-3 py-3 text-sm text-foreground"><span className="h-2.5 w-2.5 rounded-full bg-success" /> Nichts fällig bis morgen. Erinnerungen entstehen mit den nächsten Terminen.</div>
+      ) : (
+        <div className="grid gap-3 md:grid-cols-3">
+          {groups.map((g) => (
+            <div key={g.key} className={`rounded-xl border p-2.5 space-y-1 ${g.tone === 'bad' && g.items.some((t) => t.status === 'open') ? 'border-danger/40 bg-danger/5' : g.tone === 'primary' ? 'border-primary/30 bg-primary/5' : 'border-border bg-background'}`}>
+              <div className="flex items-baseline justify-between px-1 pb-1">
+                <span className={`text-[10.5px] font-mono uppercase tracking-[0.08em] ${g.tone === 'bad' ? 'text-danger' : g.tone === 'primary' ? 'text-primary' : 'text-muted'}`}>{g.label}</span>
+                <span className="text-[10.5px] font-mono text-muted">{g.items.filter((t) => t.status === 'open').length}</span>
+              </div>
+              {g.items.length === 0 && <div className="px-1 py-2 text-xs text-muted">–</div>}
+              {g.items.map((t) => {
+                const done = t.status !== 'open'
+                return (
+                  <div key={t.id} className={`grid grid-cols-[20px_22px_minmax(0,1fr)_auto] items-center gap-2 rounded-lg px-1 py-1.5 ${done ? 'opacity-55' : ''}`}>
+                    <TaskCheck done={done} onToggle={() => opt.setStatus(t, done ? 'open' : 'done')} size={18} />
+                    <Link href={`/admin/coaching/${t.enrollmentId}`} title={t.clientName}><Avatar name={t.clientName} size={22} /></Link>
+                    <Link href={`/admin/coaching/${t.enrollmentId}`} className="min-w-0 group">
+                      <span className={`block text-[12.5px] truncate ${done ? 'line-through text-muted' : 'text-foreground group-hover:text-primary'}`} title={t.title}>
+                        {t.isPrep && <ClipboardList size={11} className="inline mr-1 -mt-0.5 text-primary" />}{t.title.split(' · ')[0]}
+                      </span>
+                      <span className="block text-[10.5px] font-mono text-muted truncate">{t.clientName.split(' ')[0]}{t.title.includes(' · ') ? ` · ${t.title.split(' · ').slice(1).join(' · ')}` : ''}{showCoach && t.coach ? ` · ${t.coach}` : ''}</span>
+                    </Link>
+                    {opt.canUndo(t.id)
+                      ? <button type="button" onClick={() => opt.undo(t)} className="inline-flex items-center gap-1 text-[10.5px] font-mono text-primary hover:underline"><Undo2 size={10} /> zurück</button>
+                      : <span className="text-[10.5px] font-mono text-muted">{new Date(t.dueAt).toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' })}</span>}
+                  </div>
+                )
+              })}
+            </div>
+          ))}
+        </div>
+      )}
+    </section>
+  )
+}
+
+function RosterRow({ r, showCoach }: { r: HomeRow; showCoach: boolean }) {
+  const hot = r.signals.some((s) => s.level === 'bad')
+  const primary = r.signals.find((s) => s.level === 'bad') ?? r.signals.find((s) => s.level === 'warn') ?? r.signals.find((s) => s.level === 'ok') ?? r.signals[0]
+  const total = r.openClient + r.doneClient
+  const laneIdx = LANES.indexOf(r.lane)
+  return (
+    <Link href={`/admin/coaching/${r.id}`} className={`grid grid-cols-[minmax(0,2.2fr)_120px_minmax(0,1.4fr)_70px_90px_90px_60px_minmax(0,1.2fr)] items-center gap-3 rounded-xl border px-2 py-2 mb-1.5 bg-surface hover:border-primary/50 hover:shadow-[var(--ht-shadow-card)] transition-all ${hot ? 'border-danger/40' : 'border-border'}`}>
+      <div className="flex items-center gap-2.5 min-w-0">
+        <Avatar name={r.clientName} size={30} ring={hot ? 'bad' : undefined} />
+        <div className="min-w-0">
+          <div className="text-[13px] font-semibold text-foreground truncate">{r.clientName}</div>
+          <div className="text-[10.5px] font-mono text-muted truncate">{[r.company, showCoach ? r.coach : null].filter(Boolean).join(' · ')}</div>
         </div>
       </div>
-      <div className="mt-2 flex items-center gap-2">
-        <span className="h-1 flex-1 rounded-full bg-border overflow-hidden"><span className="block h-full bg-primary" style={{ width: `${pct}%` }} /></span>
-        <span className="inline-flex items-center gap-0.5">{r.goals.map((g, i) => <span key={i} className={`h-1.5 w-1.5 rounded-full ${GOAL_STATUS_META[g].dot}`} />)}</span>
-        <MoodDots score={r.mood?.score ?? null} size={4} />
+      <div className="min-w-0" title={LANE_META[r.lane]}>
+        <div className="grid grid-cols-6 gap-0.5">
+          {LANES.map((l, i) => <span key={l} className={`h-1.5 rounded-full ${i < laneIdx ? 'bg-success' : i === laneIdx ? 'bg-primary' : 'bg-border'}`} />)}
+        </div>
+        <div className="mt-1 text-[10px] font-mono text-muted truncate">{r.phase}</div>
+      </div>
+      <div className="min-w-0 text-[12px]">
+        {r.nextAt ? (
+          <><div className="font-semibold text-foreground truncate">{shortDate(r.nextAt)} · {new Date(r.nextAt).toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' })}</div><div className="text-[10.5px] font-mono text-muted truncate">{r.nextTitle?.split(' · ')[0]}{r.nextPrepOpen ? ' · Prep offen' : ''}</div></>
+        ) : <span className="text-danger font-semibold">Termin fehlt</span>}
+      </div>
+      <div className="flex items-center gap-1" title={r.goals.map((g) => GOAL_STATUS_META[g].label).join(', ')}>
+        {r.goals.map((g, i) => <span key={i} className={`h-2.5 w-2.5 rounded-full ${GOAL_STATUS_META[g].dot}`} />)}
+        {r.goals.length === 0 && <span className="text-[10.5px] text-muted">–</span>}
+      </div>
+      <div className="min-w-0">
+        <div className="flex items-center gap-1.5">
+          <span className="h-1.5 flex-1 rounded-full bg-border overflow-hidden"><span className={`block h-full ${r.overdueClient ? 'bg-warning' : 'bg-primary'}`} style={{ width: `${total ? (r.doneClient / total) * 100 : 0}%` }} /></span>
+          <span className="text-[10.5px] font-mono text-muted tabular-nums">{r.doneClient}/{total}</span>
+        </div>
+        {r.overdueClient > 0 && <div className="text-[10px] font-mono text-danger mt-0.5">{r.overdueClient} überfällig</div>}
+      </div>
+      <div className="text-[11px] min-w-0">
+        {r.lastContact ? <><div className="text-foreground">{relativeDays(r.lastContact.at)}</div><div className="text-[10px] font-mono text-muted truncate">{r.lastContact.label}</div></> : <span className="text-muted">–</span>}
+      </div>
+      <div><MoodDots score={r.mood?.score ?? null} size={6} /></div>
+      <div className="min-w-0">
+        {primary ? <span className={`inline-block max-w-full truncate rounded-full px-2 py-0.5 text-[10.5px] font-mono ${primary.level === 'bad' ? 'bg-danger/15 text-danger' : primary.level === 'warn' ? 'bg-warning/15 text-warning' : primary.level === 'ok' ? 'bg-success/15 text-success' : 'bg-primary/10 text-primary'}`}>{primary.label}</span> : <span className="inline-block rounded-full px-2 py-0.5 text-[10.5px] font-mono bg-success/15 text-success">läuft</span>}
       </div>
     </Link>
   )
