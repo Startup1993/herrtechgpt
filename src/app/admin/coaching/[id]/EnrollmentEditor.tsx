@@ -891,9 +891,12 @@ function LageSection({ bundle, milestones, onTab }: { bundle: EnrollmentBundle; 
               const done = t.status !== 'open'
               const late = !done && !!t.due_at && new Date(t.due_at).getTime() < now.getTime() - 60 * 60 * 1000
               return (
-                <div key={t.id} className={`grid grid-cols-[20px_minmax(0,1fr)_auto] items-center gap-2.5 py-2 border-b border-border last:border-0 ${done ? 'opacity-60' : ''}`}>
-                  <TaskCheck done={done} onToggle={() => coach.setStatus(t, done ? 'open' : 'done')} size={20} />
-                  <span className={`text-[13px] truncate ${done ? 'text-muted line-through' : 'text-foreground'}`} title={t.title}>{t.title.split(' · ')[0]}</span>
+                <div key={t.id} className={`grid grid-cols-[20px_minmax(0,1fr)_auto] items-start gap-2.5 py-2 border-b border-border last:border-0 ${done ? 'opacity-60' : ''}`}>
+                  <div className="pt-0.5"><TaskCheck done={done} onToggle={() => coach.setStatus(t, done ? 'open' : 'done')} size={20} /></div>
+                  <span className="min-w-0">
+                    <span className={`block text-[13px] leading-snug line-clamp-2 ${done ? 'text-muted line-through' : 'text-foreground'}`} title={t.title}>{t.title.split(' · ')[0]}</span>
+                    {t.description && <span className="block text-[11px] text-muted line-clamp-1 mt-0.5" title={t.description}>{t.description}</span>}
+                  </span>
                   {coach.canUndo(t.id)
                     ? <button type="button" onClick={() => coach.undo(t)} className="inline-flex items-center gap-1 text-[11px] font-mono text-primary hover:underline"><Undo2 size={11} /> Rückgängig</button>
                     : <span className={`rounded-md px-1.5 py-0.5 text-[10.5px] font-mono ${late ? 'bg-danger/10 text-danger' : t.due_at && relativeDays(t.due_at) === 'heute' ? 'bg-primary/10 text-primary' : 'text-muted'}`}>{t.due_at ? relativeDays(t.due_at) : 'offen'}</span>}
@@ -919,9 +922,9 @@ function LageSection({ bundle, milestones, onTab }: { bundle: EnrollmentBundle; 
             {clientOpen.slice(0, 5).map((t) => {
               const late = !!t.due_at && new Date(t.due_at).getTime() < now.getTime()
               return (
-                <div key={t.id} className="grid grid-cols-[12px_minmax(0,1fr)_auto] items-center gap-2.5 py-2 border-b border-border last:border-0">
-                  <span className={`h-3 w-3 rounded-full ${late ? 'bg-danger' : 'border-2 border-border'}`} />
-                  <span className="text-[13px] text-foreground truncate" title={t.title}>{t.title}</span>
+                <div key={t.id} className="grid grid-cols-[12px_minmax(0,1fr)_auto] items-start gap-2.5 py-2 border-b border-border last:border-0">
+                  <span className={`mt-1 h-3 w-3 rounded-full ${late ? 'bg-danger' : 'border-2 border-border'}`} />
+                  <span className="text-[13px] text-foreground leading-snug line-clamp-2" title={t.title}>{t.title}</span>
                   <span className={`rounded-md px-1.5 py-0.5 text-[10.5px] font-mono ${late ? 'bg-danger/10 text-danger' : 'text-muted'}`}>{t.due_at ? relativeDays(t.due_at) : 'offen'}</span>
                 </div>
               )
