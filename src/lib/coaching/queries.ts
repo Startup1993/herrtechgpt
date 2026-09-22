@@ -1,6 +1,6 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { createAdminClient } from '@/lib/supabase/admin'
-import type { CoachingEvent, Enrollment, Goal, Material, Milestone, Program, Task } from './types'
+import type { CoachingEvent, Enrollment, Goal, Material, Milestone, Program, Task, EventSource, OverviewRow } from './types'
 
 export const COACHING_BUCKET = 'coaching-files'
 
@@ -155,6 +155,8 @@ export async function logEvent(
     author_name?: string | null
     mood_score?: number | null
     client_visible?: boolean
+    occurred_at?: string | null
+    source?: EventSource
   },
 ) {
   await admin.from('coaching_events').insert({
@@ -166,7 +168,17 @@ export async function logEvent(
     author_name: input.author_name ?? null,
     mood_score: input.mood_score ?? null,
     client_visible: input.client_visible ?? false,
+    occurred_at: input.occurred_at ?? new Date().toISOString(),
+    source: input.source ?? 'coach',
   })
+}
+
+/** Vorberechnete Übersicht für die Coach-Startseite, eine Abfrage statt fünf. */
+export async function listAdminOverview(): Promise<OverviewRow[]> {
+  const admin = createAdminClient()
+  const { data, error } = await admin.rpc('coaching_admin_overview')
+  if (error) throw new Error(error.message)
+  return ((data ?? []) as unknown[]) as OverviewRow[]
 }
 
 /** Markiert, dass der Kunde gerade da war. Höchstens einmal pro Stunde ein Login-Ereignis. */
@@ -176,6 +188,6 @@ export async function touchClientSeen(admin: SupabaseClient, enrollment: Enrollm
   const stale = !last || now.getTime() - last.getTime() > 60 * 60 * 1000
   await admin.from('coaching_enrollments').update({ last_client_seen_at: now.toISOString() }).eq('id', enrollment.id)
   if (stale) {
-    await logEvent(admin, { enrollment_id: enrollment.id, kind: 'login', author_profile_id: enrollment.profile_id, author_name: enrollment.client_name })
+    await logEvent(admin, { enrollment_id: enrollment.id, kind: 'login', author_profile_id: enrollment.profile_id, author_name: enrollment.client_name, source: 'client' })
   }
 }

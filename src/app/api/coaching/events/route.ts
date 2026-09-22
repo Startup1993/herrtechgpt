@@ -24,6 +24,7 @@ export async function POST(request: Request) {
     author_profile_id: ctx.userId,
     author_name: ctx.enrollment.client_name,
     client_visible: true,
+    source: 'client',
   })
 
   // Coach-Benachrichtigung: Slack zuerst (Coaching-Channel), Mail nur ohne Webhook.

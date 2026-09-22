@@ -4,9 +4,13 @@ import { EnrollmentEditor } from './EnrollmentEditor'
 
 export const dynamic = 'force-dynamic'
 
-export default async function AdminEnrollmentPage({ params }: { params: Promise<{ id: string }> }) {
-  const { id } = await params
+const TABS = ['lage', 'sessions', 'tasks', 'goals', 'material', 'history', 'stammdaten'] as const
+export type EditorTab = (typeof TABS)[number]
+
+export default async function AdminEnrollmentPage({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<{ tab?: string }> }) {
+  const [{ id }, { tab }] = await Promise.all([params, searchParams])
   const [bundle, programs] = await Promise.all([getEnrollmentAdmin(id), listPrograms()])
   if (!bundle) notFound()
-  return <EnrollmentEditor bundle={bundle} programs={programs} />
+  const initialTab: EditorTab = (TABS as readonly string[]).includes(tab ?? '') ? (tab as EditorTab) : 'lage'
+  return <EnrollmentEditor bundle={bundle} programs={programs} initialTab={initialTab} />
 }
