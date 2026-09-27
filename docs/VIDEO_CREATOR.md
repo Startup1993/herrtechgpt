@@ -94,7 +94,7 @@ Der **Video Creator ist eine eigenständige App** auf `vc.herr.tech` (Hetzner VP
 ### Worker-Repo
 - **GitHub:** `github.com/jacob-sc/herr-tech-video-creator`
 - **Default-Branch:** `feature/restore-ui` (auf diesem Branch läuft der Hetzner-Container)
-- **Lokal:** `/Users/jacob/claude/video-creator-migration`
+- **Lokal:** `/Users/jacob/claude/_archiv/video-creator-migration`
 - **Pre-Strip-Referenz:** UI stammt aus Commit `b2560ab^` (zurückgeholt via `git checkout`)
 
 ### herrtechgpt-Repo (dieser hier)
