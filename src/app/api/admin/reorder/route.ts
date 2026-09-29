@@ -5,10 +5,8 @@ import { createClient } from '@/lib/supabase/server'
 
 type Table =
   | 'module_videos' | 'module_chapters' | 'module_video_resources' | 'course_modules' | 'toolbox_tools'
-  | 'coaching_milestones' | 'coaching_tasks' | 'coaching_goals' | 'coaching_materials'
 const ALLOWED: Table[] = [
   'module_videos', 'module_chapters', 'module_video_resources', 'course_modules', 'toolbox_tools',
-  'coaching_milestones', 'coaching_tasks', 'coaching_goals', 'coaching_materials',
 ]
 
 async function requireAdmin() {

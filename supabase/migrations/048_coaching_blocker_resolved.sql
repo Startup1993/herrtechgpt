@@ -19,28 +19,28 @@ update public.coaching_programs set template = jsonb_set(jsonb_set(template, '{c
 ]'::jsonb)
 where key = 'coaching_1zu1';
 
--- Bestehende offene Erinnerungen nachziehen.
+-- Bestehende offene Erinnerungen nachziehen (so auf der Live-DB ausgeführt).
 with tpl as (
-  select (s->>'title') as title, (s->>'description') as description
-  from coaching_programs p, jsonb_array_elements(p.template->'coach_cadence' || p.template->'coach_prep') s
-  where p.key = 'coaching_1zu1'
-), map(old_title, new_title) as (values
-  ('WhatsApp: Schon angefangen?', 'WhatsApp: Erste Aufgabe angefangen?'),
-  ('Call vorbereiten: Verlauf lesen, Drehbuch öffnen', 'Call vorbereiten: Lage lesen, Drehbuch öffnen')
+  select s->>'title' as title, s->>'description' as description
+  from coaching_programs p, jsonb_array_elements(p.template->'coach_cadence') s where p.key = 'coaching_1zu1'
+  union all
+  select s->>'title', s->>'description'
+  from coaching_programs p, jsonb_array_elements(p.template->'coach_prep') s where p.key = 'coaching_1zu1'
+), renamed as (
+  select t2.id,
+    case split_part(t2.title, ' · ', 1)
+      when 'WhatsApp: Schon angefangen?' then 'WhatsApp: Erste Aufgabe angefangen?'
+      when 'Call vorbereiten: Verlauf lesen, Drehbuch öffnen' then 'Call vorbereiten: Lage lesen, Drehbuch öffnen'
+      else split_part(t2.title, ' · ', 1) end as first_part,
+    case when position(' · ' in t2.title) > 0 then substring(t2.title from position(' · ' in t2.title)) else '' end as rest,
+    split_part(e.client_name, ' ', 1) as vorname
+  from coaching_tasks t2 join coaching_enrollments e on e.id = t2.enrollment_id
+  where t2.assignee = 'coach' and t2.kind = 'cadence' and t2.status = 'open' and t2.description is null
 )
 update coaching_tasks t
-set title = x.new_title, description = x.description
-from (
-  select t2.id,
-    coalesce(m.new_title, split_part(t2.title, ' · ', 1)) || case when position(' · ' in t2.title) > 0 then ' · ' || split_part(t2.title, ' · ', 2) else '' end as new_title,
-    replace(tpl.description, '{Vorname}', split_part(e.client_name, ' ', 1)) as description
-  from coaching_tasks t2
-  join coaching_enrollments e on e.id = t2.enrollment_id
-  left join map m on m.old_title = split_part(t2.title, ' · ', 1)
-  join tpl on tpl.title = coalesce(m.new_title, split_part(t2.title, ' · ', 1))
-  where t2.assignee = 'coach' and t2.kind = 'cadence' and t2.status = 'open' and t2.description is null
-) x
-where t.id = x.id;
+set title = r.first_part || r.rest, description = replace(tpl.description, '{Vorname}', r.vorname)
+from renamed r join tpl on tpl.title = r.first_part
+where t.id = r.id;
 
 create or replace function public.coaching_admin_overview()
 returns setof jsonb
