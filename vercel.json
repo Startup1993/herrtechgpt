@@ -11,10 +11,6 @@
     {
       "path": "/api/cron/community-credit-grant",
       "schedule": "0 4 * * *"
-    },
-    {
-      "path": "/api/cron/coaching-daily",
-      "schedule": "30 5 * * *"
     }
   ]
 }
