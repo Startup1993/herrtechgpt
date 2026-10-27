@@ -83,7 +83,7 @@ Der **Video Creator ist eine eigenständige App** auf `vc.herr.tech` (Hetzner VP
    - POSTed `access_token` an `/api/auth/sso` (genau einmal pro Seitenaufruf)
    - Worker verifiziert Token über `supabase.auth.getUser(token)`
    - Worker erzeugt eine **eigene Session** für den User (`admin.generateLink` Magic-Link-Hash + `verifyOtp`), mit eigener Refresh-Token-Familie. Den Refresh-Token der Plattform übernimmt er nie (siehe „Warum eigene Session“)
-   - Setzt HttpOnly-Cookies `sb-at`, `sb-rt` auf `vc.herr.tech`
+   - Setzt HttpOnly-Cookies `sb-at`, `sb-wrt` auf `vc.herr.tech` und löscht das alte `sb-rt` (dort lag früher der Refresh-Token der Plattform, der wird nie mehr gelesen)
    - Speichert `htvc-theme` + `htvc-back` als normale Cookies (Client-read)
    - `window.location.replace('/projects')` (Default) bzw. `/` (wenn Liste leer)
 6. User ist im Video Creator eingeloggt, im richtigen Theme, mit funktionierendem „← World"-Button
@@ -190,12 +190,12 @@ GOOGLE_CLOUD_LOCATION=us-central1
   2. Cookie `sb-at` — für Browser-Requests nach SSO-Handshake
 - **`src/lib/use-session.js`**: Drop-in-Ersatz für `next-auth/react` (hook `useSession()` + `signOut()`) über `/api/auth/me` bzw. `/api/auth/signout`
 - **`src/pages/_app.js`**: globaler Auth-Guard — redirected Unauthenticated zu `/auth/signin` (Ausnahmen: `/sso`, `/auth/signin` selbst)
-- **Token-Lifetime:** Cookie `sb-at` so lange wie der Access-Token (Supabase `jwt_exp` = 4 h), Cookie `sb-rt` 30 Tage. `requireAuth` refresht serverseitig mit `sb-rt`, solange der Cookie da ist. Supabase selbst hat kein Session-Zeitlimit und keinen Inaktivitäts-Timeout (Stand 27.10.2026).
-- **Ohne Worker-Session** (Direktaufruf, Cookies weg): `/auth/signin` leitet automatisch auf `<Plattform>/dashboard/ki-toolbox/video-creator` weiter (Plattform aus Cookie `htvc-back`, sonst world.herr.tech). Die startet den SSO-Handshake von selbst, der User landet ohne Klick wieder im Worker. Schleifenschutz: kam die letzte automatische Weiterleitung vor weniger als 60 s, zeigt die Seite stattdessen den Button. Ist der User in der Plattform nicht eingeloggt, endet er dort auf `/coming-soon` bzw. `/login`.
+- **Token-Lifetime:** Cookie `sb-at` so lange wie der Access-Token (Supabase `jwt_exp` = 4 h), Cookie `sb-wrt` 30 Tage. `requireAuth` refresht serverseitig mit `sb-wrt`, solange der Cookie da ist. Supabase selbst hat kein Session-Zeitlimit und keinen Inaktivitäts-Timeout (Stand 27.10.2026).
+- **Ohne Worker-Session** (Direktaufruf, Cookies weg): `/auth/signin` leitet automatisch auf `<Plattform>/dashboard/ki-toolbox/video-creator` weiter (Plattform aus Cookie `htvc-back`, sonst world.herr.tech). Die startet den SSO-Handshake von selbst, der User landet ohne Klick wieder im Worker. Schleifenschutz: kam die letzte automatische Weiterleitung vor weniger als 60 s, zeigt die Seite stattdessen den Button. Das ursprüngliche Ziel (`next`) merkt sich `/auth/signin` in `sessionStorage`, `/sso` springt nach dem Handshake dorthin statt auf `/projects`. Ist der User in der Plattform nicht eingeloggt, endet er dort auf `/coming-soon` bzw. `/login`.
 
 ### Warum eigene Session
 
-Bis 27.10.2026 hat der Worker den Refresh-Token der Plattform übernommen. Dann rotierten beide Seiten denselben Token. Refreshte die Plattform zweimal, bevor der Worker refreshte, lehnte Supabase den Token des Workers mit „Invalid Refresh Token: Already Used“ ab und der User flog aus dem Video Creator (nachgestellt mit Testkonto). Seit der eigenen Session sind beide Seiten unabhängig. Auth-Aufrufe (`refreshSession`, `verifyOtp`) laufen über einen frischen Client, weil der geteilte Service-Role-Client sonst die User-Session übernimmt und DB-Abfragen danach als dieser User liefen.
+Bis 27.10.2026 hat der Worker den Refresh-Token der Plattform übernommen. Dann rotierten beide Seiten denselben Token. Refreshte die Plattform zweimal, bevor der Worker refreshte, lehnte Supabase den Token des Workers mit „Invalid Refresh Token: Already Used“ ab und der User flog aus dem Video Creator (nachgestellt mit Testkonto). Die Session-Daten zeigen außerdem alte Plattform-Sessions, deren letzter Zugriff vom Worker kam und die danach keinen gültigen Refresh-Token mehr hatten. Der Worker hat also wahrscheinlich auch Plattform-Sessions beendet, der User flog dann aus der World. Seit der eigenen Session sind beide Seiten unabhängig. Auth-Aufrufe (`refreshSession`, `verifyOtp`) laufen über einen frischen Client, weil der geteilte Service-Role-Client sonst die User-Session übernimmt und DB-Abfragen danach als dieser User liefen.
 
 ### User-Switch-Verhalten
 
