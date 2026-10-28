@@ -201,6 +201,8 @@ Bis 27.10.2026 hat der Worker den Refresh-Token der Plattform übernommen. Dann 
 
 Jeder Kachel-Klick in herrtechgpt triggert den SSO-Handshake komplett neu. Die Worker-Cookies werden dadurch **immer überschrieben**. Heißt: Logout auf herrtechgpt + Login als anderer User + Kachel-Klick = neuer User im Worker, alter Cookie weg.
 
+Das gilt auch, wenn die eigene Worker-Session nicht erzeugt werden kann. Dann setzt `/api/auth/sso` nur den Access-Token des neuen Users und löscht `sb-wrt` ausdrücklich. Sonst würde der Worker nach Ablauf des Access-Tokens still wieder den vorigen User anmelden (Fund aus Codex-Review 28.10.2026). Regressionstest mit gemocktem Supabase im Worker-Repo: `npm run auth:test`.
+
 **Edge-Case (nicht blockiert):** Wer `vc.herr.tech/projects` direkt aus dem Bookmark öffnet, ohne über die Kachel zu gehen, bleibt mit der letzten Worker-Session eingeloggt, bis zu 30 Tage. Ein Logout oder User-Wechsel auf der Plattform greift im Worker erst beim nächsten Kachel-Klick. In der Praxis irrelevant, da der Standardweg die Kachel ist.
 
 ---
